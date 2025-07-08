@@ -1,34 +1,50 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  SafeAreaView, 
-  Text, 
-  StyleSheet, 
-  Modal, 
-  Animated, 
+import {
+  SafeAreaView,
+  Text,
+  StyleSheet,
+  Modal,
+  Animated,
   View,
   TouchableOpacity
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useAuth } from '../../store/AuthProvider';
-// import { Button } from '@rneui/themed'; // Replaced for debugging
+import { useSocket } from '../../store/SocketProvider';
+import { incrementScoreForUser } from '../../services/supabase';
 import GameBoard from '../../components/modules/GameBoard';
 import Dice from '../../components/shared/Dice';
 import { useGameEngine } from '../../hooks/useGameEngine';
 import { COLORS } from '../../constants/game';
 import LottieView from 'lottie-react-native';
 
-
-const GameScreen = ({ mode }) => {
+const GameScreen = () => {
+  const { session } = useAuth();
+  const { gameId, mode } = useLocalSearchParams(); // mode can be 'single' or 'multi'
+  const { socket } = useSocket();
   const router = useRouter();
-  const { user } = useAuth();
-  const username = user?.user_metadata?.username;
-  const { state, dispatch } = useGameEngine(mode, username);
+
+  // The hook now handles both single-player and multi-player modes
+  const { state, dispatch, playersInfo } = useGameEngine(socket, gameId, session?.user?.id, mode);
+  const { gamePhase, winner, pawns, currentPlayer, diceValue, isRolling, gameMessage, turnOrderRolls, aiPlayers } = state;
+
   const [showTurnPopup, setShowTurnPopup] = useState(false);
   const [popupAnim] = useState(new Animated.Value(0));
-
-
+  // --- Award points to the winner ---
   useEffect(() => {
-    if (state.currentPlayer && state.gamePhase === 'playing') {
+    if (gamePhase === 'game-over' && winner && playersInfo[winner]) {
+      const winnerInfo = playersInfo[winner];
+      // Ensure the winner is a real player with a user_id, not an AI
+      if (winnerInfo.user_id) {
+        console.log(`Awarding 10 points to ${winnerInfo.nickname} (ID: ${winnerInfo.user_id})`);
+        incrementScoreForUser(winnerInfo.user_id);
+      }
+    }
+  }, [gamePhase, winner]);
+
+  // --- Turn change popup animation ---
+  useEffect(() => {
+    if (currentPlayer && gamePhase === 'playing') {
       setShowTurnPopup(true);
       Animated.sequence([
         Animated.timing(popupAnim, {
@@ -44,12 +60,12 @@ const GameScreen = ({ mode }) => {
         }),
       ]).start(() => setShowTurnPopup(false));
     }
-  }, [state.currentPlayer, state.gamePhase]);
+  }, [currentPlayer, gamePhase]);
 
   const handleRollDice = () => {
-    if (state.isRolling) return;
+    if (isRolling) return;
 
-    if (state.gamePhase === 'pre-game') {
+    if (gamePhase === 'pre-game') {
       dispatch({ type: 'ROLL_DICE_FOR_TURN_ORDER' });
     } else {
       dispatch({ type: 'ROLL_DICE' });
@@ -57,17 +73,17 @@ const GameScreen = ({ mode }) => {
   };
 
   const handleResetGame = () => {
-    dispatch({ type: 'RESET_GAME' });
+    if (mode === 'single') {
+      dispatch({ type: 'RESET_GAME' });
+    } else {
+      // In multiplayer, usually you'd go back to the lobby
+      router.back();
+    }
   };
 
   const handlePawnPress = (pawnId) => {
     dispatch({ type: 'MOVE_PAWN', payload: { pawnId } });
   };
-
-  // --- DEBUG LOG ---
-  useEffect(() => {
-    console.log(`[Game State] Current Player: ${state.currentPlayer}, Is AI?: ${state.aiPlayers.includes(state.currentPlayer)}, AI Players: ${JSON.stringify(state.aiPlayers)}, Phase: ${state.gamePhase}`);
-  }, [state.currentPlayer, state.gamePhase]);
 
   const popupStyle = {
     opacity: popupAnim,
@@ -81,64 +97,65 @@ const GameScreen = ({ mode }) => {
     ],
   };
 
-  const handleNewGame = () => {
-    router.replace('/home');
-  };
-
   return (
     <SafeAreaView style={styles.container}>
+      {showTurnPopup && (
+        <Animated.View style={[styles.popupContainer, popupStyle]}>
+          <Text style={styles.popupText}>{playersInfo[currentPlayer]?.nickname}'s Turn</Text>
+        </Animated.View>
+      )}
+
       <View style={styles.header}>
         <Text style={styles.turnText}>
-          {state.gamePhase === 'pre-game'
+          {gamePhase === 'pre-game'
             ? 'Sıra Belirleme Turu'
-            : `Sıra: ${state.playersInfo && state.playersInfo[state.currentPlayer]?.nickname}`}
+            : `Sıra: ${playersInfo && playersInfo[currentPlayer]?.nickname}`}
         </Text>
-        <View style={[styles.turnColorBox, { backgroundColor: COLORS[state.currentPlayer] }]} />
+        <View style={[styles.turnColorBox, { backgroundColor: COLORS[currentPlayer] }]} />
       </View>
 
       <GameBoard
-        style={styles.gameBoard} // Add a specific style for the board
-        pawns={state.pawns}
+        style={styles.gameBoard}
+        pawns={pawns}
         onPawnPress={handlePawnPress}
-        currentPlayer={state.currentPlayer}
-        diceValue={state.diceValue}
-        playersInfo={state.playersInfo}
+        currentPlayer={currentPlayer}
+        diceValue={diceValue}
+        playersInfo={playersInfo}
       />
 
       <View style={styles.controlsContainer}>
         <View style={styles.messageContainer}>
-          <Text style={styles.gameMessage}>{state.gameMessage}</Text>
+          <Text style={styles.gameMessage}>{gameMessage}</Text>
         </View>
 
-        {state.gamePhase === 'pre-game' && (
+        {gamePhase === 'pre-game' && (
           <View style={styles.turnOrderContainer}>
-            {state.turnOrderRolls.map((roll, index) => (
+            {turnOrderRolls.map((roll, index) => (
               <Text key={index} style={styles.turnOrderText}>
-                {state.playersInfo[roll.color].nickname}: {roll.roll}
+                {playersInfo[roll.color].nickname}: {roll.roll}
               </Text>
             ))}
           </View>
         )}
 
         <View style={styles.diceAndButtonContainer}>
-          {state.diceValue && !state.winner && <Dice number={state.diceValue} />}
+          {diceValue && !winner && <Dice number={diceValue} />}
           
           <View style={styles.controls}>
-            {state.aiPlayers.includes(state.currentPlayer) ? (
+            {aiPlayers.includes(currentPlayer) ? (
               <Text style={styles.aiThinkingText}>AI düşünüyor...</Text>
             ) : (
-              // Only show the button if it's a human's turn and the game is not over
-              !state.aiPlayers.includes(state.currentPlayer) && !state.winner && (
+              !winner && (
                 <TouchableOpacity
                   onPress={handleRollDice}
                   disabled={
-                    (state.gamePhase === 'playing' && state.diceValue !== null) ||
-                    (state.gamePhase === 'pre-game' && state.turnOrderRolls.some(r => r.color === state.currentPlayer))
+                    (gamePhase === 'playing' && diceValue !== null) ||
+                    (gamePhase === 'pre-game' && turnOrderRolls.some(r => r.color === currentPlayer))
                   }
                   style={[
                     styles.actionButton,
-                    ((state.gamePhase === 'playing' && state.diceValue !== null) ||
-                    (state.gamePhase === 'pre-game' && state.turnOrderRolls.some(r => r.color === state.currentPlayer))) && styles.disabledButton
+                    ((gamePhase === 'playing' && diceValue !== null) ||
+                    (gamePhase === 'pre-game' && turnOrderRolls.some(r => r.color === currentPlayer))) && styles.disabledButton
                   ]}
                 >
                   <Text style={styles.actionButtonText}>Zar At</Text>
@@ -158,23 +175,24 @@ const GameScreen = ({ mode }) => {
         </View>
       </View>
 
+      {/* Real Winner Modal */}
       <Modal
         animationType="slide"
         transparent={true}
-        visible={!!state.winner}
+        visible={!!winner}
         onRequestClose={() => { /* Must select an option */ }}
       >
         <View style={styles.centeredView}>
           <View style={styles.modalView}>
             <Text style={styles.winnerText}>Kazanan</Text>
-            <Text style={styles.winnerName}>{state.winner ? state.playersInfo[state.winner]?.nickname : ''}</Text>
+            <Text style={styles.winnerName}>{winner ? playersInfo[winner]?.nickname : ''}</Text>
+            <Text style={styles.pointsWonText}>+10 Puan!</Text>
             <LottieView
               source={require("../../assets/animations/firstwinner.json")}
               style={styles.lottieWinner}
               autoPlay
               loop={false}
             />
-            
             <View style={styles.modalFooterButtons}>
               <TouchableOpacity onPress={handleResetGame} style={styles.footerButton}>
                 <Text style={styles.footerButtonText}>Yeni Oyun</Text>
@@ -187,6 +205,8 @@ const GameScreen = ({ mode }) => {
         </View>
       </Modal>
 
+
+
     </SafeAreaView>
   );
 };
@@ -196,8 +216,8 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#0c1a3e',
     padding: 10,
-    justifyContent: 'space-around', // Changed for better spacing
-    alignItems: 'center', // Center items horizontally
+    justifyContent: 'space-around',
+    alignItems: 'center',
   },
   header: {
     flexDirection: 'row',
@@ -221,13 +241,13 @@ const styles = StyleSheet.create({
     borderColor: '#fff',
   },
   gameBoard: {
-    width: '95%', // Use a percentage of the screen width
-    aspectRatio: 1, // Keep it square
-    maxWidth: 400, // Max width to avoid being too large on tablets
-    maxHeight: 400, // Max height
+    width: '95%',
+    aspectRatio: 1,
+    maxWidth: 400,
+    maxHeight: 400,
   },
   controlsContainer: {
-    width: '95%', // Make it almost full width
+    width: '95%',
     padding: 10,
     backgroundColor: 'rgba(255, 255, 255, 0.1)',
     borderRadius: 10,
@@ -257,7 +277,7 @@ const styles = StyleSheet.create({
   },
   diceAndButtonContainer: {
     flexDirection: 'row',
-    justifyContent: 'space-around', // Reverted to space-around for better centering
+    justifyContent: 'space-around',
     alignItems: 'center',
     minHeight: 80,
   },
@@ -266,22 +286,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     minWidth: 120,
   },
-  winnerContainer: {
-    alignItems: 'center',
-  },
-  winnerText: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#66ff66',
-    marginBottom: 20,
-    textAlign: 'center',
-  },
   aiThinkingText: {
     fontSize: 16,
     fontStyle: 'italic',
     color: '#ccc',
   },
-
   actionButton: {
     width: 120,
     height: 50,
@@ -298,13 +307,6 @@ const styles = StyleSheet.create({
   disabledButton: {
     backgroundColor: '#6c757d',
     opacity: 0.7,
-  },
-  newGameButton: {
-    backgroundColor: '#28a745',
-    paddingVertical: 12,
-    paddingHorizontal: 25,
-    borderRadius: 8,
-    alignItems: 'center',
   },
   footerButtonsContainer: {
     flexDirection: 'row',
@@ -325,12 +327,13 @@ const styles = StyleSheet.create({
   },
   popupContainer: {
     position: 'absolute',
-    bottom: '25%',
+    top: '15%', // Position it higher up
     alignSelf: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    backgroundColor: 'rgba(0, 0, 0, 0.8)',
     paddingHorizontal: 20,
     paddingVertical: 10,
     borderRadius: 20,
+    zIndex: 10, // Ensure it's on top
   },
   popupText: {
     color: 'white',
@@ -341,63 +344,55 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 22,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
   },
   modalView: {
     width: '90%',
     maxWidth: 400,
     margin: 20,
-    backgroundColor: 'rgba(12, 26, 62, 0.9)', // Dark blue, slightly transparent
+    backgroundColor: 'rgba(12, 26, 62, 0.95)',
     borderRadius: 20,
     padding: 25,
     alignItems: 'center',
     shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
     shadowRadius: 4,
     elevation: 5,
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.2)',
   },
-  button: {
-    borderRadius: 20,
-    padding: 10,
-    elevation: 2
-  },
-  buttonClose: {
-    backgroundColor: '#2196F3',
-  },
-  textStyle: {
-    color: 'white',
+  winnerText: {
+    fontSize: 24,
     fontWeight: 'bold',
+    color: '#66ff66',
+    marginBottom: 10,
     textAlign: 'center',
   },
-  modalText: {
-    marginBottom: 15,
-    textAlign: 'center',
+  winnerName: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: '#FFD700',
+    textShadowColor: 'rgba(0, 0, 0, 0.75)',
+    textShadowOffset: { width: -1, height: 1 },
+    textShadowRadius: 10,
+    marginBottom: 5,
+  },
+  pointsWonText: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: '#4CAF50', // Green color for points
+    marginTop: 5,
+    marginBottom: 10,
   },
   lottieWinner: {
     width: 250,
     height: 250,
-    marginTop: 10, // Add some space below the name
-  },
-  winnerText: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#FFD700', // Gold color
-    marginBottom: 5,
-  },
-  winnerName: {
-    fontSize: 22,
-    color: 'white',
-    marginBottom: 25,
   },
   modalFooterButtons: {
     flexDirection: 'row',
     justifyContent: 'space-around',
+    marginTop: 15,
     width: '100%',
   },
 });

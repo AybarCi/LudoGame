@@ -284,6 +284,10 @@ const gameReducer = (state, action) => {
       };
     }
 
+    case 'SET_GAME_STATE': {
+      return { ...state, ...action.payload };
+    }
+
     case 'MOVE_PAWN': {
       const { pawnId } = action.payload;
       const { diceValue, pawns, currentPlayer, playersInfo } = state;

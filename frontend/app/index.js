@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { View, StyleSheet, ActivityIndicator } from 'react-native';
+import { View, StyleSheet, ActivityIndicator, Image } from 'react-native';
 import { Button, Text } from '@rneui/themed';
 import { useRouter } from 'expo-router';
 
@@ -29,7 +29,10 @@ const WelcomeScreen = () => {
   return (
     <View style={styles.container}>
 
-      <Text h2 style={styles.title}>Kızma Birader</Text>
+      <Image
+        source={require('../assets/images/logo.png')}
+        style={styles.logo}
+      />
       <Text style={styles.subtitle}>Eğlenceye Hazır Mısın?</Text>
       <Button
         title="Başla"
@@ -52,18 +55,20 @@ const styles = StyleSheet.create({
     width: 200,
     height: 200,
   },
-  title: {
-    marginTop: 20,
-    fontWeight: 'bold',
+  logo: {
+    width: 250,
+    height: 250,
+    marginBottom: 10, // Sloganla arayı azaltmak için düşürüldü
+    resizeMode: 'contain',
   },
   subtitle: {
     fontSize: 18,
     color: 'gray',
-    marginTop: 10,
-    marginBottom: 40,
+    // marginTop: 10, // Logoya yaklaştırmak için kaldırıldı
+    marginBottom: 200,
   },
   button: {
-    backgroundColor: '#FF6347',
+    backgroundColor: '#c5363e',
     width: 250,
     height: 50,
     borderRadius: 30,

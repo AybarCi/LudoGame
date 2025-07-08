@@ -1,12 +1,34 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, StyleSheet, Alert, ActivityIndicator } from 'react-native';
 import { Button, Text } from '@rneui/themed';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../../store/AuthProvider';
+import { supabase } from '../../services/supabase';
 
 const HomeScreen = () => {
   const router = useRouter();
   const { user, signOut, loading } = useAuth();
+  const [profile, setProfile] = useState(null);
+
+  useEffect(() => {
+    const fetchProfile = async () => {
+      if (user) {
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('score, level')
+          .eq('id', user.id)
+          .single();
+        
+        if (error) {
+          console.error('Error fetching profile:', error.message);
+        } else {
+          setProfile(data);
+        }
+      }
+    };
+
+    fetchProfile();
+  }, [user]);
 
   useEffect(() => {
     // If loading is finished and there's no user, redirect to login
@@ -34,6 +56,14 @@ const HomeScreen = () => {
   return (
     <View style={styles.container}>
       <Text h4 style={styles.welcomeText}>Hoş Geldin, {user?.user_metadata?.username || user?.email}!</Text>
+      
+      {profile && (
+        <View style={styles.profileInfoContainer}>
+          <Text style={styles.profileText}>Seviye: {profile.level}</Text>
+          <Text style={styles.profileText}>Puan: {profile.score}</Text>
+        </View>
+      )}
+
       <Text style={styles.infoText}>Hangi modda oynamak istersin?</Text>
       <Button
         title="🤖 Yapay Zekaya Karşı Oyna"
@@ -75,6 +105,21 @@ const styles = StyleSheet.create({
     marginBottom: 30,
     fontSize: 16,
     color: 'gray',
+  },
+  profileInfoContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    alignItems: 'center',
+    backgroundColor: '#e7e7e7',
+    borderRadius: 10,
+    padding: 15,
+    marginVertical: 20,
+    width: '80%',
+  },
+  profileText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#333',
   },
   buttonContainer: {
     width: '80%',

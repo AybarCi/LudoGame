@@ -16,3 +16,24 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     detectSessionInUrl: false, // Required for React Native
   },
 });
+
+/**
+ * Increments the score for a given user by calling the RPC function in Supabase.
+ * @param {string} userId - The UUID of the user whose score should be incremented.
+ * @returns {Promise<void>}
+ */
+export const incrementScoreForUser = async (userId) => {
+  if (!userId) {
+    console.error('User ID is required to increment score.');
+    return;
+  }
+
+  const { error } = await supabase.rpc('increment_score', {
+    user_id_to_update: userId,
+    score_to_add: 10,
+  });
+
+  if (error) {
+    console.error('Error incrementing score:', error.message);
+  }
+};
