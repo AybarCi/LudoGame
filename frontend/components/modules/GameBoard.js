@@ -9,6 +9,14 @@ const COLORS = {
   blue: '#1976D2',
   yellow: '#FBC02D',
 };
+
+// Semi-transparent colors for player bases
+const TRANSPARENT_COLORS = {
+  red: 'rgba(211, 47, 47, 0.4)',
+  green: 'rgba(56, 142, 60, 0.4)',
+  blue: 'rgba(25, 118, 210, 0.4)',
+  yellow: 'rgba(251, 192, 45, 0.4)',
+};
 import Pawn from '../shared/Pawn';
 
 // --- CONSTANTS FOR VISUAL CUES ---
@@ -165,10 +173,10 @@ const GameBoard = ({ pawns, onPawnPress, currentPlayer, diceValue, playersInfo, 
     <View style={[styles.board, style]}>
       {boardLayout.map((cell, index) => {
         const backgroundColor =
-          cell.type === 'base' ? cell.color :
-          cell.type === 'path' ? (cell.color === 'path' ? 'white' : cell.color) :
-          cell.type === 'goal' ? '#E0E0E0' : // Gray for the goal area
-          '#E0E0E0'; // Gray for other empty cells
+          cell.type === 'base' ? TRANSPARENT_COLORS[cell.color] : // Use transparent colors for bases
+          cell.type === 'path' ? (cell.color === 'path' ? 'white' : COLORS[cell.color]) : // Use solid colors for home stretches
+          cell.type === 'goal' ? 'rgba(224, 224, 224, 0.3)' : // More transparent goal
+          'transparent'; // Default to transparent to show the wood background
 
         const cellStyle = [styles.cell, { backgroundColor }];
         if (cell.isHighlighted) {

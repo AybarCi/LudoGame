@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
+  ImageBackground,
   SafeAreaView,
   Text,
   StyleSheet,
@@ -113,7 +114,12 @@ const GameScreen = () => {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <ImageBackground 
+      source={require('../../assets/images/wood-background.png')}
+      style={{flex: 1}}
+      resizeMode="cover"
+    >
+      <SafeAreaView style={styles.container}>
       {showTurnPopup && (
         <Animated.View style={[styles.popupContainer, popupStyle]}>
           <Text style={styles.popupText}>{playersInfo && playersInfo[currentPlayer]?.nickname}'s Turn</Text>
@@ -222,14 +228,15 @@ const GameScreen = () => {
 
 
 
-    </SafeAreaView>
+      </SafeAreaView>
+    </ImageBackground>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0c1a3e',
+    backgroundColor: 'transparent',
     padding: 10,
     justifyContent: 'space-around',
     alignItems: 'center',
@@ -239,7 +246,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     padding: 10,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
     borderRadius: 10,
   },
   turnText: {
@@ -264,7 +271,7 @@ const styles = StyleSheet.create({
   controlsContainer: {
     width: '95%',
     padding: 10,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
     borderRadius: 10,
   },
   messageContainer: {
