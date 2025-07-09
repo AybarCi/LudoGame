@@ -160,7 +160,7 @@ const chooseBestMove = (possibleMoves, state) => {
 
 // --- INITIAL STATE FACTORY ---
 
-const getInitialState = (gameMode, username = 'Player') => {
+const getInitialState = (gameMode, playersInfo) => {
   const players = ['red', 'green', 'yellow', 'blue'];
   const pawns = players.flatMap(color =>
     Array.from({ length: 4 }, (_, i) => ({
@@ -170,26 +170,28 @@ const getInitialState = (gameMode, username = 'Player') => {
     }))
   );
 
-  const playersInfo = {
-    red: { nickname: username },
+  // If no playersInfo is provided, create a default one.
+  const initialPlayersInfo = playersInfo || {
+    red: { nickname: 'Player 1' },
     green: { nickname: 'Verstappen' },
     yellow: { nickname: 'Leclerc' },
     blue: { nickname: 'Norris' },
   };
 
   return {
-    gamePhase: 'pre-game', // 'pre-game', 'playing', 'game-over'
+    gamePhase: 'pre-game',
     pawns,
-    currentPlayer: 'red', // In pre-game, this is the player rolling for turn order
+    currentPlayer: 'red',
     diceValue: null,
-    winner: null, // New state to track the winner
-    players, // This will be re-ordered
-    playersInfo,
+    winner: null,
+    players,
+    playersInfo: initialPlayersInfo,
     aiPlayers: gameMode === 'ai' ? players.filter(p => p !== 'red') : [],
     isRolling: false,
-    turnOrderRolls: [], // Stores { color, roll }
+    turnOrderRolls: [],
     turnOrderDetermined: false,
     gameMessage: 'Sıra belirlemek için zar atın.',
+    isInitialized: !!playersInfo, // Set initial initialized status
   };
 };
 
@@ -197,11 +199,16 @@ const getInitialState = (gameMode, username = 'Player') => {
 
 const gameReducer = (state, action) => {
   switch (action.type) {
-    case 'RESET_GAME':
-      return getInitialState(
-        state.aiPlayers.length > 0 ? 'ai' : 'local',
-        state.playersInfo.red.nickname
-      );
+    case 'RESET_GAME': {
+      // Pass the existing playersInfo to preserve nicknames on reset
+      return getInitialState(state.aiPlayers.length > 0 ? 'ai' : 'local', state.playersInfo);
+    }
+
+    case 'INITIALIZE_GAME': {
+      const { mode, playersInfo } = action.payload;
+      const initialState = getInitialState(mode, playersInfo);
+      return { ...initialState, isInitialized: true };
+    }
 
     case 'DETERMINE_TURN_ORDER': {
       // Guard to prevent this from running at the wrong time.
@@ -214,25 +221,20 @@ const gameReducer = (state, action) => {
       const newPlayerOrder = sortedRolls.map(r => r.color);
       const firstPlayer = newPlayerOrder[0];
 
-      // "Clean Slate" Approach: Create a fresh state for the 'playing' phase
-      // to prevent any state from the 'pre-game' phase from leaking through.
-      const cleanState = getInitialState(
+      // Create a clean state for the 'playing' phase, but make sure
+      // to pass the existing player info so it's not lost.
+      const playingState = getInitialState(
         state.aiPlayers.length > 0 ? 'ai' : 'local',
-        state.playersInfo.red.nickname
+        state.playersInfo // Preserve player names!
       );
 
       return {
-        ...cleanState,
-        // Preserve essential info from the pre-game setup
-        playersInfo: state.playersInfo,
-        aiPlayers: state.aiPlayers,
-
-        // Apply the results of the turn order phase
+        ...playingState,
         gamePhase: 'playing',
         players: newPlayerOrder, // The new turn order
         currentPlayer: firstPlayer, // The first player
-        turnOrderDetermined: true, // Mark the order as set
-        gameMessage: `Oyun başlıyor. İlk sıra: ${state.playersInfo[firstPlayer].nickname}.`,
+        turnOrderDetermined: true,
+        gameMessage: `Oyun başlıyor. İlk sıra: ${state.playersInfo[firstPlayer]?.nickname || firstPlayer}.`,
       };
     }
 
@@ -244,6 +246,16 @@ const gameReducer = (state, action) => {
       
       const currentPlayerIndex = state.players.indexOf(state.currentPlayer);
       const nextPlayer = state.players[(currentPlayerIndex + 1) % state.players.length];
+
+      // If all players have now rolled, it's time to determine the final turn order.
+      if (newTurnOrderRolls.length === state.players.length) {
+        // We call the reducer again, but with the DETERMINE_TURN_ORDER action.
+        // We pass the updated rolls so it can work with the latest data.
+        return gameReducer(
+          { ...state, turnOrderRolls: newTurnOrderRolls },
+          { type: 'DETERMINE_TURN_ORDER' }
+        );
+      }
 
       return {
         ...state,
@@ -280,7 +292,7 @@ const gameReducer = (state, action) => {
         currentPlayer: nextPlayer,
         diceValue: null,
         isRolling: false,
-        gameMessage: `Sıra ${state.playersInfo[nextPlayer]?.nickname || ''}'da.`,
+        gameMessage: `Sıra ${state.playersInfo[nextPlayer]?.nickname || nextPlayer}'da.`,
       };
     }
 
@@ -466,12 +478,14 @@ const gameReducer = (state, action) => {
     }
 
     default:
-      throw new Error(`Unhandled action type: ${action.type}`);
+      return state;
   }
 };
 
-export const useGameEngine = (gameMode, username) => {
-  const [state, dispatch] = useReducer(gameReducer, getInitialState(gameMode, username));
+export const useGameEngine = (socket, gameId, userId, mode, playersInfo) => {
+  const [state, dispatch] = useReducer(gameReducer, undefined, () =>
+    getInitialState(mode, playersInfo)
+  );
 
   // This consolidated effect handles the AI's entire turn, with logging.
   useEffect(() => {

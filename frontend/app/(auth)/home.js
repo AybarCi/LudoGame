@@ -38,7 +38,22 @@ const HomeScreen = () => {
   }, [user, loading, router]);
 
   const handlePlayWithAI = () => {
-    router.push({ pathname: '/game', params: { mode: 'ai' } });
+    const playerNickname = user?.user_metadata?.username || 'Oyuncu 1';
+    const playersInfo = {
+      red: { nickname: playerNickname, type: 'human' },
+      green: { nickname: 'Cansu', type: 'ai' },
+      yellow: { nickname: 'Cenk Acar', type: 'ai' },
+      blue: { nickname: 'Cihan', type: 'ai' },
+    };
+
+    router.push({
+      pathname: '/game',
+      params: {
+        mode: 'ai',
+        playersInfo: JSON.stringify(playersInfo),
+        playerColor: 'red',
+      },
+    });
   };
 
   const handlePlayOnline = () => {

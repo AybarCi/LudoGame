@@ -20,13 +20,33 @@ import LottieView from 'lottie-react-native';
 
 const GameScreen = () => {
   const { session } = useAuth();
-  const { gameId, mode } = useLocalSearchParams(); // mode can be 'single' or 'multi'
+  const { gameId, mode, playersInfo: playersInfoString } = useLocalSearchParams();
   const { socket } = useSocket();
   const router = useRouter();
 
+  // Decode playersInfo from the navigation parameters if it exists
+  const playersInfoFromParams = playersInfoString ? JSON.parse(playersInfoString) : null;
+
   // The hook now handles both single-player and multi-player modes
-  const { state, dispatch, playersInfo } = useGameEngine(socket, gameId, session?.user?.id, mode);
-  const { gamePhase, winner, pawns, currentPlayer, diceValue, isRolling, gameMessage, turnOrderRolls, aiPlayers } = state;
+  const { state, dispatch } = useGameEngine(
+    socket,
+    gameId,
+    session?.user?.id,
+    mode,
+    playersInfoFromParams
+  );
+  const { gamePhase, winner, pawns, currentPlayer, diceValue, isRolling, gameMessage, turnOrderRolls, aiPlayers, playersInfo, isInitialized } = state;
+
+  useEffect(() => {
+    // Only initialize if we have the params and the game isn't already initialized.
+    if (playersInfoFromParams && !isInitialized) {
+      dispatch({
+        type: 'INITIALIZE_GAME',
+        payload: { mode, playersInfo: playersInfoFromParams },
+      });
+    }
+    // Use the string version in the dependency array to prevent re-runs from new object creation.
+  }, [playersInfoString, mode, isInitialized, dispatch]);
 
   const [showTurnPopup, setShowTurnPopup] = useState(false);
   const [popupAnim] = useState(new Animated.Value(0));
@@ -40,7 +60,7 @@ const GameScreen = () => {
         incrementScoreForUser(winnerInfo.user_id);
       }
     }
-  }, [gamePhase, winner]);
+  }, [gamePhase, winner, playersInfo]);
 
   // --- Turn change popup animation ---
   useEffect(() => {
@@ -73,12 +93,7 @@ const GameScreen = () => {
   };
 
   const handleResetGame = () => {
-    if (mode === 'single') {
-      dispatch({ type: 'RESET_GAME' });
-    } else {
-      // In multiplayer, usually you'd go back to the lobby
-      router.back();
-    }
+    dispatch({ type: 'RESET_GAME' });
   };
 
   const handlePawnPress = (pawnId) => {
@@ -101,7 +116,7 @@ const GameScreen = () => {
     <SafeAreaView style={styles.container}>
       {showTurnPopup && (
         <Animated.View style={[styles.popupContainer, popupStyle]}>
-          <Text style={styles.popupText}>{playersInfo[currentPlayer]?.nickname}'s Turn</Text>
+          <Text style={styles.popupText}>{playersInfo && playersInfo[currentPlayer]?.nickname}'s Turn</Text>
         </Animated.View>
       )}
 
@@ -132,7 +147,7 @@ const GameScreen = () => {
           <View style={styles.turnOrderContainer}>
             {turnOrderRolls.map((roll, index) => (
               <Text key={index} style={styles.turnOrderText}>
-                {playersInfo[roll.color].nickname}: {roll.roll}
+                {playersInfo && playersInfo[roll.color]?.nickname}: {roll.roll}
               </Text>
             ))}
           </View>
@@ -185,7 +200,7 @@ const GameScreen = () => {
         <View style={styles.centeredView}>
           <View style={styles.modalView}>
             <Text style={styles.winnerText}>Kazanan</Text>
-            <Text style={styles.winnerName}>{winner ? playersInfo[winner]?.nickname : ''}</Text>
+            <Text style={styles.winnerName}>{winner && playersInfo ? playersInfo[winner]?.nickname : ''}</Text>
             <Text style={styles.pointsWonText}>+10 Puan!</Text>
             <LottieView
               source={require("../../assets/animations/firstwinner.json")}
