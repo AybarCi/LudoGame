@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, StyleSheet, Alert, ActivityIndicator } from 'react-native';
+import { View, StyleSheet, Alert, ActivityIndicator, ImageBackground } from 'react-native';
 import { Button, Text } from '@rneui/themed';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../../store/AuthProvider';
@@ -69,72 +69,118 @@ const HomeScreen = () => {
   }
 
   return (
-    <View style={styles.container}>
-      <Text h4 style={styles.welcomeText}>Hoş Geldin, {user?.user_metadata?.username || user?.email}!</Text>
-      
-      {profile && (
-        <View style={styles.profileInfoContainer}>
-          <Text style={styles.profileText}>Seviye: {profile.level}</Text>
-          <Text style={styles.profileText}>Puan: {profile.score}</Text>
-        </View>
-      )}
+    <ImageBackground 
+      source={require('../../assets/images/wood-background.png')}
+      style={styles.container}
+      resizeMode="cover"
+    >
+      <View style={styles.topContainer}>
+        <Text h4 style={styles.welcomeText}>Hoş Geldin, {user?.user_metadata?.username || user?.email}!</Text>
+        
+        {profile && (
+          <View style={styles.profileInfoContainer}>
+            <View style={styles.statsContainer}>
+              <View style={styles.statBadge}>
+                <Text style={styles.statText}>Seviye: {profile.level}</Text>
+              </View>
+              <View style={styles.statBadge}>
+                <Text style={styles.statText}>Puan: {profile.score}</Text>
+              </View>
+            </View>
+          </View>
+        )}
+      </View>
 
-      <Text style={styles.infoText}>Hangi modda oynamak istersin?</Text>
-      <Button
-        title="🤖 Yapay Zekaya Karşı Oyna"
-        onPress={handlePlayWithAI}
-        buttonStyle={styles.button}
-        containerStyle={styles.buttonContainer}
-      />
-      <Button
-        title="🌐 Online Oyna"
-        onPress={handlePlayOnline}
-        buttonStyle={styles.button}
-        containerStyle={styles.buttonContainer}
-      />
-      <Button
-        title={loading ? 'Çıkış Yapılıyor...' : 'Çıkış Yap'}
-        onPress={signOut}
-        buttonStyle={styles.button}
-        containerStyle={styles.buttonContainer}
-        type="outline"
-        disabled={loading}
-        icon={loading && <ActivityIndicator style={{ marginRight: 10 }} />}
-      />
-    </View>
+      <View style={styles.bottomContainer}>
+        <Text style={styles.infoText}>Hangi modda oynamak istersin?</Text>
+        <Button
+          title="🤖 Yapay Zekaya Karşı Oyna"
+          onPress={handlePlayWithAI}
+          buttonStyle={styles.button}
+          titleStyle={styles.buttonTitle}
+          containerStyle={styles.buttonContainer}
+        />
+        <Button
+          title="🌐 Online Oyna"
+          onPress={handlePlayOnline}
+          buttonStyle={styles.button}
+          titleStyle={styles.buttonTitle}
+          containerStyle={styles.buttonContainer}
+        />
+        <Button
+          title={loading ? 'Çıkış Yapılıyor...' : 'Çıkış Yap'}
+          onPress={signOut}
+          buttonStyle={[styles.button, styles.secondaryButton]}
+          titleStyle={styles.secondaryButtonTitle}
+          containerStyle={styles.buttonContainer}
+          disabled={loading}
+          icon={loading && <ActivityIndicator style={{ marginRight: 10 }} />}
+        />
+      </View>
+    </ImageBackground>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    justifyContent: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 60,
+    paddingHorizontal: 20,
+  },
+  topContainer: {
     alignItems: 'center',
-    backgroundColor: '#f5f5f5',
-    padding: 20,
+  },
+  bottomContainer: {
+    alignItems: 'center',
   },
   welcomeText: {
+    fontFamily: 'Poppins_700Bold',
     marginBottom: 10,
+    color: '#fff',
+    fontSize: 24,
+    textShadowColor: 'rgba(0, 0, 0, 0.75)',
+    textShadowOffset: {width: -1, height: 1},
+    textShadowRadius: 10
   },
   infoText: {
+    fontFamily: 'Poppins_600SemiBold',
     marginBottom: 30,
-    fontSize: 16,
-    color: 'gray',
+    fontSize: 20,
+    color: '#FFFFFF',
+    textAlign: 'center',
+    textShadowColor: 'rgba(0, 0, 0, 0.75)',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 8,
   },
   profileInfoContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
     alignItems: 'center',
-    backgroundColor: '#e7e7e7',
-    borderRadius: 10,
-    padding: 15,
     marginVertical: 20,
-    width: '80%',
   },
-  profileText: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333',
+  statsContainer: {
+    flexDirection: 'row',
+  },
+  statBadge: {
+    backgroundColor: '#c5363e', // Same as primary buttons
+    borderRadius: 20,
+    paddingVertical: 8,
+    paddingHorizontal: 15,
+    marginHorizontal: 10,
+    borderWidth: 1.5,
+    borderColor: '#fff', // Same as secondary button border
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 3,
+    elevation: 5,
+  },
+  statText: {
+    fontSize: 16,
+    color: '#FFFFFF',
+    fontFamily: 'Poppins_600SemiBold',
+    textShadowColor: 'rgba(0, 0, 0, 0.6)',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 3,
   },
   buttonContainer: {
     width: '80%',
@@ -143,7 +189,20 @@ const styles = StyleSheet.create({
   button: {
     borderRadius: 10,
     paddingVertical: 15,
+    backgroundColor: '#c5363e',
   },
+  secondaryButton: {
+    backgroundColor: 'transparent',
+    borderColor: '#fff',
+    borderWidth: 2,
+  },
+  buttonTitle: {
+    fontFamily: 'Poppins_600SemiBold',
+  },
+  secondaryButtonTitle: {
+    fontFamily: 'Poppins_600SemiBold',
+    color: '#fff'
+  }
 });
 
 export default HomeScreen;

@@ -22,6 +22,7 @@ export function AuthProvider({ children }) {
 
     // Listen for changes
     const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
+
       setSession(session);
       setUser(session?.user ?? null);
     });

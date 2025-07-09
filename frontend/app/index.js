@@ -1,81 +1,63 @@
-import React, { useEffect } from 'react';
-import { View, StyleSheet, ActivityIndicator, Image } from 'react-native';
+import React from 'react';
+import { View, StyleSheet, Image, ImageBackground } from 'react-native';
 import { Button, Text } from '@rneui/themed';
 import { useRouter } from 'expo-router';
 
-import { useAuth } from '../store/AuthProvider';
-
-const WelcomeScreen = () => {
+export default function Welcome() {
   const router = useRouter();
-  const { session, loading } = useAuth();
 
-  useEffect(() => {
-    // If the session is loaded and exists, redirect to home
-    if (!loading && session) {
-      router.replace('/home');
-    }
-  }, [session, loading, router]);
-
-  // Show a loading indicator while session is being checked
-  if (loading) {
-    return (
-      <View style={styles.container}>
-        <ActivityIndicator size="large" />
-      </View>
-    );
-  }
-
-  // If no session, show the welcome screen
   return (
-    <View style={styles.container}>
-
-      <Image
-        source={require('../assets/images/logo.png')}
-        style={styles.logo}
-      />
-      <Text style={styles.subtitle}>Eğlenceye Hazır Mısın?</Text>
-      <Button
-        title="Başla"
-        onPress={() => router.push('/login')}
-        buttonStyle={styles.button}
-        titleStyle={styles.buttonTitle}
-      />
-    </View>
+    <ImageBackground source={require('../assets/images/wood-background.png')} style={styles.background}>
+      <View style={styles.container}>
+        <Image source={require('../assets/images/logo.png')} style={styles.logo} />
+        <Text style={styles.subtitle}>Oyunun Ustası Ol</Text>
+        <Button
+          title="Giriş Yap / Kayıt Ol"
+          buttonStyle={styles.button}
+          titleStyle={styles.buttonTitle}
+          onPress={() => router.replace('/login')}
+        />
+      </View>
+    </ImageBackground>
   );
-};
+}
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#fff',
+    backgroundColor: 'rgba(0,0,0,0.3)',
   },
-  lottie: {
-    width: 200,
-    height: 200,
+  background: {
+    flex: 1,
+    width: '100%',
+    height: '100%',
   },
   logo: {
-    width: 250,
-    height: 250,
-    marginBottom: 10, // Sloganla arayı azaltmak için düşürüldü
+    width: 200,
+    height: 200,
     resizeMode: 'contain',
+    marginBottom: 20,
   },
   subtitle: {
-    fontSize: 18,
-    color: 'gray',
-    // marginTop: 10, // Logoya yaklaştırmak için kaldırıldı
-    marginBottom: 200,
+    fontSize: 24,
+    color: '#FFFFFF',
+    fontFamily: 'Poppins_600SemiBold',
+    textShadowColor: 'rgba(0, 0, 0, 0.75)',
+    textShadowOffset: { width: -1, height: 1 },
+    textShadowRadius: 10,
+    marginBottom: 40,
   },
   button: {
-    backgroundColor: '#c5363e',
-    width: 250,
-    height: 50,
+    backgroundColor: '#C84343',
     borderRadius: 30,
+    paddingVertical: 15,
+    paddingHorizontal: 50,
   },
   buttonTitle: {
-    fontWeight: 'bold',
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontFamily: 'Poppins_700Bold',
   },
 });
-
-export default WelcomeScreen;
