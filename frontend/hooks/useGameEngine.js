@@ -251,10 +251,14 @@ const gameReducer = (state, action) => {
       if (newTurnOrderRolls.length === state.players.length) {
         // We call the reducer again, but with the DETERMINE_TURN_ORDER action.
         // We pass the updated rolls so it can work with the latest data.
-        return gameReducer(
-          { ...state, turnOrderRolls: newTurnOrderRolls },
-          { type: 'DETERMINE_TURN_ORDER' }
-        );
+        // First, return the state showing the final player's roll.
+        // The actual turn determination will happen in the useEffect hook.
+        return {
+          ...state,
+          diceValue,
+          turnOrderRolls: newTurnOrderRolls,
+          gameMessage: `${state.playersInfo[state.currentPlayer].nickname} ${diceValue} attı.`,
+        };
       }
 
       return {
@@ -560,14 +564,18 @@ export const useGameEngine = (socket, gameId, userId, mode, playersInfo) => {
 
   // Effect to determine turn order once all players have rolled.
   useEffect(() => {
-    if (state.gamePhase === 'pre-game' && state.turnOrderRolls.length === state.players.length) {
-      const determinationTimer = setTimeout(() => {
-        // TODO: Handle ties in dice rolls.
+    if (
+      state.gamePhase === 'pre-game' &&
+      state.turnOrderRolls.length === state.players.length &&
+      !state.turnOrderDetermined // Add this check to prevent re-running
+    ) {
+      const timer = setTimeout(() => {
         dispatch({ type: 'DETERMINE_TURN_ORDER' });
-      }, 1500); // Wait a moment to show the last roll.
-      return () => clearTimeout(determinationTimer);
+      }, 1500); // Wait 1.5s to ensure the last roll is visible.
+
+      return () => clearTimeout(timer); // Cleanup timer
     }
-  }, [state.turnOrderRolls, state.gamePhase, state.players.length]);
+  }, [state]); // Depend on the entire state for robustness
 
 
   return { state, dispatch };
