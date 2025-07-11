@@ -57,7 +57,7 @@ const HomeScreen = () => {
   };
 
   const handlePlayOnline = () => {
-    router.push({ pathname: '/game', params: { mode: 'online' } });
+    router.push('/lobby');
   };
 
   if (loading || !user) {
