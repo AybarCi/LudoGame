@@ -179,15 +179,19 @@ io.on('connection', (socket) => {
         if (playerIndex !== -1) {
             roomIdFound = id;
             const wasHost = room.hostId === socket.id;
+            const wasTurn = room.gameState && room.gameState.turn === socket.id;
+
             room.players.splice(playerIndex, 1);
 
             if (room.players.length === 0) {
                 delete rooms[id];
-                console.log(`Room ${id} deleted.`);
+                console.log(`Room ${id} was empty and has been deleted.`);
             } else {
-                if (wasHost) room.hostId = room.players[0].id;
-                if(room.gameState && room.gameState.turn === socket.id && !room.gameState.winner) {
-                    room.gameState.turn = room.players[0].id; // Pass turn to new host
+                if (wasHost) {
+                    room.hostId = room.players[0].id;
+                }
+                if (wasTurn && room.gameState && !room.gameState.winner) {
+                    room.gameState.turn = room.players[0].id;
                     room.gameState.message = `A player left. It's now ${room.players[0].nickname}'s turn.`;
                 }
                 io.to(id).emit('player_left', room);
