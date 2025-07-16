@@ -12,7 +12,6 @@ import {
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useAuth } from '../../store/AuthProvider';
 import { useSocket } from '../../store/SocketProvider';
-import { incrementScoreForUser } from '../../services/supabase';
 import GameBoard from '../../components/modules/GameBoard';
 import Dice from '../../components/shared/Dice';
 import { useGameEngine } from '../../hooks/useGameEngine';
@@ -20,7 +19,7 @@ import { COLORS } from '../../constants/game';
 import LottieView from 'lottie-react-native';
 
 const GameScreen = () => {
-  const { session } = useAuth();
+  const { session, user, updateScore } = useAuth();
   const { gameId, mode, playersInfo: playersInfoString } = useLocalSearchParams();
   const { socket } = useSocket();
   const router = useRouter();
@@ -56,12 +55,12 @@ const GameScreen = () => {
     if (gamePhase === 'game-over' && winner && playersInfo[winner]) {
       const winnerInfo = playersInfo[winner];
       // Ensure the winner is a real player with a user_id, not an AI
-      if (winnerInfo.user_id) {
+      if (winnerInfo.user_id && winnerInfo.user_id === user.id) {
         console.log(`Awarding 10 points to ${winnerInfo.nickname} (ID: ${winnerInfo.user_id})`);
-        incrementScoreForUser(winnerInfo.user_id);
+        updateScore(10);
       }
     }
-  }, [gamePhase, winner, playersInfo]);
+  }, [gamePhase, winner, playersInfo, user, updateScore]);
 
   // --- Turn change popup animation ---
   useEffect(() => {

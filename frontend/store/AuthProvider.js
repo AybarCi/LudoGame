@@ -32,6 +32,40 @@ export function AuthProvider({ children }) {
     };
   }, []);
 
+  const updateScore = async (amount) => {
+    if (!user) return;
+
+    const { data: currentProfile, error: fetchError } = await supabase
+      .from('profiles')
+      .select('score')
+      .eq('id', user.id)
+      .single();
+
+    if (fetchError) {
+      console.error('Error fetching score:', fetchError);
+      return;
+    }
+
+    const newScore = (currentProfile.score || 0) + amount;
+
+    const { error: updateError } = await supabase
+      .from('profiles')
+      .update({ score: newScore })
+      .eq('id', user.id);
+
+    if (updateError) {
+      console.error('Error updating score:', updateError);
+    } else {
+      // This part is tricky because the user object from auth doesn't have the profile data.
+      // The profile data is usually fetched separately. Let's assume the UI will refetch or update from a different source.
+      // For now, we can try to update the local state if it has a similar structure.
+      setUser(prevUser => {
+        const newProfile = { ...(prevUser.profile || {}), score: newScore };
+        return { ...prevUser, profile: newProfile };
+      });
+    }
+  };
+
   const value = {
     session,
     user,
@@ -74,6 +108,7 @@ export function AuthProvider({ children }) {
         setLoading(false);
       }
     },
+    updateScore,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

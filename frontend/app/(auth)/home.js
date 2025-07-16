@@ -7,7 +7,7 @@ import { supabase } from '../../services/supabase';
 
 const HomeScreen = () => {
   const router = useRouter();
-  const { user, signOut, loading } = useAuth();
+      const { user, signOut, loading } = useAuth();
   const [profile, setProfile] = useState(null);
 
   useEffect(() => {

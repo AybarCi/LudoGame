@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { io } from 'socket.io-client';
+import { useAuth } from './AuthProvider';
 
 const SocketContext = createContext();
 
@@ -8,32 +9,50 @@ export const useSocket = () => {
 };
 
 export const SocketProvider = ({ children }) => {
+  const { user } = useAuth();
   const [socket, setSocket] = useState(null);
+  const [reconnectTrigger, setReconnectTrigger] = useState(0);
 
   useEffect(() => {
-    // Ensure this IP address is correct for your local network
-    const serverURL = process.env.EXPO_PUBLIC_API_URL || 'http://192.168.1.134:3001';
+    if (!user) {
+      socket?.disconnect();
+      setSocket(null);
+      return;
+    }
+
+    const serverURL = process.env.EXPO_PUBLIC_API_URL;
+    if (!serverURL) {
+        console.error('[SocketProvider] FATAL: EXPO_PUBLIC_API_URL is not defined in .env');
+        return;
+    }
+
     console.log(`[SocketProvider] Attempting to connect to: ${serverURL}`);
     const newSocket = io(serverURL, {
-      reconnection: true,
-      reconnectionAttempts: 5,
-      reconnectionDelay: 1000,
+      query: { userId: user.id, username: user.username },
+      reconnection: false, // We handle this manually
     });
 
     setSocket(newSocket);
 
     newSocket.on('connect', () => {
-      console.log(`Connected to socket server with id: ${newSocket.id}`);
+      console.log(`[SocketProvider] Connected with socket id: ${newSocket.id}`);
     });
 
     newSocket.on('disconnect', (reason) => {
-      console.log('Disconnected from socket server:', reason);
+      console.log(`[SocketProvider] Disconnected: ${reason}`);
+      // Reconnect by triggering the useEffect hook again after a delay
+      if (reason !== 'io server disconnect') {
+        setTimeout(() => setReconnectTrigger(t => t + 1), 3000);
+      }
     });
 
+    // Cleanup function to disconnect the socket when the component unmounts or user changes
     return () => {
+      console.log('[SocketProvider] Cleaning up old socket.');
       newSocket.disconnect();
     };
-  }, []);
+
+  }, [user, reconnectTrigger]); // Re-run effect if user or reconnectTrigger changes
 
   return (
     <SocketContext.Provider value={{ socket }}>

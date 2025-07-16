@@ -1,7 +1,9 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { View, Text, Button, StyleSheet, ActivityIndicator, TouchableOpacity } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { Alert } from 'react-native';
 import { useOnlineGameEngine } from '@/hooks/useOnlineGameEngine';
+import { useSocket } from '@/store/SocketProvider';
 import { useAuth } from '@/store/AuthProvider';
 import GameBoard from '@/components/modules/GameBoard';
 import Dice from '@/components/shared/Dice';
@@ -22,7 +24,17 @@ const OnlineGameScreen = () => {
   const { user } = useAuth();
   const { roomId } = useLocalSearchParams();
   const router = useRouter();
+  const { socket } = useSocket();
   const { state, isHost, startGame, rollDice, movePawn } = useOnlineGameEngine(roomId);
+
+  useEffect(() => {
+    if (state.isRoomDeleted) {
+      console.log('[UI] useEffect detected state.isRoomDeleted = true. Navigating...');
+      Alert.alert('Oda Kapatıldı', 'Oda, 5 dakika boyunca aktif olmadığı için sunucu tarafından kapatıldı.', [
+        { text: 'Tamam', onPress: () => router.replace('/(auth)/lobby') },
+      ]);
+    }
+  }, [state.isRoomDeleted, router]);
 
   if (!state || state.gamePhase === 'connecting') {
     return (
