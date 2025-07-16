@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, Button, FlatList, StyleSheet, ActivityIndicator, TouchableOpacity } from 'react-native';
+import { View, Text, Button, FlatList, StyleSheet, ActivityIndicator, TouchableOpacity, ImageBackground } from 'react-native';
 import { useSocket } from '@/store/SocketProvider';
 import { useAuth } from '@/store/AuthProvider';
 import { useRouter } from 'expo-router';
@@ -73,100 +73,162 @@ const Lobby = () => {
     });
   };
 
+  // Render loading state (Temporarily disabled for UI review)
+  /*
   if (isLoading) {
     return (
-      <View style={[styles.container, styles.centered]}>
-        <ActivityIndicator size="large" color="#007AFF" />
-        <Text style={styles.loadingText}>Odalar Yükleniyor...</Text>
-      </View>
+      <ImageBackground 
+        source={require('../../assets/images/wood-background.png')} 
+        style={styles.container}
+        resizeMode="cover"
+      >
+        <View style={{flex: 1}}>    <ActivityIndicator size="large" color="#007AFF" />
+          <Text style={styles.loadingText}>Odalar Yükleniyor...</Text>
+        </View>
+      </ImageBackground>
     );
   }
+  */
 
   const roomList = Object.values(rooms);
 
   return (
-    <View style={styles.container}>
-      <TouchableOpacity style={styles.createButton} onPress={handleCreateRoom}>
-        <Text style={styles.createButtonText}>Oda Kur</Text>
-      </TouchableOpacity>
-      
-      <FlatList
-        data={roomList}
-        keyExtractor={(item) => item.id}
-        renderItem={({ item }) => (
-          <View style={styles.roomItem}>
-            <View>
-              <Text style={styles.roomName}>{`Oda #${item.id.slice(-5)}`}</Text>
-              <Text style={styles.playerCount}>{`Oyuncular: ${item.playerCount} / 4`}</Text>
-            </View>
-            <TouchableOpacity 
-              style={[styles.joinButton, (item.playerCount >= 4 || item.isGameStarted) && styles.joinButtonDisabled]}
-              onPress={() => handleJoinRoom(item.id)}
-              disabled={item.playerCount >= 4 || item.isGameStarted}
-            >
-              <Text style={styles.joinButtonText}>{item.isGameStarted ? 'Oynanıyor' : 'Katıl'}</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-        ListHeaderComponent={<Text style={styles.title}>Aktif Odalar</Text>}
-        ListEmptyComponent={<Text style={styles.emptyText}>Henüz kimse oda kurmamış. İlk odayı sen kur!</Text>}
-        style={styles.list}
-      />
-    </View>
+    <ImageBackground 
+      source={require('../../assets/images/wood-background.png')} 
+      style={styles.container}
+      resizeMode="cover"
+    >
+      {/* Main content area */}
+      <View style={styles.mainContent}>
+        <TouchableOpacity style={styles.createButton} onPress={handleCreateRoom}>
+          <Text style={styles.createButtonText}>Oda Kur</Text>
+        </TouchableOpacity>
+        
+        <View style={styles.listContainer}>
+          <FlatList
+            data={roomList}
+            keyExtractor={(item) => item.id}
+            renderItem={({ item }) => (
+              <View style={styles.roomItem}>
+                <View>
+                  <Text style={styles.roomName}>{`Oda #${item.id.slice(-5)}`}</Text>
+                  <Text style={styles.playerCount}>{`Oyuncular: ${item.playerCount} / 4`}</Text>
+                </View>
+                <TouchableOpacity 
+                  style={[styles.joinButton, (item.playerCount >= 4 || item.isGameStarted) && styles.joinButtonDisabled]}
+                  onPress={() => handleJoinRoom(item.id)}
+                  disabled={item.playerCount >= 4 || item.isGameStarted}
+                >
+                  <Text style={styles.joinButtonText}>{item.isGameStarted ? 'Oynanıyor' : 'Katıl'}</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+            ListHeaderComponent={<Text style={styles.title}>Aktif Odalar</Text>}
+            ListEmptyComponent={<Text style={styles.emptyText}>Henüz kimse oda kurmamış. İlk odayı sen kur!</Text>}
+            contentContainerStyle={styles.listContent}
+          />
+        </View>
+      </View>
+
+      {/* Bottom button area */}
+      <View style={styles.footer}>
+        <TouchableOpacity style={styles.backButton} onPress={() => router.push('/(auth)/home')}>
+          <Text style={styles.backButtonText}>Geri Dön</Text>
+        </TouchableOpacity>
+      </View>
+    </ImageBackground>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: 20,
-    backgroundColor: '#F8F9FA',
+  },
+  mainContent: {
+    flex: 1,
+    paddingTop: 60, // Adjust for status bar
   },
   centered: {
     justifyContent: 'center',
     alignItems: 'center',
   },
   title: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    marginBottom: 20,
+    fontSize: 24,
+    fontFamily: 'Poppins_700Bold',
+    color: '#ffffff',
     textAlign: 'center',
-    color: '#343A40',
+    marginBottom: 15,
+    textShadowColor: 'rgba(0, 0, 0, 0.8)',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 5,
   },
   createButton: {
-    backgroundColor: '#007AFF',
+    backgroundColor: '#e53935', 
     paddingVertical: 15,
-    borderRadius: 8,
-    alignItems: 'center',
+    borderRadius: 10,
+    alignItems: 'center', 
+    marginHorizontal: 20, 
+    marginTop: 20,
     marginBottom: 20,
-    width: '100%',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 3,
   },
   createButtonText: {
     color: '#FFFFFF',
     fontSize: 18,
     fontWeight: 'bold',
   },
-  list: {
-    width: '100%',
+  listContainer: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    borderRadius: 20,
+    padding: 20,
+    marginHorizontal: 20,
+    marginBottom: 20, // Added space between list and back button
+  },
+  listContent: {
+    paddingHorizontal: 20,
+    paddingBottom: 20,
+  },
+  footer: {
+    paddingBottom: 50, 
+    paddingHorizontal: 20,
+  },
+  backButton: {
+    backgroundColor: 'transparent',
+    paddingVertical: 12,
+    paddingHorizontal: 30,
+    borderRadius: 10,
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.8)',
+  },
+  backButtonText: {
+    color: '#ffffff',
+    fontSize: 18,
+    fontFamily: 'Poppins_600SemiBold',
   },
   roomItem: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
     padding: 20,
-    borderRadius: 8,
+    borderRadius: 10,
+    marginBottom: 15,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 10,
     borderWidth: 1,
-    borderColor: '#DEE2E6',
+    borderColor: 'rgba(255, 255, 255, 0.2)',
   },
   roomName: {
     fontSize: 18,
-    fontWeight: '600',
+    fontFamily: 'Poppins_600SemiBold',
+    color: '#ffffff',
   },
   playerCount: {
     fontSize: 14,
-    color: '#6C757D',
+    color: '#ffffff',
     marginTop: 5,
   },
   joinButton: {
@@ -181,12 +243,17 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     textAlign: 'center',
-    marginTop: 50,
+    color: '#ffffff',
     fontSize: 16,
-    color: '#6C757D',
+    fontFamily: 'Poppins_600SemiBold',
+    marginTop: 50,
+    textShadowColor: 'rgba(0, 0, 0, 0.8)',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 5,
+    paddingHorizontal: 20,
   },
   joinButtonDisabled: {
-    backgroundColor: '#A9A9A9', // Grey out when disabled
+    backgroundColor: '#A9A9A9', 
   },
   loadingText: {
     marginTop: 10,

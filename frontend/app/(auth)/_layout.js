@@ -23,6 +23,7 @@ export default function AuthLayout() {
   return (
     <Stack>
       <Stack.Screen name="home" options={{ headerShown: false }} />
+      <Stack.Screen name="lobby" options={{ headerShown: false }} />
       <Stack.Screen name="game" options={{ headerShown: false }} />
     </Stack>
   );
