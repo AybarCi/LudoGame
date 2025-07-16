@@ -193,12 +193,13 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
     borderRadius: 20,
-    padding: 20,
+    paddingVertical: 20, // Vertical padding remains
+    paddingHorizontal: 10, // Horizontal padding is reduced
     marginHorizontal: 20,
     marginBottom: 20, // Added space between list and back button
   },
   listContent: {
-    paddingHorizontal: 20,
+    // Horizontal padding removed to allow items to fill the container
     paddingBottom: 20,
   },
   footer: {
