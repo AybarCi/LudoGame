@@ -1,10 +1,10 @@
-import { AuthProvider } from '../store/AuthProvider';
+import { AuthProvider, useAuth } from '../store/AuthProvider';
 import { SocketProvider } from '../store/SocketProvider';
 import { Stack, SplashScreen, useRouter, useSegments } from 'expo-router';
 import { ActivityIndicator, ImageBackground, StyleSheet } from 'react-native';
 import { useFonts, Poppins_400Regular, Poppins_600SemiBold, Poppins_700Bold } from '@expo-google-fonts/poppins';
 import { useEffect } from 'react';
-import { useAuth } from '../store/AuthProvider';
+
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();

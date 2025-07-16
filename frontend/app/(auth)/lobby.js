@@ -36,13 +36,14 @@ const Lobby = () => {
     socket.on('player_joined', handlePlayerJoined);
     socket.on('player_left', handlePlayerLeft);
 
-    console.log('[Lobby] Requesting initial room list...');
-    socket.emit('get_rooms', (initialRooms) => {
-      console.log('[Lobby] Received initial rooms:', initialRooms);
-      handleUpdateRooms(initialRooms);
+    console.log('➡️ [REQUEST] Emitting get_rooms to server to fetch initial room list...');
+    socket.emit('get_rooms', (response) => {
+      console.log('✅ [RESPONSE] Received initial room list:', JSON.stringify(response, null, 2));
+      handleUpdateRooms(response);
     });
 
     return () => {
+      // Clean up all listeners when the component unmounts
       socket.off('update_rooms', handleUpdateRooms);
       socket.off('player_joined', handlePlayerJoined);
       socket.off('player_left', handlePlayerLeft);
@@ -52,7 +53,10 @@ const Lobby = () => {
   const handleCreateRoom = () => {
     if (!socket) return;
     setIsLoading(true);
-    socket.emit('create_room', { nickname }, (response) => {
+    const payload = { nickname };
+    console.log('➡️ [REQUEST] Emitting create_room with payload:', JSON.stringify(payload, null, 2));
+    socket.emit('create_room', payload, (response) => {
+      console.log('✅ [RESPONSE] Received response for create_room:', JSON.stringify(response, null, 2));
       setIsLoading(false);
       if (response.success) {
         router.push(`/game?roomId=${response.room.id}`);
@@ -211,15 +215,14 @@ const styles = StyleSheet.create({
     fontFamily: 'Poppins_600SemiBold',
   },
   roomItem: {
-    backgroundColor: 'rgba(0, 0, 0, 0.4)',
-    padding: 20,
-    borderRadius: 10,
-    marginBottom: 15,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.2)',
+    paddingVertical: 20, // Increased vertical padding
+    paddingHorizontal: 25, // Increased horizontal padding
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    borderRadius: 10,
+    marginBottom: 10,
   },
   roomName: {
     fontSize: 18,
