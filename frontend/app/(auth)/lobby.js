@@ -72,7 +72,12 @@ const Lobby = () => {
       if (response.success) {
         router.push(`/game?roomId=${roomId}`);
       } else {
-        alert(`Could not join room: ${response.message}`);
+        // Check for the specific error message from the server
+        if (response.message === 'You are already in this room.') {
+          alert('Kendi kurduğun odaya zaten katılmış durumdasın.');
+        } else {
+          alert(`Odaya katılamadınız: ${response.message}`);
+        }
       }
     });
   };
@@ -218,11 +223,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 20, // Increased vertical padding
-    paddingHorizontal: 25, // Increased horizontal padding
+    paddingVertical: 28, // Final increase to vertical padding
+    paddingHorizontal: 30,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
     borderRadius: 10,
-    marginBottom: 10,
+    marginBottom: 12,
   },
   roomName: {
     fontSize: 18,
