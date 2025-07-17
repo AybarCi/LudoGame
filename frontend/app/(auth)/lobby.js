@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { View, Text, Button, FlatList, StyleSheet, ActivityIndicator, TouchableOpacity, ImageBackground } from 'react-native';
 import { useSocket } from '@/store/SocketProvider';
 import { useAuth } from '@/store/AuthProvider';
@@ -10,8 +11,6 @@ const Lobby = () => {
   const router = useRouter();
   const [rooms, setRooms] = useState({});
   const [isLoading, setIsLoading] = useState(true);
-
-  const nickname = user?.user_metadata?.nickname || 'Guest';
 
   useEffect(() => {
     if (!socket) {
@@ -50,12 +49,13 @@ const Lobby = () => {
     };
   }, [socket]);
 
-  const handleCreateRoom = () => {
+  const handleCreateRoom = async () => {
     if (!socket) return;
     setIsLoading(true);
-    const payload = { nickname };
-    console.log('➡️ [REQUEST] Emitting create_room with payload:', JSON.stringify(payload, null, 2));
-    socket.emit('create_room', payload, (response) => {
+    try {
+      const nickname = await AsyncStorage.getItem('user_nickname') || 'Guest';
+      console.log(`[Lobby] Creating room with nickname: ${nickname}`);
+      socket.emit('create_room', { nickname }, (response) => {
       console.log('✅ [RESPONSE] Received response for create_room:', JSON.stringify(response, null, 2));
       setIsLoading(false);
       if (response.success) {
@@ -64,11 +64,17 @@ const Lobby = () => {
         alert(`Failed to create room: ${response.message}`);
       }
     });
+    } catch (e) {
+      console.error('[Storage] Failed to read nickname for create_room.', e);
+      setIsLoading(false);
+    }
   };
 
-  const handleJoinRoom = (roomId) => {
+  const handleJoinRoom = async (roomId) => {
     if (!socket) return;
-    socket.emit('join_room', { roomId, nickname }, (response) => {
+    try {
+      const nickname = await AsyncStorage.getItem('user_nickname') || 'Guest';
+      socket.emit('join_room', { roomId, nickname }, (response) => {
       if (response.success) {
         router.push(`/game?roomId=${roomId}`);
       } else {
@@ -80,6 +86,9 @@ const Lobby = () => {
         }
       }
     });
+    } catch (e) {
+      console.error('[Storage] Failed to read nickname for join_room.', e);
+    }
   };
 
   // Render loading state (Temporarily disabled for UI review)

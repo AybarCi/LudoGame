@@ -76,13 +76,19 @@ const styles = StyleSheet.create({
   },
 });
 
-export default function RootLayout() {
+function RootLayoutNav() {
   return (
     <AuthProvider>
-      <SocketProvider>
-        <InitialLayout />
-      </SocketProvider>
+      <InitialLayout />
     </AuthProvider>
+  );
+}
+
+export default function RootLayout() {
+  return (
+    <SocketProvider>
+      <RootLayoutNav />
+    </SocketProvider>
   );
 }
 

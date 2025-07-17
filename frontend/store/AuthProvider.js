@@ -1,4 +1,5 @@
 import React, { useState, useEffect, createContext, useContext } from 'react';
+import { useSocket } from './SocketProvider';
 import { supabase } from '../services/supabase';
 
 const AuthContext = createContext();
@@ -8,6 +9,7 @@ export function useAuth() {
 }
 
 export function AuthProvider({ children }) {
+  const { connect, disconnect } = useSocket();
   const [user, setUser] = useState(null);
   const [session, setSession] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -22,15 +24,23 @@ export function AuthProvider({ children }) {
 
     // Listen for changes
     const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
-
+      const currentUser = session?.user ?? null;
       setSession(session);
-      setUser(session?.user ?? null);
+      setUser(currentUser);
+
+      if (currentUser) {
+        console.log('[AuthProvider] Auth state changed: User logged in. Connecting socket.');
+        connect(currentUser);
+      } else {
+        console.log('[AuthProvider] Auth state changed: User logged out. Disconnecting socket.');
+        disconnect();
+      }
     });
 
     return () => {
       authListener.subscription.unsubscribe();
     };
-  }, []);
+  }, [connect, disconnect]);
 
   const updateScore = async (amount) => {
     if (!user) return;

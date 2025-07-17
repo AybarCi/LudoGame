@@ -1,7 +1,7 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { View, Text, Button, StyleSheet, ActivityIndicator, TouchableOpacity } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { Alert } from 'react-native';
+import { Alert, Modal } from 'react-native';
 import { useOnlineGameEngine } from '@/hooks/useOnlineGameEngine';
 import { useSocket } from '@/store/SocketProvider';
 import { useAuth } from '@/store/AuthProvider';
@@ -21,11 +21,42 @@ const PlayerInfo = ({ players, currentPlayerId }) => (
 );
 
 const OnlineGameScreen = () => {
+  const [showTimeoutModal, setShowTimeoutModal] = useState(false);
+  const timeoutRef = useRef(null);
   const { user } = useAuth();
   const { roomId } = useLocalSearchParams();
   const router = useRouter();
   const { socket } = useSocket();
   const { state, isHost, startGame, rollDice, movePawn } = useOnlineGameEngine(roomId);
+
+  useEffect(() => {
+    const isWaitingForPlayers = state.gamePhase === 'waiting';
+    const isAlone = state.players.length === 1;
+
+    // If we are waiting and alone, and no timer is running, start one.
+    if (isWaitingForPlayers && isAlone && !timeoutRef.current) {
+      console.log('[OnlineGame] Player is alone, starting 60s timeout.');
+      timeoutRef.current = setTimeout(() => {
+        console.log('[OnlineGame] Timeout reached. Notifying user to close room.');
+        setShowTimeoutModal(true);
+        socket.emit('leave_room', { roomId });
+      }, 60000); // 60 seconds
+    }
+
+    // If we are no longer waiting alone (e.g., another player joined), clear the timer.
+    if ((!isWaitingForPlayers || !isAlone) && timeoutRef.current) {
+      console.log('[OnlineGame] Conditions changed (player joined or game started), clearing timeout.');
+      clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+    }
+
+    // Cleanup on unmount
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+    };
+  }, [state.gamePhase, state.players.length, socket, roomId]);
 
   useEffect(() => {
     if (state.isRoomDeleted) {
@@ -62,6 +93,23 @@ const OnlineGameScreen = () => {
 
   return (
     <View style={styles.container}>
+      <Modal
+        transparent={true}
+        visible={showTimeoutModal}
+        animationType="fade"
+      >
+        <View style={styles.centeredView}>
+          <View style={styles.modalView}>
+            <Text style={styles.modalText}>Oyun için yeterli sayıda katılımcı olmadığından oda silinmiştir.</Text>
+            <TouchableOpacity
+              style={styles.button}
+              onPress={() => router.replace('/(auth)/lobby')}
+            >
+              <Text style={styles.buttonText}>Tamam</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
       <PlayerInfo players={state.players} currentPlayerId={state.currentPlayer} />
       <Text style={styles.gameMessage}>{state.gameMessage || ' '}</Text>
 
@@ -155,6 +203,45 @@ const styles = StyleSheet.create({
   playerText: {
     fontSize: 14,
     fontWeight: 'bold',
+  },
+  // Modal styles from game.js for consistency
+  centeredView: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.6)',
+  },
+  modalView: {
+    margin: 20,
+    backgroundColor: 'white',
+    borderRadius: 20,
+    padding: 35,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  modalText: {
+    marginBottom: 20,
+    textAlign: 'center',
+    fontSize: 18,
+  },
+  button: {
+    backgroundColor: '#007AFF',
+    borderRadius: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 30,
+    elevation: 2,
+  },
+  buttonText: {
+    color: 'white',
+    fontWeight: 'bold',
+    textAlign: 'center',
   },
 });
 

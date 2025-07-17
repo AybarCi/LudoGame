@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { View, StyleSheet, Alert, ActivityIndicator, ImageBackground } from 'react-native';
 import { Button, Text } from '@rneui/themed';
 import { useRouter } from 'expo-router';
@@ -11,6 +12,15 @@ const HomeScreen = () => {
   const [profile, setProfile] = useState(null);
 
   useEffect(() => {
+    const storeNickname = async (nickname) => {
+      try {
+        await AsyncStorage.setItem('user_nickname', nickname);
+        console.log(`[Storage] Nickname '${nickname}' saved successfully.`);
+      } catch (e) {
+        console.error('[Storage] Failed to save nickname.', e);
+      }
+    };
+
     const fetchProfile = async () => {
       if (user) {
         const { data, error } = await supabase
@@ -23,6 +33,11 @@ const HomeScreen = () => {
           console.error('Error fetching profile:', error.message);
         } else {
           setProfile(data);
+        }
+
+        // Store the nickname for later use in other screens
+        if (user.user_metadata?.username) {
+          storeNickname(user.user_metadata.username);
         }
       }
     };

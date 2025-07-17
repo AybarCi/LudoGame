@@ -225,8 +225,6 @@ const GameScreen = () => {
         </View>
       </Modal>
 
-
-
       </SafeAreaView>
     </ImageBackground>
   );
