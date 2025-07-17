@@ -1,247 +1,208 @@
-import React, { useEffect, useState, useRef } from 'react';
-import { View, Text, Button, StyleSheet, ActivityIndicator, TouchableOpacity } from 'react-native';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
+import { View, Text, StyleSheet, ActivityIndicator, Modal, TouchableOpacity, ImageBackground } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { Alert, Modal } from 'react-native';
-import { useOnlineGameEngine } from '@/hooks/useOnlineGameEngine';
-import { useSocket } from '@/store/SocketProvider';
-import { useAuth } from '@/store/AuthProvider';
-import GameBoard from '@/components/modules/GameBoard';
-import Dice from '@/components/shared/Dice';
-
-// PlayerInfo component defined locally to resolve module issue
-const PlayerInfo = ({ players, currentPlayerId }) => (
-  <View style={styles.playerInfoContainer}>
-    {players.map(player => (
-      <View key={player.id} style={[styles.playerInfo, currentPlayerId === player.id && styles.currentPlayerInfo]}>
-        <View style={[styles.playerColor, { backgroundColor: player.color }]} />
-        <Text style={styles.playerText}>{player.nickname}</Text>
-      </View>
-    ))}
-  </View>
-);
+import { useOnlineGameEngine } from '../../hooks/useOnlineGameEngine';
+import GameBoard from '../../components/modules/GameBoard';
 
 const OnlineGameScreen = () => {
-  const [showTimeoutModal, setShowTimeoutModal] = useState(false);
-  const timeoutRef = useRef(null);
-  const { user } = useAuth();
-  const { roomId } = useLocalSearchParams();
   const router = useRouter();
-  const { socket } = useSocket();
-  const { state, isHost, startGame, rollDice, movePawn } = useOnlineGameEngine(roomId);
+  const { roomId } = useLocalSearchParams();
+  const { state, socket } = useOnlineGameEngine(roomId);
+  const [showTimeoutModal, setShowTimeoutModal] = useState(false);
+  const intervalRef = useRef(null);
+
+  const handleTimeoutModalClose = useCallback(() => {
+    // Simply navigate. The component unmount will clean up everything, including the modal.
+    setShowTimeoutModal(false);
+    // Use a short timeout to allow the modal to close before navigating
+    setTimeout(() => {
+      router.replace('/lobby');
+    }, 100);
+  }, [router]);
 
   useEffect(() => {
-    const isWaitingForPlayers = state.gamePhase === 'waiting';
-    const isAlone = state.players.length === 1;
-
-    // If we are waiting and alone, and no timer is running, start one.
-    if (isWaitingForPlayers && isAlone && !timeoutRef.current) {
-      console.log('[OnlineGame] Player is alone, starting 60s timeout.');
-      timeoutRef.current = setTimeout(() => {
-        console.log('[OnlineGame] Timeout reached. Notifying user to close room.');
-        setShowTimeoutModal(true);
-        socket.emit('leave_room', { roomId });
-      }, 60000); // 60 seconds
+    // Always clear previous interval
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
     }
 
-    // If we are no longer waiting alone (e.g., another player joined), clear the timer.
-    if ((!isWaitingForPlayers || !isAlone) && timeoutRef.current) {
-      console.log('[OnlineGame] Conditions changed (player joined or game started), clearing timeout.');
-      clearTimeout(timeoutRef.current);
-      timeoutRef.current = null;
+    const isWaitingAndAlone = state.gamePhase === 'waiting' && state.players.length === 1;
+
+    if (isWaitingAndAlone) {
+      let countdown = 0;
+      intervalRef.current = setInterval(() => {
+        countdown++;
+        if (countdown >= 60) {
+          setShowTimeoutModal(true);
+          clearInterval(intervalRef.current);
+          intervalRef.current = null;
+        }
+      }, 1000);
     }
 
-    // Cleanup on unmount
     return () => {
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
       }
     };
-  }, [state.gamePhase, state.players.length, socket, roomId]);
+  }, [state.gamePhase, state.players.length]);
 
+  // This useEffect handles the cleanup when the component unmounts.
   useEffect(() => {
-    if (state.isRoomDeleted) {
-      console.log('[UI] useEffect detected state.isRoomDeleted = true. Navigating...');
-      Alert.alert('Oda Kapatıldı', 'Oda, 5 dakika boyunca aktif olmadığı için sunucu tarafından kapatıldı.', [
-        { text: 'Tamam', onPress: () => router.replace('/(auth)/lobby') },
-      ]);
-    }
-  }, [state.isRoomDeleted, router]);
+    return () => {
+      if (socket && roomId) {
+        console.log(`Leaving room ${roomId}...`);
+        socket.emit('leave_room', { roomId });
+      }
+    };
+  }, [socket, roomId]);
+
+
+
+
+
 
   if (!state || state.gamePhase === 'connecting') {
     return (
-      <View style={styles.centeredContainer}>
-        <ActivityIndicator size="large" color="#007AFF"/>
-        <Text style={styles.loadingText}>Connecting to room...</Text>
-      </View>
-    );
-  }
-
-  if (state.gamePhase === 'waiting') {
-    return (
-      <View style={styles.centeredContainer}>
-        <Text style={styles.waitingTitle}>Room: {roomId}</Text>
-        <Text style={styles.playersTitle}>Players:</Text>
-        {state.players.map(p => <Text key={p.id}>{p.nickname} ({p.color})</Text>)}
-        {isHost ? (
-          <Button title="Start Game" onPress={startGame} disabled={state.players.length < 2} />
-        ) : (
-          <Text style={styles.waitingText}>Waiting for the host to start the game...</Text>
-        )}
-      </View>
+        <ImageBackground source={require('../../assets/images/wood-background.png')} style={styles.background}>
+            <View style={styles.centeredContainer}>
+                <ActivityIndicator size="large" color="#FFFFFF" />
+                <Text style={styles.loadingText}>Odaya bağlanılıyor...</Text>
+            </View>
+        </ImageBackground>
     );
   }
 
   return (
-    <View style={styles.container}>
+    <ImageBackground source={require('../../assets/images/wood-background.png')} style={styles.background}>
+            <View style={styles.boardContainer}>
+        <GameBoard
+          pawns={state.board || []}
+          diceValue={state.dice}
+          onRoll={() => socket.emit('roll_dice')}
+          onPawnPress={(pawn) => socket.emit('move_piece', { piece: pawn })}
+          currentPlayer={state.activePlayer}
+          validMoves={state.validMoves || []}
+          isMyTurn={state.isMyTurn}
+          players={state.players || []}
+        />
+        {state.gamePhase === 'waiting' && (
+          <View style={styles.waitingContainer}>
+            <Text style={styles.waitingText}>Oyuncular bekleniyor...</Text>
+            <Text style={styles.roomIdText}>Oda ID: {roomId}</Text>
+          </View>
+        )}
+      </View>
+
       <Modal
         transparent={true}
+        animationType="slide"
         visible={showTimeoutModal}
-        animationType="fade"
+        onRequestClose={handleTimeoutModalClose}
       >
-        <View style={styles.centeredView}>
-          <View style={styles.modalView}>
-            <Text style={styles.modalText}>Oyun için yeterli sayıda katılımcı olmadığından oda silinmiştir.</Text>
-            <TouchableOpacity
-              style={styles.button}
-              onPress={() => router.replace('/(auth)/lobby')}
-            >
-              <Text style={styles.buttonText}>Tamam</Text>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Oda Kapatıldı</Text>
+            <Text style={styles.modalText}>Kimse gelmediği için bekleme süresi doldu.</Text>
+            <TouchableOpacity style={styles.modalButton} onPress={handleTimeoutModalClose}>
+              <Text style={styles.modalButtonText}>Lobiye Dön</Text>
             </TouchableOpacity>
           </View>
         </View>
       </Modal>
-      <PlayerInfo players={state.players} currentPlayerId={state.currentPlayer} />
-      <Text style={styles.gameMessage}>{state.gameMessage || ' '}</Text>
-
-      {state.winner ? (
-        <View style={styles.winnerContainer}>
-          <Text style={styles.winnerText}>{state.players.find(p => p.id === state.winner)?.nickname} Kazandı!</Text>
-          <TouchableOpacity onPress={() => router.replace('/lobby')} style={styles.button}>
-              <Text style={styles.buttonText}>Lobiye Dön</Text>
-          </TouchableOpacity>
-        </View>
-      ) : (
-        <>
-          <GameBoard pawns={state.pawns} onPawnPress={movePawn} />
-          <View style={styles.diceContainer}>
-            <TouchableOpacity onPress={rollDice} disabled={state.currentPlayer !== user?.id || state.diceValue !== null}>
-                <Dice diceValue={state.diceValue} />
-            </TouchableOpacity>
-          </View>
-        </>
-      )}
-    </View>
+    </ImageBackground>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
+  background: {
     flex: 1,
-    justifyContent: 'space-between',
+    justifyContent: 'center',
     alignItems: 'center',
-    padding: 10,
-    backgroundColor: '#F5FCFF',
   },
   centeredContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  loadingText: {
-    marginTop: 10,
-    fontSize: 16,
-  },
-  waitingTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    marginBottom: 20,
-  },
-  playersTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    marginBottom: 10,
-  },
-  waitingText: {
-    marginTop: 20,
-    fontStyle: 'italic',
-    color: '#666',
-  },
-  bottomContainer: {
-    height: 150,
+  boardContainer: {
+    width: '100%',
+    height: 'auto',
+    aspectRatio: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    padding: 10,
   },
-  gameMessage: {
-    fontSize: 16,
-    marginVertical: 10,
-    textAlign: 'center',
-    fontWeight: 'bold',
+  loadingText: {
+      marginTop: 20,
+      fontSize: 18,
+      color: '#FFFFFF',
+      fontWeight: 'bold',
   },
-  playerInfoContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    width: '100%',
-    marginBottom: 10,
-  },
-  playerInfo: {
+  waitingContainer: {
+    position: 'absolute',
+    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+    paddingVertical: 20,
+    paddingHorizontal: 30,
+    borderRadius: 15,
     alignItems: 'center',
-    padding: 5,
-    borderRadius: 5,
-    borderWidth: 2,
-    borderColor: 'transparent',
+    justifyContent: 'center',
+    zIndex: 10, // Ensure it's on top of the board
   },
-  currentPlayerInfo: {
-    borderColor: '#FFD700', // Gold border for current player
-    transform: [{ scale: 1.1 }],
-  },
-  playerColor: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    marginBottom: 5,
-  },
-  playerText: {
-    fontSize: 14,
+  waitingText: {
+    fontSize: 24,
+    color: 'white',
     fontWeight: 'bold',
   },
-  // Modal styles from game.js for consistency
-  centeredView: {
+  roomIdText: {
+    fontSize: 16,
+    color: '#DDDDDD',
+    textAlign: 'center',
+    marginTop: 8,
+  },
+  modalOverlay: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.6)',
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
   },
-  modalView: {
-    margin: 20,
+  modalContent: {
+    width: '85%',
     backgroundColor: 'white',
-    borderRadius: 20,
-    padding: 35,
+    borderRadius: 15,
+    padding: 25,
     alignItems: 'center',
     shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
     shadowRadius: 4,
     elevation: 5,
   },
-  modalText: {
-    marginBottom: 20,
-    textAlign: 'center',
-    fontSize: 18,
+  modalTitle: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    marginBottom: 15,
+    color: '#333',
   },
-  button: {
-    backgroundColor: '#007AFF',
+  modalText: {
+    fontSize: 16,
+    textAlign: 'center',
+    marginBottom: 25,
+    color: '#555',
+  },
+  modalButton: {
+    backgroundColor: '#007BFF',
     borderRadius: 10,
     paddingVertical: 12,
-    paddingHorizontal: 30,
+    paddingHorizontal: 40,
     elevation: 2,
   },
-  buttonText: {
+  modalButtonText: {
     color: 'white',
     fontWeight: 'bold',
     textAlign: 'center',
+    fontSize: 16,
   },
 });
 

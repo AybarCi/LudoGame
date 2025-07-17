@@ -12,6 +12,7 @@ const initialState = {
   diceValue: null,
   message: '',
   isRoomDeleted: false,
+  gamePhase: 'waiting',
 };
 
 function gameReducer(state, action) {
@@ -40,6 +41,13 @@ export function useOnlineGameEngine(roomId) {
           dispatch({ type: 'ROOM_DELETED' });
           return;
         }
+        let gamePhase = 'waiting';
+        if (room.gameState?.winner) {
+          gamePhase = 'finished';
+        } else if (room.gameState) {
+          gamePhase = 'playing';
+        }
+
         const newState = {
           room,
           gameState: room.gameState,
@@ -50,6 +58,7 @@ export function useOnlineGameEngine(roomId) {
           diceValue: room.gameState?.diceValue,
           message: room.gameState?.message || '',
           isRoomDeleted: false,
+          gamePhase: gamePhase, // Set as a concrete value
         };
         dispatch({ type: 'SET_STATE', payload: newState });
       },
@@ -96,6 +105,8 @@ export function useOnlineGameEngine(roomId) {
   const movePawn = (pawnId) => {
     if (state.turn === user?.id) socket.emit('move_pawn', { roomId, pawnId });
   };
+
+
 
   return { state, startGame, rollDice, movePawn };
 }

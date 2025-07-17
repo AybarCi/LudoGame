@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { View, Text, Button, FlatList, StyleSheet, ActivityIndicator, TouchableOpacity, ImageBackground } from 'react-native';
+import { View, Text, Button, FlatList, StyleSheet, ActivityIndicator, TouchableOpacity, ImageBackground, Modal } from 'react-native';
 import { useSocket } from '@/store/SocketProvider';
 import { useAuth } from '@/store/AuthProvider';
 import { useRouter } from 'expo-router';
@@ -11,6 +11,7 @@ const Lobby = () => {
   const router = useRouter();
   const [rooms, setRooms] = useState({});
   const [isLoading, setIsLoading] = useState(true);
+  const [showSelfJoinModal, setShowSelfJoinModal] = useState(false);
 
   useEffect(() => {
     if (!socket) {
@@ -59,7 +60,7 @@ const Lobby = () => {
       console.log('✅ [RESPONSE] Received response for create_room:', JSON.stringify(response, null, 2));
       setIsLoading(false);
       if (response.success) {
-        router.push(`/game?roomId=${response.room.id}`);
+        router.push(`/onlineGame?roomId=${response.room.id}`);
       } else {
         alert(`Failed to create room: ${response.message}`);
       }
@@ -80,7 +81,7 @@ const Lobby = () => {
       } else {
         // Check for the specific error message from the server
         if (response.message === 'You are already in this room.') {
-          alert('Kendi kurduğun odaya zaten katılmış durumdasın.');
+          setShowSelfJoinModal(true);
         } else {
           alert(`Odaya katılamadınız: ${response.message}`);
         }
@@ -154,6 +155,24 @@ const Lobby = () => {
           <Text style={styles.backButtonText}>Geri Dön</Text>
         </TouchableOpacity>
       </View>
+
+      <Modal
+        transparent={true}
+        visible={showSelfJoinModal}
+        animationType="fade"
+        onRequestClose={() => setShowSelfJoinModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContainer}>
+            <Text style={styles.modalTitle}>Uyarı</Text>
+            <Text style={styles.modalText}>Kendi kurduğunuz bir odaya dışarıdan katılamazsınız.</Text>
+            <TouchableOpacity style={styles.modalButton} onPress={() => setShowSelfJoinModal(false)}>
+              <Text style={styles.modalButtonText}>Anladım</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
     </ImageBackground>
   );
 };
@@ -276,7 +295,54 @@ const styles = StyleSheet.create({
   loadingText: {
     marginTop: 10,
     fontSize: 16,
-  }
+  },
+  // Modal Styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContainer: {
+    width: '85%',
+    backgroundColor: '#F3E9DD',
+    borderRadius: 15,
+    padding: 25,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 5,
+    elevation: 10,
+    borderWidth: 2,
+    borderColor: '#C1A27B',
+  },
+  modalTitle: {
+    fontSize: 22,
+    fontFamily: 'Poppins_700Bold',
+    color: '#5D4037',
+    marginBottom: 15,
+  },
+  modalText: {
+    fontSize: 16,
+    fontFamily: 'Poppins_400Regular',
+    color: '#6D4C41',
+    textAlign: 'center',
+    marginBottom: 25,
+    lineHeight: 24,
+  },
+  modalButton: {
+    backgroundColor: '#e53935',
+    paddingVertical: 12,
+    paddingHorizontal: 40,
+    borderRadius: 10,
+    elevation: 3,
+  },
+  modalButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontFamily: 'Poppins_600SemiBold',
+  },
 });
 
 export default Lobby;
