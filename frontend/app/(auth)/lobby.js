@@ -19,36 +19,65 @@ const Lobby = () => {
       return;
     }
 
-    const handleUpdateRooms = (updatedRooms) => {
-      setRooms(updatedRooms);
+    const handleUpdateRooms = (roomsArray) => {
+      console.log('⬅️ [EVENT] Received update_rooms:', roomsArray);
+      const roomsObject = roomsArray.reduce((acc, room) => {
+        acc[room.id] = room;
+        return acc;
+      }, {});
+      setRooms(roomsObject);
       setIsLoading(false);
     };
 
     const handlePlayerJoined = (room) => {
-        setRooms(prevRooms => ({...prevRooms, [room.id]: room}));
+      console.log('⬅️ [EVENT] Received player_joined:', room);
+      setRooms(prevRooms => ({ ...prevRooms, [room.id]: room }));
     };
 
     const handlePlayerLeft = (room) => {
-        setRooms(prevRooms => ({...prevRooms, [room.id]: room}));
+      console.log('⬅️ [EVENT] Received player_left:', room);
+      setRooms(prevRooms => ({ ...prevRooms, [room.id]: room }));
     };
 
+    const handleGameStarting = (room) => {
+      console.log(`[Lobby] Received game_starting event for room: ${room.id}`);
+      // Use the room object directly from the event to avoid race conditions with state updates.
+      if (room && room.players && room.players.some(p => p.id === socket.id)) {
+        console.log(`Navigating to game room ${room.id}`);
+        router.push({
+          pathname: '/onlineGame',
+          params: { roomId: room.id },
+        });
+      }
+    };
+
+    // Set up listeners
     socket.on('update_rooms', handleUpdateRooms);
     socket.on('player_joined', handlePlayerJoined);
     socket.on('player_left', handlePlayerLeft);
+    socket.on('game_starting', handleGameStarting);
 
+    // Initial fetch
     console.log('➡️ [REQUEST] Emitting get_rooms to server to fetch initial room list...');
-    socket.emit('get_rooms', (response) => {
-      console.log('✅ [RESPONSE] Received initial room list:', JSON.stringify(response, null, 2));
-      handleUpdateRooms(response);
+    socket.emit('get_rooms', (roomsArray) => {
+      console.log('⬅️ [RESPONSE] Received room list from server:', roomsArray);
+      const roomsObject = roomsArray.reduce((acc, room) => {
+        acc[room.id] = room;
+        return acc;
+      }, {});
+      setRooms(roomsObject);
+      setIsLoading(false);
     });
 
+    // Cleanup listeners on unmount
     return () => {
-      // Clean up all listeners when the component unmounts
+      console.log('[Lobby] Cleaning up socket listeners.');
       socket.off('update_rooms', handleUpdateRooms);
       socket.off('player_joined', handlePlayerJoined);
       socket.off('player_left', handlePlayerLeft);
+      socket.off('game_starting', handleGameStarting);
     };
-  }, [socket]);
+  }, [socket, router]);
 
   const handleCreateRoom = async () => {
     if (!socket) return;

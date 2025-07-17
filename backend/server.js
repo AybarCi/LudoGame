@@ -99,6 +99,15 @@ io.on('connection', (socket) => {
     io.to(roomId).emit('player_joined', room);
     broadcastRoomList();
     if (typeof callback === 'function') callback({ success: true, room });
+
+    // --- Auto-start game if room is full ---
+    if (room.players.length === 2) { // Game starts with 2 players now
+      console.log(`[Game] Auto-starting full room: ${roomId}`);
+      room.gameState = initializeGameState(room.players);
+      broadcastRoomList(); // Update list to show game has started
+      // Emit to all players in the room to navigate to the game screen
+      io.to(roomId).emit('game_starting', { roomId: room.id });
+    }
   });
 
   // --- Game Events ---
