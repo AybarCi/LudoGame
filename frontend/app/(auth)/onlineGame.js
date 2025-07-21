@@ -148,15 +148,12 @@ const OnlineGameScreen = () => {
         source={require('../../assets/images/wood-background.png')} 
         style={[styles.background, { flex: 1, justifyContent: 'center', alignItems: 'center' }]}
       >
-        <View style={styles.centeredContainer}>
-          <ActivityIndicator size="large" color="#FFFFFF" />
-          <Text style={styles.loadingText}>Oda kapatılıyor...</Text>
-        </View>
+        <ActivityIndicator size="large" color="#FFFFFF" />
+        <Text style={styles.loadingText}>Oda kapatılıyor...</Text>
       </ImageBackground>
     );
   }
 
-  
 
 const renderWaitingOverlay = () => (
   <View style={styles.overlay}>
@@ -208,7 +205,7 @@ useEffect(() => {
 
 
       {/* Koşullu Render: Bekleme ekranı VEYA Oyun Alanı */}
-      {gamePhase === 'connecting' || gamePhase === 'waiting' ? (
+      {gamePhase === 'waiting' ? (
         renderWaitingOverlay()
       ) : (
         /* Oyun Alanı (Tahta, Kontroller vb.) */

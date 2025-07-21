@@ -15,15 +15,20 @@ const initialState = {
 function gameReducer(state, action) {
     switch (action.type) {
         case 'SET_GAME_STATE': {
-            const { gameState, players, user, socketId } = action.payload;
+            const { room, user, socketId } = action.payload;
+
+
+
+            const { gameState, players } = room;
 
             if (!gameState || !players || !user || !socketId) {
                 return { ...state, gamePhase: 'error', message: 'Sunucudan eksik veri alındı.' };
             }
 
-            const gamePhase = gameState.gamePhase || 'waiting';
+            // Phase bilgisini doğru yerden al: gameState.phase
+            const gamePhase = gameState.phase || 'waiting';
             const myPlayer = players.find(p => p.id === socketId);
-            
+
             const pawns = [];
             if (gameState.positions) {
                 Object.keys(gameState.positions).forEach(color => {
@@ -39,7 +44,7 @@ function gameReducer(state, action) {
             const isMyTurn = myPlayer ? newGameState.currentPlayer === myPlayer.color : false;
 
             return {
-                ...state, // Önceki state'i koru
+                ...state,
                 players: players,
                 gameState: newGameState,
                 isMyTurn: isMyTurn,
@@ -71,12 +76,15 @@ export function useOnlineGameEngine(roomId) {
         if (room && room.gameState && room.players) {
             dispatch({ 
                 type: 'SET_GAME_STATE', 
-                payload: { gameState: room.gameState, players: room.players, user, socketId: socket.id } 
+                payload: { room: room, user, socketId: socket.id } 
             });
         }
     };
 
     const handleUpdateRooms = (roomsArray) => {
+      if (state.gamePhase === 'playing' || state.gamePhase === 'pre-game' || state.gamePhase === 'finished') {
+        return; // Oyun başladıktan sonra bu event'i dikkate alma
+      }
       const foundRoom = roomsArray.find(r => r.id === roomId);
       if (foundRoom && foundRoom.phase !== state.gamePhase) {
         console.log(`[useOnlineGameEngine] Phase changed via update_rooms: ${state.gamePhase} -> ${foundRoom.phase}`);
@@ -97,7 +105,7 @@ export function useOnlineGameEngine(roomId) {
       socket.off('room_updated', handleRoomUpdate);
       socket.off('update_rooms', handleUpdateRooms);
     };
-  }, [socket, roomId, user]);
+  }, [socket, roomId, user, state.gamePhase]);
 
 
 

@@ -204,19 +204,47 @@ const playBotTurnIfNeeded = (roomId) => {
 
 const determineTurnOrder = (roomId) => {
     const room = rooms[roomId];
-    const rolls = room.gameState.turnOrderRolls;
+    if (!room || room.players.length < 2) return;
 
-    if (rolls.length < room.players.length) return;
+    // Tüm oyuncular (botlar dahil) zar attı mı kontrol et
+    if (room.gameState.turnOrderRolls.length === room.players.length) {
+        console.log(`[Turn Order] All players rolled in room ${roomId}. Determining order.`);
+        room.gameState.turnOrderRolls.sort((a, b) => b.roll - a.roll);
+        const turnOrder = room.gameState.turnOrderRolls.map(r => r.color);
+        room.gameState.turnOrder = turnOrder;
+        room.gameState.currentPlayer = turnOrder[0];
+        room.gameState.phase = 'playing';
+        room.gameState.message = `${room.gameState.turnOrderRolls[0].nickname} oyuna başlıyor!`
+        updateRoom(roomId);
+        playBotTurnIfNeeded(roomId); // İlk oyuncu botsa, oynaması için tetikle
+    }
+};
 
-    rolls.sort((a, b) => b.roll - a.roll);
-    room.gameState.turnOrder = rolls.map(r => r.color);
-    room.gameState.phase = 'playing';
-    room.gameState.currentPlayer = room.gameState.turnOrder[0];
-    const firstPlayer = room.players.find(p => p.color === room.gameState.currentPlayer);
-    room.gameState.message = `${firstPlayer.nickname} en yüksek zarı attı ve oyuna başlıyor!`;
+const handleBotTurnOrderRolls = (roomId) => {
+    const room = rooms[roomId];
+    if (!room || room.gameState.phase !== 'pre-game') return;
 
-    updateRoom(roomId);
-    playBotTurnIfNeeded(roomId);
+    const botsToRoll = room.players.filter(p => p.isBot && !room.gameState.turnOrderRolls.some(r => r.color === p.color));
+
+    if (botsToRoll.length === 0) {
+        // Bot kalmadıysa, sırayı belirlemeyi dene (belki de son atan insandı)
+        determineTurnOrder(roomId);
+        return;
+    }
+
+    botsToRoll.forEach((bot, index) => {
+        setTimeout(() => {
+            if (!rooms[roomId]) return; // Oda zaman aşımıyla silinmiş olabilir
+            const roll = Math.floor(Math.random() * 6) + 1;
+            room.gameState.turnOrderRolls.push({ nickname: bot.nickname, roll, color: bot.color });
+            console.log(`[Bot Turn Order] Bot ${bot.nickname} rolled a ${roll} in room ${roomId}`);
+            updateRoom(roomId);
+
+            // Her bot attıktan sonra sıranın belirlenip belirlenmediğini kontrol et
+            determineTurnOrder(roomId);
+
+        }, (index + 1) * 1000); // Botların atışları arasına 1 saniye ekle
+    });
 };
 
 // --- Socket.IO Bağlantı Mantığı ---
@@ -267,51 +295,77 @@ io.on('connection', (socket) => {
             room.players.push({ id: `bot-${Date.now()}-${i}`, nickname: botName, color: colors[i], isBot: true, isReady: true });
         }
 
-        socket.emit('room_created', { roomId });
         if (typeof callback === 'function') callback({ success: true, room });
 
-        // 20 saniye bekleme süresi başlat
-        roomTimeouts[roomId] = setTimeout(() => {
-            const currentRoom = rooms[roomId];
-            if (!currentRoom) return;
-            const playerCount = currentRoom.players.length;
-            const maxPlayers = 4;
-            const colors = ['red', 'green', 'blue', 'yellow'];
-            const usedColors = currentRoom.players.map(p => p.color);
-            const availableColors = colors.filter(c => !usedColors.includes(c));
-            const availableBotNames = [...BOT_NAMES];
-            for (let i = 0; i < maxPlayers - playerCount; i++) {
-                const color = availableColors[i];
-                const botNameIndex = Math.floor(Math.random() * availableBotNames.length);
-                const botName = availableBotNames.splice(botNameIndex, 1)[0];
-                currentRoom.players.push({ id: `bot-${Date.now()}-${i}`, nickname: botName, color, isBot: true, isReady: true });
-            }
-            currentRoom.gameState.phase = 'pre-game';
-            currentRoom.gameState.message = 'Sırayı belirlemek için zar atın!';
-            updateRoom(roomId);
-        }, 20000);
-        
-        if (room.players.length === playerCount) {
+        // Eğer oda hemen dolduysa (1 insan + 3 bot), oyunu başlat
+        if (room.players.length === 4) {
             room.gameState.phase = 'pre-game';
-            room.gameState.message = 'Sırayı belirlemek için zar atın!';
+            console.log(`[Room Full] Room ${roomId} is full after creation, starting pre-game.`);
         }
+
         updateRoom(roomId);
+        broadcastRoomList();
     });
 
-    socket.on('join_room', ({ roomId, nickname }) => {
+    socket.on('join_room', ({ roomId, nickname }, callback) => {
         const room = rooms[roomId];
-        if (!room) return socket.emit('error', { message: 'Oda bulunamadı.' });
-        if (room.players.length >= 4) return socket.emit('error', { message: 'Oda dolu.' });
+        if (!room) {
+            return callback({ success: false, message: 'Oda bulunamadı.' });
+        }
+        if (room.players.length >= 4) {
+            return callback({ success: false, message: 'Oda dolu.' });
+        }
 
-        const colors = ['red', 'green', 'blue', 'yellow'];
-        const usedColors = room.players.map(p => p.color);
-        const availableColor = colors.find(c => !usedColors.includes(c));
-        const player = { id: socket.id, nickname, color: availableColor, isBot: false, isReady: true };
-
+        const color = ['red', 'green', 'blue', 'yellow'].find(c => !room.players.some(p => p.color === c));
+        if (!color) {
+            return callback({ success: false, message: 'Oda için uygun renk bulunamadı.'});
+        }
+        const player = { id: socket.id, nickname, color, isBot: false, isReady: true };
         room.players.push(player);
         socket.join(roomId);
-        socket.emit('joined_room', { roomId });
+
+        if (typeof callback === 'function') callback({ success: true, room });
+
+        console.log(`[Player Joined] ${nickname} joined room ${roomId}. Total players: ${room.players.length}`);
+
+        // Eğer katılan oyuncuyla oda dolduysa, oyunu başlat
+        if (room.players.length === 4) {
+            room.gameState.phase = 'pre-game';
+            console.log(`[Room Full] Room ${roomId} is now full, starting pre-game.`);
+            if(roomTimeouts[roomId]) {
+                clearTimeout(roomTimeouts[roomId]);
+                delete roomTimeouts[roomId];
+            }
+        }
+
         updateRoom(roomId);
+        broadcastRoomList();
+
+        // 20 saniye bekleme süresi başlat (eğer oda dolmadıysa)
+        if (room.players.length < 4 && !roomTimeouts[roomId]) {
+            roomTimeouts[roomId] = setTimeout(() => {
+                const currentRoom = rooms[roomId];
+                if (!currentRoom || currentRoom.players.length === 4) return;
+                
+                const playerCount = currentRoom.players.length;
+                const maxPlayers = 4;
+                const colors = ['red', 'green', 'blue', 'yellow'];
+                const usedColors = currentRoom.players.map(p => p.color);
+                const availableColors = colors.filter(c => !usedColors.includes(c));
+                const availableBotNames = [...BOT_NAMES];
+
+                for (let i = 0; i < maxPlayers - playerCount; i++) {
+                    const color = availableColors[i];
+                    const botNameIndex = Math.floor(Math.random() * availableBotNames.length);
+                    const botName = availableBotNames.splice(botNameIndex, 1)[0];
+                    currentRoom.players.push({ id: `bot-${Date.now()}-${i}`, nickname: botName, color, isBot: true, isReady: true });
+                }
+                currentRoom.gameState.phase = 'pre-game';
+                currentRoom.gameState.message = 'Sırayı belirlemek için zar atın!';
+                console.log(`[Auto Start] Room ${roomId} auto-starting with bots.`);
+                updateRoom(roomId);
+            }, 20000);
+        }
     });
 
     socket.on('roll_dice_for_turn_order', ({ roomId }) => {
@@ -324,7 +378,8 @@ io.on('connection', (socket) => {
         room.gameState.turnOrderRolls.push({ nickname: player.nickname, roll, color: player.color });
         
         updateRoom(roomId);
-        determineTurnOrder(roomId);
+        // İnsan oyuncu attıktan sonra botları tetikle
+        handleBotTurnOrderRolls(roomId);
     });
 
     socket.on('roll_dice', ({ roomId }) => {

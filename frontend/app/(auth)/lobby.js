@@ -106,7 +106,7 @@ const Lobby = () => {
       const nickname = await AsyncStorage.getItem('user_nickname') || 'Guest';
       socket.emit('join_room', { roomId, nickname }, (response) => {
       if (response.success) {
-        router.push(`/game?roomId=${roomId}`);
+        router.push(`/onlineGame?roomId=${roomId}`);
       } else {
         // Check for the specific error message from the server
         if (response.message === 'You are already in this room.') {
