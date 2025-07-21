@@ -39,8 +39,8 @@ const Lobby = () => {
       setRooms(prevRooms => ({ ...prevRooms, [room.id]: room }));
     };
 
-    const handleGameStarting = (room) => {
-      console.log(`[Lobby] Received game_starting event for room: ${room.id}`);
+    const handleGameStarted = (room) => {
+      console.log(`[Lobby] Received game_started event for room: ${room.id}`);
       // Use the room object directly from the event to avoid race conditions with state updates.
       if (room && room.players && room.players.some(p => p.id === socket.id)) {
         console.log(`Navigating to game room ${room.id}`);
@@ -55,7 +55,7 @@ const Lobby = () => {
     socket.on('update_rooms', handleUpdateRooms);
     socket.on('player_joined', handlePlayerJoined);
     socket.on('player_left', handlePlayerLeft);
-    socket.on('game_starting', handleGameStarting);
+    socket.on('game_started', handleGameStarted);
 
     // Initial fetch
     console.log('➡️ [REQUEST] Emitting get_rooms to server to fetch initial room list...');
@@ -75,7 +75,7 @@ const Lobby = () => {
       socket.off('update_rooms', handleUpdateRooms);
       socket.off('player_joined', handlePlayerJoined);
       socket.off('player_left', handlePlayerLeft);
-      socket.off('game_starting', handleGameStarting);
+      socket.off('game_started', handleGameStarted);
     };
   }, [socket, router]);
 

@@ -133,11 +133,13 @@ const generateBoardLayout = (pawns, currentPlayer, diceValue) => {
 
   // 2. Place pawns on the generated board
   pawns.forEach(pawn => {
-    if (pawn.position === -1) { // In base
+    // 'start' pozisyonunu da 'base' (-1) olarak kabul et
+    if (pawn.position === -1 || pawn.position === 'start') { // In base
       const { base } = areas[pawn.color];
-      const pawnsInBase = pawns.filter(p => p.color === pawn.color && p.position === -1);
+      // Hem 'start' hem de -1 pozisyonundaki piyonları say
+      const pawnsInBase = pawns.filter(p => p.color === pawn.color && (p.position === -1 || p.position === 'start'));
       const pawnIndex = pawnsInBase.findIndex(p => p.id === pawn.id);
-      const pawnSpots = [[1, 1], [1, 4], [4, 1], [4, 4]];
+      const pawnSpots = [[1, 1], [1, 4], [4, 1], [4, 4]]; // Evdeki 4 piyonun konumu
       if (pawnIndex !== -1) {
         const [r, c] = pawnSpots[pawnIndex];
         layout[(base[0] + r) * GRID_SIZE + (base[1] + c)].pawns.push(pawn);

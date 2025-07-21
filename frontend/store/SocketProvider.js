@@ -1,85 +1,101 @@
-import React, { createContext, useContext, useState, useMemo } from 'react';
+import React, { createContext, useContext, useState, useMemo, useRef, useCallback } from 'react';
 import { io } from 'socket.io-client';
 
+// 1. Context'i oluştur
+const SocketContext = createContext(null);
 
-// Socket instance will be created lazily, not here.
-let socket = null;
+// 2. Kolay erişim için hook'u oluştur
+export const useSocket = () => {
+    return useContext(SocketContext);
+};
 
-const SocketContext = createContext();
-
-export const useSocket = () => useContext(SocketContext);
-
+// 3. Provider bileşenini oluştur
 export const SocketProvider = ({ children }) => {
-  const [isConnected, setIsConnected] = useState(false);
+    const socketRef = useRef(null); // Soket örneğini re-render'lar arasında korumak için ref kullan
+    const [isConnected, setIsConnected] = useState(false);
+    const [roomClosed, setRoomClosed] = useState({ isClosed: false, reason: '' });
 
-  // Memoize the context value to prevent unnecessary re-renders of consumers
-  const contextValue = useMemo(() => {
-    const connect = (user) => {
-      if (socket && socket.connected) {
-        console.log('[SocketProvider] Already connected.');
-        return;
-      }
+    // contextValue'yu memoize ederek gereksiz re-render'ları önle
+    const contextValue = useMemo(() => {
+        const connect = (user) => {
+            // Zaten bağlıysa veya kullanıcı yoksa işlem yapma
+            if (socketRef.current?.connected) {
+                console.log('[SocketProvider] Zaten bağlı.');
+                return;
+            }
+            if (!user) {
+                console.error('[SocketProvider] Bağlanmak için kullanıcı bilgisi gerekli!');
+                return;
+            }
 
-      // LAZY INITIALIZATION: Create socket instance on first connect call.
-      if (!socket) {
-        const socketUrl = process.env.EXPO_PUBLIC_SOCKET_URL;
-        if (!socketUrl) {
-          console.error('[FATAL] EXPO_PUBLIC_SOCKET_URL is not defined. Cannot connect.');
-          return;
-        }
+            // Soket örneği daha önce oluşturulmadıysa oluştur (Lazy Initialization)
+            if (!socketRef.current) {
+                const socketUrl = process.env.EXPO_PUBLIC_SOCKET_URL;
+                if (!socketUrl) {
+                    console.error('[FATAL] EXPO_PUBLIC_SOCKET_URL tanımlı değil. Bağlantı kurulamıyor.');
+                    return;
+                }
 
-        console.log(`[SocketProvider] First connection. Creating socket instance for ${socketUrl}`);
-        socket = io(socketUrl, {
-          autoConnect: false,
-          reconnection: true,
-          reconnectionAttempts: 5,
-          reconnectionDelay: 2000,
-          transports: ['websocket'],
-        });
+                console.log(`[SocketProvider] İlk bağlantı. Soket oluşturuluyor: ${socketUrl}`);
+                socketRef.current = io(socketUrl, {
+                    autoConnect: false, // Manuel olarak bağlanacağız
+                    reconnection: true,
+                    transports: ['websocket'],
+                });
 
-        // Set up listeners only once when the socket is created
-        socket.on('connect', () => {
-          console.log(`[SocketProvider] Connected with id: ${socket.id}`);
-          setIsConnected(true);
-        });
+                // Listener'ları sadece bir kez, soket oluşturulduğunda ekle
+                socketRef.current.on('connect', () => {
+                    console.log(`[SocketProvider] ✅ Sunucuya bağlanıldı! ID: ${socketRef.current.id}`);
+                    setIsConnected(true);
+                });
 
-        socket.on('disconnect', (reason) => {
-          console.log(`[SocketProvider] Disconnected: ${reason}`);
-          setIsConnected(false);
-        });
+                socketRef.current.on('disconnect', (reason) => {
+                    console.log(`[SocketProvider] ❌ Bağlantı kesildi: ${reason}`);
+                    setIsConnected(false);
+                });
 
-        socket.on('connect_error', (err) => {
-          console.error(`[SocketProvider] Connection Error: ${err.message}`);
-        });
-      }
+                socketRef.current.on('connect_error', (err) => {
+                    console.error(`[SocketProvider] ❌ Bağlantı Hatası: ${err.message}`);
+                });
 
-      console.log(`[SocketProvider] Manual connect initiated for user: ${user.id}`);
-      socket.auth = { userId: user.id, nickname: user.user_metadata?.nickname };
-      socket.connect();
-    };
+                // Oda kapatıldığında tetiklenecek
+                socketRef.current.on('room_closed', (data) => {
+                    console.log('[SocketProvider] Oda kapatıldı:', data.reason);
+                    setRoomClosed({ isClosed: true, reason: data.reason });
+                    // 3 saniye sonra mesajı kaldır
+                    setTimeout(() => {
+                        setRoomClosed({ isClosed: false, reason: '' });
+                    }, 5000);
+                });
+            }
 
-    const disconnect = () => {
-      if (!socket || !socket.connected) {
-        console.log('[SocketProvider] Already disconnected or socket not created.');
-        return;
-      }
-      console.log('[SocketProvider] Manual disconnect initiated.');
-      socket.disconnect();
-    };
+            // Kullanıcı bilgileriyle birlikte manuel olarak bağlan
+            console.log(`[SocketProvider] Kullanıcı ile bağlantı başlatılıyor: ${user.id}`);
+            socketRef.current.auth = { userId: user.id, nickname: user.user_metadata?.nickname };
+            socketRef.current.connect();
+        };
 
+        const disconnect = () => {
+            if (!socketRef.current?.connected) {
+                console.log('[SocketProvider] Zaten bağlı değil.');
+                return;
+            }
+            console.log('[SocketProvider] Bağlantı manuel olarak kesiliyor.');
+            socketRef.current.disconnect();
+        };
 
+        return {
+            socket: socketRef.current,
+            isConnected,
+            roomClosed,
+            connect,
+            disconnect,
+        };
+    }, [isConnected]); // isConnected değiştiğinde contextValue yeniden hesaplanır
 
-    return {
-      socket,
-      isConnected,
-      connect,
-      disconnect,
-    };
-  }, [isConnected]);
-
-  return (
-    <SocketContext.Provider value={contextValue}>
-      {children}
-    </SocketContext.Provider>
-  );
+    return (
+        <SocketContext.Provider value={contextValue}>
+            {children}
+        </SocketContext.Provider>
+    );
 };
