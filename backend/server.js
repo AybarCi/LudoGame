@@ -1,4 +1,5 @@
 const express = require('express');
+const { PLAYER_COLORS, HOME_POSITIONS, START_POSITIONS, HOME_ENTRANCE, PATH_LENGTH, HOME_STRETCH_LENGTH, GOAL_POSITION, PATH_MAP, SAFE_SPOTS } = require('./constants');
 const http = require('http');
 const { Server } = require('socket.io');
 const cors = require('cors');
@@ -8,21 +9,16 @@ const app = express();
 app.use(cors());
 const server = http.createServer(app);
 const io = new Server(server, {
-    cors: {
-        origin: "*",
-        methods: ["GET", "POST"]
-    }
+  cors: {
+    origin: "*",
+    methods: ["GET", "POST"]
+  }
 });
 
 const PORT = 3001;
 const BOT_NAMES = ["Aslı", "Can", "Efe", "Gizem"];
 
-// --- Oyun Sabitleri ---
-const SAFE_POSITIONS = [0, 8, 13, 21, 26, 34, 39, 47];
-const START_POSITIONS = { red: 0, green: 13, blue: 39, yellow: 26 };
-const HOME_ENTRANCES = { red: 51, green: 12, blue: 38, yellow: 25 };
-const HOME_PATH_STARTS = { red: 52, green: 58, yellow: 70, blue: 64 };
-const WINNING_POSITIONS = { red: 57, green: 63, yellow: 75, blue: 69 };
+
 
 let rooms = {};
 const roomTimeouts = {}; // roomId: timeoutId
@@ -44,9 +40,19 @@ const updateRoom = (roomId) => {
     if (room) {
         // Her güncellemede pozisyonları piyon formatına çevir
         const roomStateForClient = {
-            ...room,
+            id: room.id,
+            players: room.players,
+            hostId: room.hostId,
+            phase: room.gameState?.phase,
             gameState: {
-                ...room.gameState,
+                phase: room.gameState.phase,
+                currentPlayer: room.gameState.currentPlayer,
+                diceValue: room.gameState.diceValue,
+                turnOrder: room.gameState.turnOrder,
+                turnOrderRolls: room.gameState.turnOrderRolls,
+                validMoves: room.gameState.validMoves,
+                positions: room.gameState.positions,
+                message: room.gameState.message,
                 pawns: convertPositionsToPawns(room.gameState.positions)
             }
         };
@@ -56,12 +62,22 @@ const updateRoom = (roomId) => {
 };
 
 const broadcastRoomList = () => {
-    const roomDetails = Object.values(rooms).map(r => ({ id: r.id, playerCount: r.players.length, phase: r.gameState.phase }));
+    // Oda listesinde sadece botlardan oluşan odaları asla gösterme!
+    const roomDetails = Object.values(rooms)
+        .filter(r => r.players.some(p => !p.isBot)) // En az 1 insan varsa göster
+        .map(r => ({ id: r.id, playerCount: r.players.length, phase: r.gameState.phase }));
     io.emit('update_rooms', roomDetails);
 };
 
 const deleteRoom = (roomId, reason) => {
     if (rooms[roomId]) {
+        const room = rooms[roomId];
+        console.log(`[DEBUG] deleteRoom called for roomId=${roomId}, reason='${reason}'. Room state before delete:`, JSON.stringify({
+            players: room.players,
+            phase: room.gameState?.phase,
+            hostId: room.hostId,
+            createdAt: room.createdAt
+        }, null, 2));
         // Timeout'u temizle
         if (roomTimeouts[roomId]) {
             clearTimeout(roomTimeouts[roomId]);
@@ -69,79 +85,98 @@ const deleteRoom = (roomId, reason) => {
         }
         console.log(`[Temizlik] Oda siliniyor: ${roomId}. Sebep: ${reason}`);
         io.to(roomId).emit('room_closed', { reason });
+        console.log(`[DEBUG] room_closed event emitted for roomId=${roomId}, reason='${reason}'`);
         delete rooms[roomId];
         broadcastRoomList();
     }
 };
 
-const getValidMoves = (color, diceValue, positions) => {
+const getValidMoves = (player, diceValue, room) => {
+    const { color, pawns } = player;
+    const { players } = room.gameState;
     const moves = [];
-    const playerPawns = positions[color];
-    const startPosition = START_POSITIONS[color];
 
-    if (diceValue === 6 && playerPawns.includes(-1)) {
-        const isStartOccupiedBySelf = playerPawns.some(p => p === startPosition);
-        if (!isStartOccupiedBySelf) {
-            const pawnIndex = playerPawns.findIndex(p => p === -1);
-            moves.push({ type: 'start', pawnIndex, from: -1, to: startPosition });
-        }
-    }
+    const startPos = START_POSITIONS[color];
+    const homeEntry = HOME_ENTRANCE[color];
+    const playerPath = PATH_MAP[color];
 
-    for (let i = 0; i < playerPawns.length; i++) {
-        const currentPos = playerPawns[i];
-        if (currentPos < 0) continue;
+    pawns.forEach((pawn, pawnIndex) => {
+        const currentPos = pawn.position;
 
-        const homeEntrance = HOME_ENTRANCES[color];
-        const homePathStart = HOME_PATH_STARTS[color];
-        const winningPosition = WINNING_POSITIONS[color];
-        let newPos;
-
-        if (currentPos >= 52) { // Ev yolunda
-            newPos = currentPos + diceValue;
-        } else { // Ana tahtada
-            const movesToHomeEntrance = (homeEntrance - currentPos + 52) % 52;
-            if (diceValue > movesToHomeEntrance) {
-                newPos = homePathStart + (diceValue - movesToHomeEntrance - 1);
-            } else {
-                newPos = (currentPos + diceValue) % 52;
+        // 1. Handle starting a pawn from home
+        if (currentPos >= 100 && diceValue === 6) {
+            const targetPos = startPos;
+            const isOccupiedByOwnPawn = pawns.some(p => p.position === targetPos);
+            if (!isOccupiedByOwnPawn) {
+                moves.push({ pawnIndex, from: currentPos, to: targetPos, type: 'start' });
             }
         }
+        // 2. Handle moves for pawns already on the board
+        else if (currentPos < 100) {
+            const relativePosition = playerPath.indexOf(currentPos);
+            const newRelativePosition = relativePosition + diceValue;
 
-        if (newPos > winningPosition || playerPawns.includes(newPos)) continue;
+            // 2a. Handle finishing a pawn
+            if (newRelativePosition >= PATH_LENGTH) {
+                const stepsIntoHome = newRelativePosition - PATH_LENGTH;
+                if (stepsIntoHome < HOME_STRETCH_LENGTH) {
+                    const targetPos = PATH_LENGTH + stepsIntoHome; // e.g., 56, 57, ...
+                    const isOccupiedByOwnPawn = pawns.some(p => p.position === targetPos);
+                     if (!isOccupiedByOwnPawn) {
+                        moves.push({ pawnIndex, from: currentPos, to: targetPos, type: 'home' });
+                    }
+                }
+            }
+            // 2b. Handle a regular move on the main path
+            else {
+                const targetPos = playerPath[newRelativePosition];
+                const isOccupiedByOwnPawn = pawns.some(p => p.position === targetPos);
+                if (!isOccupiedByOwnPawn) {
+                    moves.push({ pawnIndex, from: currentPos, to: targetPos, type: 'move' });
+                }
+            }
+        }
+    });
 
-        moves.push({ type: 'move', pawnIndex: i, from: currentPos, to: newPos });
-    }
     return moves;
 };
 
 const handlePawnMove = (room, player, move) => {
+    const { players } = room.gameState;
     const { color } = player;
-    const { pawnIndex, to } = move;
-    room.gameState.positions[color][pawnIndex] = to;
+    const pawnToMove = player.pawns[move.pawnIndex];
+    pawnToMove.position = move.to;
 
-    let capturedPawn = false;
-    if (move.type === 'move' && !SAFE_POSITIONS.includes(to) && to < 52) {
-        Object.keys(room.gameState.positions).forEach(otherColor => {
-            if (otherColor !== color) {
-                room.gameState.positions[otherColor] = room.gameState.positions[otherColor].map(pawnPos => {
-                    if (pawnPos === to) {
-                        capturedPawn = true;
-                        return -1;
+    let capturedPawnInfo = null;
+
+    // Capture logic: only on the main path and not on safe spots.
+    if (move.to < PATH_LENGTH && !SAFE_POSITIONS.includes(move.to)) {
+        for (const otherPlayer of players) {
+            if (otherPlayer.color !== color) {
+                for (let i = 0; i < otherPlayer.pawns.length; i++) {
+                    if (otherPlayer.pawns[i].position === move.to) {
+                        // A pawn was captured, send it home.
+                        otherPlayer.pawns[i].position = HOME_POSITIONS[otherPlayer.color][i];
+                        capturedPawnInfo = { color: otherPlayer.color, pawnIndex: i };
+                        console.log(`[Capture] ${color} captured ${otherPlayer.color}'s pawn at ${move.to}`);
+                        break; // Only one pawn can be captured at a time.
                     }
-                    return pawnPos;
-                });
+                }
             }
-        });
+            if (capturedPawnInfo) break;
+        }
     }
 
-    const pawnsAtHome = room.gameState.positions[color].filter(p => p >= WINNING_POSITIONS[color]).length;
-    if (pawnsAtHome === 4) {
+    // Check for win condition
+    const pawnsInGoal = player.pawns.filter(p => p.position >= PATH_LENGTH).length;
+    if (pawnsInGoal === 4) {
         room.gameState.phase = 'finished';
         room.gameState.winner = color;
         room.gameState.message = `${player.nickname} oyunu kazandı!`;
+        console.log(`[Game Over] Player ${player.nickname} (${color}) won the game in room ${room.id}.`);
     }
 
-    return capturedPawn;
+    return capturedPawnInfo;
 };
 
 const updateTurn = (room) => {
@@ -162,7 +197,12 @@ const updateTurn = (room) => {
 
 const playBotTurnIfNeeded = (roomId) => {
     const room = rooms[roomId];
-    if (!room || room.gameState.phase !== 'playing') return;
+
+    // Safety check: Ensure the room, its game state, and the phase are correct before proceeding.
+    if (!room || !room.gameState || room.gameState.phase !== 'playing') {
+        // console.log(`[Bot Turn] Skipped for room ${roomId}. Reason: No room, no gameState, or phase is not 'playing'.`);
+        return;
+    }
 
     const currentPlayer = room.players.find(p => p.color === room.gameState.currentPlayer);
     if (!currentPlayer || !currentPlayer.isBot) return;
@@ -171,7 +211,7 @@ const playBotTurnIfNeeded = (roomId) => {
         const diceValue = Math.floor(Math.random() * 6) + 1;
         room.gameState.diceValue = diceValue;
         
-        const validMoves = getValidMoves(currentPlayer.color, diceValue, room.gameState.positions);
+        const validMoves = getValidMoves(currentPlayer, diceValue, room);
         room.gameState.validMoves = validMoves;
         updateRoom(roomId);
 
@@ -180,7 +220,7 @@ const playBotTurnIfNeeded = (roomId) => {
                 const chosenMove = validMoves[Math.floor(Math.random() * validMoves.length)];
                 
                 const capturedPawn = handlePawnMove(room, currentPlayer, chosenMove);
-                const pawnFinished = chosenMove.to >= WINNING_POSITIONS[currentPlayer.color];
+                const pawnFinished = chosenMove.to === GOAL_POSITION;
                 const moveAgain = diceValue === 6 || capturedPawn || pawnFinished;
 
                 if (room.gameState.phase === 'finished') {
@@ -215,6 +255,12 @@ const determineTurnOrder = (roomId) => {
         room.gameState.currentPlayer = turnOrder[0];
         room.gameState.phase = 'playing';
         room.gameState.message = `${room.gameState.turnOrderRolls[0].nickname} oyuna başlıyor!`
+        
+        // Emit game_started event to all players in the room
+        room.players.forEach(player => {
+            io.to(player.id).emit('game_started', room);
+        });
+        
         updateRoom(roomId);
         playBotTurnIfNeeded(roomId); // İlk oyuncu botsa, oynaması için tetikle
     }
@@ -272,14 +318,30 @@ io.on('connection', (socket) => {
 
     socket.on('create_room', ({ nickname, playerCount }, callback) => {
         const roomId = uuidv4().substring(0, 6);
-        const player = { id: socket.id, nickname, color: 'red', isBot: false, isReady: true };
+        const hostPlayer = {
+            id: socket.id,
+            nickname,
+            color: 'red',
+            isBot: false,
+            isReady: true,
+            pawns: HOME_POSITIONS['red'].map(pos => ({ position: pos }))
+        };
         const room = {
             id: roomId,
-            players: [player],
+            players: [hostPlayer],
             gameState: {
                 phase: 'waiting',
-                currentPlayer: null, diceValue: null, turnOrder: [], turnOrderRolls: [], validMoves: [],
-                positions: { red: [-1,-1,-1,-1], green: [-1,-1,-1,-1], blue: [-1,-1,-1,-1], yellow: [-1,-1,-1,-1] },
+                currentPlayer: null, 
+                diceValue: null, 
+                turnOrder: [], 
+                turnOrderRolls: [], 
+                validMoves: [],
+                positions: { 
+                    red: [-1,-1,-1,-1], 
+                    green: [-1,-1,-1,-1], 
+                    blue: [-1,-1,-1,-1], 
+                    yellow: [-1,-1,-1,-1] 
+                },
                 message: 'Oyuncular bekleniyor...'
             },
             hostId: socket.id
@@ -287,24 +349,44 @@ io.on('connection', (socket) => {
         rooms[roomId] = room;
         socket.join(roomId);
         
-        const colors = ['green', 'blue', 'yellow'];
-        const availableBotNames = [...BOT_NAMES];
-        for (let i = 0; i < playerCount - 1; i++) {
-            const botNameIndex = Math.floor(Math.random() * availableBotNames.length);
-            const botName = availableBotNames.splice(botNameIndex, 1)[0];
-            room.players.push({ id: `bot-${Date.now()}-${i}`, nickname: botName, color: colors[i], isBot: true, isReady: true });
-        }
-
         if (typeof callback === 'function') callback({ success: true, room });
-
-        // Eğer oda hemen dolduysa (1 insan + 3 bot), oyunu başlat
-        if (room.players.length === 4) {
-            room.gameState.phase = 'pre-game';
-            console.log(`[Room Full] Room ${roomId} is full after creation, starting pre-game.`);
-        }
 
         updateRoom(roomId);
         broadcastRoomList();
+
+        // 20 saniye bekleme süresi başlat (her zaman, oda dolsa bile)
+        roomTimeouts[roomId] = setTimeout(() => {
+            const currentRoom = rooms[roomId];
+            if (!currentRoom) return;
+            
+            const playerCount = currentRoom.players.length;
+            const maxPlayers = 4;
+            const colors = ['green', 'blue', 'yellow'];
+            const usedColors = currentRoom.players.map(p => p.color);
+            const availableColors = colors.filter(c => !usedColors.includes(c));
+            const availableBotNames = [...BOT_NAMES];
+
+            // Eksik oyuncuları bot ile tamamla
+            for (let i = 0; i < maxPlayers - playerCount; i++) {
+                const color = availableColors[i];
+                const botNameIndex = Math.floor(Math.random() * availableBotNames.length);
+                const botName = availableBotNames.splice(botNameIndex, 1)[0];
+                const botPlayer = {
+                    id: `bot-${uuidv4()}`,
+                    nickname: botName,
+                    color,
+                    isBot: true,
+                    isReady: true,
+                    pawns: HOME_POSITIONS[color].map(pos => ({ position: pos }))
+                };
+                currentRoom.players.push(botPlayer);
+            }
+            
+            currentRoom.gameState.phase = 'pre-game';
+            currentRoom.gameState.message = 'Sırayı belirlemek için zar atın!';
+            console.log(`[Auto Start] Room ${roomId} starting pre-game after waiting period.`);
+            updateRoom(roomId);
+        }, 20000);
     });
 
     socket.on('join_room', ({ roomId, nickname }, callback) => {
@@ -312,6 +394,20 @@ io.on('connection', (socket) => {
         if (!room) {
             return callback({ success: false, message: 'Oda bulunamadı.' });
         }
+
+        // Reconnect logic
+        const disconnectedPlayer = room.players.find(p => p.nickname === nickname && p.disconnected);
+        if (disconnectedPlayer) {
+            clearTimeout(disconnectedPlayer.disconnectTimer);
+            delete disconnectedPlayer.disconnected;
+            delete disconnectedPlayer.disconnectTimer;
+            disconnectedPlayer.id = socket.id; // Update socket id
+            socket.join(roomId);
+            console.log(`[Reconnect] Player ${nickname} reconnected to room ${roomId}.`);
+            updateRoom(roomId);
+            return callback({ success: true, room });
+        }
+
         if (room.players.length >= 4) {
             return callback({ success: false, message: 'Oda dolu.' });
         }
@@ -320,7 +416,14 @@ io.on('connection', (socket) => {
         if (!color) {
             return callback({ success: false, message: 'Oda için uygun renk bulunamadı.'});
         }
-        const player = { id: socket.id, nickname, color, isBot: false, isReady: true };
+        const player = {
+            id: socket.id,
+            nickname,
+            color,
+            isBot: false,
+            isReady: true,
+            pawns: HOME_POSITIONS[color].map(pos => ({ position: pos }))
+        };
         room.players.push(player);
         socket.join(roomId);
 
@@ -358,7 +461,15 @@ io.on('connection', (socket) => {
                     const color = availableColors[i];
                     const botNameIndex = Math.floor(Math.random() * availableBotNames.length);
                     const botName = availableBotNames.splice(botNameIndex, 1)[0];
-                    currentRoom.players.push({ id: `bot-${Date.now()}-${i}`, nickname: botName, color, isBot: true, isReady: true });
+                    const botPlayer = {
+                        id: `bot-${uuidv4()}`,
+                        nickname: botName,
+                        color,
+                        isBot: true,
+                        isReady: true,
+                        pawns: HOME_POSITIONS[color].map(pos => ({ position: pos }))
+                    };
+                    currentRoom.players.push(botPlayer);
                 }
                 currentRoom.gameState.phase = 'pre-game';
                 currentRoom.gameState.message = 'Sırayı belirlemek için zar atın!';
@@ -390,7 +501,7 @@ io.on('connection', (socket) => {
         const diceValue = Math.floor(Math.random() * 6) + 1;
         room.gameState.diceValue = diceValue;
         
-        const validMoves = getValidMoves(player.color, diceValue, room.gameState.positions);
+        const validMoves = getValidMoves(player, diceValue, room);
         room.gameState.validMoves = validMoves;
 
         if (validMoves.length === 0) {
@@ -408,6 +519,14 @@ io.on('connection', (socket) => {
         const player = room?.players.find(p => p.id === socket.id);
         if (!room || !player || player.color !== room.gameState.currentPlayer) return;
 
+        // --- YENİ GÜVENLİK KONTROLÜ ---
+        // Oyuncunun sadece kendi piyonunu oynayabildiğinden emin ol.
+        const pawnColor = pawnId.split('-')[0];
+        if (pawnColor !== player.color) {
+            console.error(`[SECURITY] Player ${player.nickname} (${player.color}) tried to move opponent's pawn ${pawnId}.`);
+            return; // Hamleyi reddet
+        }
+
         const [color, pawnIndexStr] = pawnId.split('-');
         const pawnIndex = parseInt(pawnIndexStr, 10);
 
@@ -415,7 +534,7 @@ io.on('connection', (socket) => {
         if (!move) return console.error('Geçersiz hamle denemesi!');
 
         const capturedPawn = handlePawnMove(room, player, move);
-        const pawnFinished = move.to >= WINNING_POSITIONS[player.color];
+        const pawnFinished = move.to === GOAL_POSITION;
         const moveAgain = room.gameState.diceValue === 6 || capturedPawn || pawnFinished;
 
         if (room.gameState.phase === 'finished') {
@@ -452,6 +571,12 @@ io.on('connection', (socket) => {
         if (room.players.filter(p => !p.isBot).length === 0) {
             deleteRoom(roomId, 'Tüm oyuncular ayrıldı.');
         } else {
+            // Ekstra güvenlik: Sadece botlar kaldıysa odayı sil (ghost room fix)
+            if (room.players.every(p => p.isBot)) {
+                console.warn(`[GhostRoomFix] Bot-only room detected after leave_room, force deleting: ${roomId}`);
+                deleteRoom(roomId, 'Sadece botlar kaldı (ghost room fix)');
+                return;
+            }
             if (isHost) {
                 const newHost = room.players.find(p => !p.isBot);
                 if (newHost) room.hostId = newHost.id;
@@ -466,20 +591,37 @@ io.on('connection', (socket) => {
         if (!roomId) return;
 
         const room = rooms[roomId];
-        room.players = room.players.filter(p => p.id !== socket.id);
+        const player = room.players.find(p => p.id === socket.id);
 
-        if (room.players.filter(p => !p.isBot).length === 0) {
-            deleteRoom(roomId, 'Tüm oyuncular ayrıldı.');
-        } else {
-            if (room.hostId === socket.id) {
-                const newHost = room.players.find(p => !p.isBot);
-                if (newHost) room.hostId = newHost.id;
+        if (player && !player.isBot) {
+            // Oyuncuyu hemen çıkar
+            const currentRoom = rooms[roomId];
+            if (currentRoom) {
+                currentRoom.players = currentRoom.players.filter(p => p.id !== socket.id);
+                console.log(`[Disconnect] Player ${player.nickname} removed from room ${roomId} (disconnect).`);
+
+                // Eğer artık insan oyuncu yoksa odayı hemen sil
+                if (currentRoom.players.filter(p => !p.isBot).length === 0) {
+                    deleteRoom(roomId, 'Tüm insan oyuncular ayrıldı.');
+                } else {
+                    // Ekstra güvenlik: Sadece botlar kaldıysa odayı sil (ghost room fix)
+                    if (currentRoom.players.every(p => p.isBot)) {
+                        console.warn(`[GhostRoomFix] Bot-only room detected after disconnect, force deleting: ${roomId}`);
+                        deleteRoom(roomId, 'Sadece botlar kaldı (ghost room fix)');
+                        return;
+                    }
+                    // Eğer ayrılan host ise yeni bir host ata
+                    if (currentRoom.hostId === socket.id) {
+                        const newHost = currentRoom.players.find(p => !p.isBot);
+                        if (newHost) currentRoom.hostId = newHost.id;
+                    }
+                    updateRoom(roomId);
+                }
             }
-            updateRoom(roomId);
         }
     });
 });
 
-server.listen(PORT, () => {
-    console.log(`Sunucu ${PORT} portunda çalışıyor...`);
+server.listen(PORT, '192.168.1.6', () => {
+    console.log(`Sunucu ${PORT} portunda çalışıyor (192.168.1.6)...`);
 });

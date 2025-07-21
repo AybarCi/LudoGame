@@ -160,12 +160,12 @@ const Lobby = () => {
               <View style={styles.roomItem}>
                 <View>
                   <Text style={styles.roomName}>{`Oda #${item.id.slice(-5)}`}</Text>
-                  <Text style={styles.playerCount}>{`Oyuncular: ${item.playerCount} / 4`}</Text>
+                  <Text style={styles.playerCount}>{`Oyuncular: ${typeof item.playerCount === 'number' ? item.playerCount : 0} / 4`}</Text>
                 </View>
                 <TouchableOpacity 
-                  style={[styles.joinButton, (item.playerCount >= 4 || item.isGameStarted) && styles.joinButtonDisabled]}
+                  style={[styles.joinButton, ((item.playerCount || 0) >= 4 || item.isGameStarted) && styles.joinButtonDisabled]}
                   onPress={() => handleJoinRoom(item.id)}
-                  disabled={item.playerCount >= 4 || item.isGameStarted}
+                  disabled={(item.playerCount || 0) >= 4 || item.isGameStarted}
                 >
                   <Text style={styles.joinButtonText}>{item.isGameStarted ? 'Oynanıyor' : 'Katıl'}</Text>
                 </TouchableOpacity>

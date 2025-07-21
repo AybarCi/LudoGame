@@ -1,22 +1,42 @@
 import React from 'react';
 import { View, StyleSheet, Text } from 'react-native';
-import { PATH_MAP, SAFE_SPOTS } from '../../constants/game';
+import {
+  COLORS,
+  PATH_MAP,
+  SAFE_SPOTS
+} from '../../constants/game';
 
-// Define COLORS directly in the component to avoid import issues and crashes.
-const COLORS = {
-  red: '#D32F2F',
-  green: '#388E3C',
-  blue: '#1976D2',
-  yellow: '#FBC02D',
+// Fallback sabitler (constants/game.js'de yoksa buradan alınır)
+const MAIN_PATH_COORDS = global.MAIN_PATH_COORDS || [
+  [6, 1], [6, 2], [6, 3], [6, 4], [6, 5], [6, 6],
+  [5, 6], [4, 6], [3, 6], [2, 6], [1, 6], [0, 6], [0, 7], [0, 8],
+  [1, 8], [2, 8], [3, 8], [4, 8], [5, 8], [6, 8],
+  [6, 9], [6, 10], [6, 11], [6, 12], [6, 13], [6, 14], [7, 14], [8, 14],
+  [8, 13], [8, 12], [8, 11], [8, 10], [8, 9], [8, 8],
+  [9, 8], [10, 8], [11, 8], [12, 8], [13, 8], [14, 8], [14, 7], [14, 6],
+  [13, 6], [12, 6], [11, 6], [10, 6], [9, 6], [8, 6],
+  [8, 5], [8, 4], [8, 3], [8, 2], [8, 1], [8, 0], [7, 0], [6, 0]
+];
+const HOME_STRETCH_COORDS = global.HOME_STRETCH_COORDS || {
+  yellow: [[1, 7], [2, 7], [3, 7], [4, 7]],
+  blue: [[7, 13], [7, 12], [7, 11], [7, 10]],
+  red: [[13, 7], [12, 7], [11, 7], [10, 7]],
+  green: [[7, 1], [7, 2], [7, 3], [7, 4]],
 };
-
-// Semi-transparent colors for player bases
-const TRANSPARENT_COLORS = {
+const HOME_STRETCH_ENTRANCES = global.HOME_STRETCH_ENTRANCES || {
+  red: 41,
+  yellow: 13,
+  green: 55,
+  blue: 27,
+};
+const TRANSPARENT_COLORS = global.TRANSPARENT_COLORS || {
   red: 'rgba(211, 47, 47, 0.4)',
   green: 'rgba(56, 142, 60, 0.4)',
   blue: 'rgba(25, 118, 210, 0.4)',
   yellow: 'rgba(251, 192, 45, 0.4)',
 };
+// Tüm sabitler constants/game.js'de yoksa fallback olarak burada tanımlı.
+
 import Pawn from '../shared/Pawn';
 
 // --- CONSTANTS FOR VISUAL CUES ---
@@ -27,16 +47,7 @@ const ARROW_ROTATIONS = {
   yellow: '180deg',// Points down
   blue: '270deg', // Points left
 };
-
-// Absolute indices on MAIN_PATH_COORDS for the starting cells of each color.
-// This is where the arrow indicating the start position is placed.
-const HOME_STRETCH_ENTRANCES = {
-  red: 41,
-  yellow: 13,
-  green: 55,
-  blue: 27,
-};
-
+// HOME_STRETCH_ENTRANCES artık sadece constants/game.js'den geliyor.
 // --- HELPER COMPONENTS ---
 
 const Arrow = ({ color }) => (
@@ -46,30 +57,7 @@ const Arrow = ({ color }) => (
 );
 
 const GRID_SIZE = 15;
-
-const MAIN_PATH_COORDS = [
-  // Path segment for Green player's side (bottom-left)
-  [6, 1], [6, 2], [6, 3], [6, 4], [6, 5], [6, 6], // 0-5 (new corner at 5)
-  // Path segment for Yellow player's side (top-left)
-  [5, 6], [4, 6], [3, 6], [2, 6], [1, 6], [0, 6], [0, 7], [0, 8], // 6-13
-  [1, 8], [2, 8], [3, 8], [4, 8], [5, 8], [6, 8], // 14-19 (new corner at 19)
-  // Path segment for Blue player's side (top-right)
-  [6, 9], [6, 10], [6, 11], [6, 12], [6, 13], [6, 14], [7, 14], [8, 14], // 20-27
-  [8, 13], [8, 12], [8, 11], [8, 10], [8, 9], [8, 8], // 28-33 (new corner at 33)
-  // Path segment for Red player's side (bottom-right)
-  [9, 8], [10, 8], [11, 8], [12, 8], [13, 8], [14, 8], [14, 7], [14, 6], // 34-41
-  [13, 6], [12, 6], [11, 6], [10, 6], [9, 6], [8, 6], // 42-47 (new corner at 47)
-  // Final path segment leading back to Green's start
-  [8, 5], [8, 4], [8, 3], [8, 2], [8, 1], [8, 0], [7, 0], [6, 0] // 48-55
-];
-
-const HOME_STRETCH_COORDS = {
-  yellow: [[1, 7], [2, 7], [3, 7], [4, 7]],
-  blue: [[7, 13], [7, 12], [7, 11], [7, 10]],
-  red: [[13, 7], [12, 7], [11, 7], [10, 7]],
-  green: [[7, 1], [7, 2], [7, 3], [7, 4]],
-};
-
+// MAIN_PATH_COORDS ve HOME_STRETCH_COORDS artık sadece constants/game.js'den geliyor.
 const generateBoardLayout = (pawns, currentPlayer, diceValue) => {
   const layout = Array.from({ length: GRID_SIZE * GRID_SIZE }, () => ({ type: 'empty', pawns: [] }));
 
@@ -169,7 +157,13 @@ const generateBoardLayout = (pawns, currentPlayer, diceValue) => {
 };
 
 const GameBoard = ({ pawns, onPawnPress, currentPlayer, diceValue, playersInfo, style }) => {
-  const boardLayout = generateBoardLayout(pawns, currentPlayer, diceValue);
+  // Prop guard: undefined veya yanlış tip gelirse default değer kullan
+  const safePawns = Array.isArray(pawns) ? pawns : [];
+  const safeCurrentPlayer = typeof currentPlayer === 'string' ? currentPlayer : null;
+  const safeDiceValue = typeof diceValue === 'number' ? diceValue : null;
+  const safePlayersInfo = typeof playersInfo === 'object' && playersInfo !== null ? playersInfo : {};
+
+  const boardLayout = generateBoardLayout(safePawns, safeCurrentPlayer, safeDiceValue);
 
   return (
     <View style={[styles.board, style]}>

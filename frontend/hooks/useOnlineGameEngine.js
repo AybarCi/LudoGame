@@ -1,121 +1,154 @@
-import { useEffect, useReducer } from 'react';
+import { useEffect, useCallback } from 'react';
 import { useSocket } from '../store/SocketProvider';
 import { useAuth } from '../store/AuthProvider';
 
-const initialState = {
-  players: [],
-  gameState: null,
-  isMyTurn: false,
-  gamePhase: 'connecting', // connecting, waiting, pre-game, playing, finished
-  message: 'Sunucuya bağlanılıyor...',
-  winner: null,
-  turnOrderRolls: [],
-};
-
-function gameReducer(state, action) {
-    switch (action.type) {
-        case 'SET_GAME_STATE': {
-            const { room, user, socketId } = action.payload;
-
-
-
-            const { gameState, players } = room;
-
-            if (!gameState || !players || !user || !socketId) {
-                return { ...state, gamePhase: 'error', message: 'Sunucudan eksik veri alındı.' };
-            }
-
-            // Phase bilgisini doğru yerden al: gameState.phase
-            const gamePhase = gameState.phase || 'waiting';
-            const myPlayer = players.find(p => p.id === socketId);
-
-            const pawns = [];
-            if (gameState.positions) {
-                Object.keys(gameState.positions).forEach(color => {
-                    if (Array.isArray(gameState.positions[color])) {
-                        gameState.positions[color].forEach((position, index) => {
-                            pawns.push({ id: `${color}-${index}`, color, position });
-                        });
-                    }
-                });
-            }
-
-            const newGameState = { ...gameState, pawns };
-            const isMyTurn = myPlayer ? newGameState.currentPlayer === myPlayer.color : false;
-
-            return {
-                ...state,
-                players: players,
-                gameState: newGameState,
-                isMyTurn: isMyTurn,
-                gamePhase: gamePhase,
-                message: newGameState.message || (gamePhase === 'waiting' ? 'Diğer oyuncular bekleniyor...' : ''),
-                winner: newGameState.winner || null,
-                turnOrderRolls: newGameState.turnOrderRolls || [],
-            };
-        }
-        case 'SET_GAME_PHASE':
-            return {
-                ...state,
-                gamePhase: action.payload,
-            };
-        default:
-            return state;
-    }
-}
-
-export function useOnlineGameEngine(roomId) {
-  const { socket } = useSocket();
+export const useOnlineGameEngine = () => {
+  const { 
+    socket, 
+    room, 
+    setRoom,
+    connect,
+    joinRoom,
+    leaveRoom,
+    disconnect,
+    gameState,
+    players,
+    currentTurn,
+    roomClosed
+  } = useSocket();
   const { user } = useAuth();
-  const [state, dispatch] = useReducer(gameReducer, initialState);
 
+  // --- NORMALIZED BOARD STATE ---
+  // playersInfo: { red: {...}, green: {...}, ... }
+  const playersInfo = (players && Array.isArray(players)) ? players.reduce((acc, player) => {
+    acc[player.color] = {
+      nickname: player.nickname || '',
+      user_id: player.user_id || '',
+      isBot: !!player.isBot,
+      color: player.color,
+    };
+    return acc;
+  }, {}) : {};
+
+  // pawns: always array
+  const pawns = (gameState && Array.isArray(gameState.pawns)) ? gameState.pawns : [];
+
+  // currentPlayer: string|null
+  const currentPlayer = (gameState && typeof gameState.currentPlayer === 'string') ? gameState.currentPlayer : null;
+
+  // diceValue: number|null
+  const diceValue = (gameState && typeof gameState.diceValue === 'number') ? gameState.diceValue : null;
+
+  // myColor: string|null
+  const myColor = (players && socket?.id) ? (players.find(p => p.id === socket.id)?.color || null) : null;
+
+  // isMyTurn: boolean
+  const isMyTurn = !!(gameState && myColor && gameState.currentPlayer === myColor);
+
+  // onPawnPress: function
+  const movePawn = useCallback((pawn, move) => {
+    if (socket && room) {
+      socket.emit('move-pawn', { roomId: room.id, pawn, move });
+    }
+  }, [socket, room]);
+
+  // Sunucudan gelen genel olayları dinlemek için ana useEffect
   useEffect(() => {
-    if (!socket || !roomId || !user) return;
+    if (!socket) return;
 
-    const handleRoomUpdate = (room) => {
-        if (room && room.gameState && room.players) {
-            dispatch({ 
-                type: 'SET_GAME_STATE', 
-                payload: { room: room, user, socketId: socket.id } 
-            });
-        }
+    const handleRoomCreated = (newRoom) => {
+      console.log('EVENT: room-created', newRoom);
+      setRoom(newRoom); // Merkezi state'i güncelle
     };
 
-    const handleUpdateRooms = (roomsArray) => {
-      if (state.gamePhase === 'playing' || state.gamePhase === 'pre-game' || state.gamePhase === 'finished') {
-        return; // Oyun başladıktan sonra bu event'i dikkate alma
-      }
-      const foundRoom = roomsArray.find(r => r.id === roomId);
-      if (foundRoom && foundRoom.phase !== state.gamePhase) {
-        console.log(`[useOnlineGameEngine] Phase changed via update_rooms: ${state.gamePhase} -> ${foundRoom.phase}`);
-        dispatch({ type: 'SET_GAME_PHASE', payload: foundRoom.phase });
-      }
+    const handleRoomJoined = (joinedRoom) => {
+      console.log('EVENT: room-joined', joinedRoom);
+      setRoom(joinedRoom);
     };
 
-    socket.on('room_updated', handleRoomUpdate);
-    socket.on('update_rooms', handleUpdateRooms);
+    const handleRoomNotFound = () => {
+      console.error('EVENT: room-not-found');
+      alert('Oda bulunamadı!');
+      setRoom(null);
+    };
 
-    socket.emit('get_room_state', roomId, (room) => {
-        if (room) {
-            handleRoomUpdate(room);
-        }
-    });
+    const handleUpdateState = (newState) => {
+      console.log("EVENT: update-state", newState);
+      // State updates are handled through room object in SocketProvider
+      // No direct setters needed since values are computed from room
+    };
 
+    const handleTurnOrder = (turnOrder) => {
+      console.log("EVENT: turn-order", turnOrder);
+      // Turn order is handled through room object in SocketProvider
+    };
+
+    const handlePreGameRoll = (rolls) => {
+      console.log("EVENT: pre-game-roll", rolls);
+      // Pre-game rolls are handled through room object in SocketProvider
+    };
+
+    const handleRoomClosed = (data) => {
+      console.log(`EVENT: room-closed: ${data.message}`);
+      alert(`Oda kapatıldı: ${data.message}`);
+      setRoom(null); 
+      // Room closed state is handled in SocketProvider
+    };
+
+    // Olay dinleyicilerini ekle
+    socket.on('room-created', handleRoomCreated);
+    socket.on('room-joined', handleRoomJoined);
+    socket.on('room-not-found', handleRoomNotFound);
+    socket.on('update-state', handleUpdateState);
+    socket.on('turn-order', handleTurnOrder);
+    socket.on('pre-game-roll', handlePreGameRoll);
+    socket.on('room-closed', handleRoomClosed);
+
+    // Temizleme fonksiyonu
     return () => {
-      socket.off('room_updated', handleRoomUpdate);
-      socket.off('update_rooms', handleUpdateRooms);
+      socket.off('room-created', handleRoomCreated);
+      socket.off('room-joined', handleRoomJoined);
+      socket.off('room-not-found', handleRoomNotFound);
+      socket.off('update-state', handleUpdateState);
+      socket.off('turn-order', handleTurnOrder);
+      socket.off('pre-game-roll', handlePreGameRoll);
+      socket.off('room-closed', handleRoomClosed);
     };
-  }, [socket, roomId, user, state.gamePhase]);
+  }, [socket, setRoom]);
 
+  // Sunucuya olay göndermek için kullanılan fonksiyonlar
+  const createRoom = useCallback(() => {
+    if (socket && user) {
+      console.log(`[useOnlineGameEngine] Emitting create-room for user: ${user.id}`);
+      socket.emit('create-room', { userId: user.id, nickname: user.nickname });
+    }
+  }, [socket, user]);
 
+  // joinRoom and leaveRoom functions are imported from SocketProvider
+  // No need to redefine them here
 
+  const rollDice = useCallback(() => {
+    if (socket && room) {
+      console.log(`[useOnlineGameEngine] Emitting roll-dice for room: ${room.id}`);
+      socket.emit('roll-dice', { roomId: room.id });
+    }
+  }, [socket, room]);
 
-
-  const movePawn = (pawnId) => {
-    if (state.isMyTurn) {
-      socket.emit('move_pawn', { roomId, pawnId });
+  // Eski fonksiyonlar + yeni normalize edilmiş board state'i döndür
+  return {
+    createRoom,
+    joinRoom,
+    leaveRoom,
+    rollDice,
+    movePawn,
+    boardState: {
+      pawns,
+      playersInfo,
+      currentPlayer,
+      diceValue,
+      myColor,
+      isMyTurn,
+      onPawnPress: movePawn
     }
   };
-
-  return { state, movePawn };
-}
+};

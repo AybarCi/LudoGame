@@ -1,6 +1,5 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { BackHandler } from 'react-native';
-
 import {
   ImageBackground,
   SafeAreaView,
@@ -20,82 +19,133 @@ import { useSocket } from '../../store/SocketProvider';
 import { COLORS } from '../../constants/game';
 import LottieView from 'lottie-react-native';
 
-
-
 const OnlineGameScreen = () => {
   const { roomId } = useLocalSearchParams();
   const router = useRouter();
   const navigation = useNavigation();
-  const { state, movePawn } = useOnlineGameEngine(roomId);
-  const { gameState, players, gamePhase, winner, turnOrderRolls, message, isMyTurn } = state;
-  const { socket, roomClosed } = useSocket(); // socket nesnesini al
+  const { 
+    socket, 
+    room, 
+    roomClosed, 
+    gameState, 
+    players, 
+    currentTurn, 
+    winner, 
+    dice, 
+    validMoves, 
+    turnOrder, 
+    preGameRolls 
+  } = useSocket(); 
+
+  const { 
+    createRoom, 
+    joinRoom, 
+    leaveRoom, 
+    rollDice, 
+    movePawn, 
+    boardState 
+  } = useOnlineGameEngine();
+
+
+  // Multiplayer board burada açıldığı için navigation yapılmıyor.
+  useEffect(() => {
+    // Oyun 'pre-game' veya 'playing' fazına geçtiğinde gameboard'a yönlendir
+    const currentPhase = room?.phase || room?.gameState?.phase || gameState?.phase;
+    if (room && room.id && (currentPhase === 'pre-game' || currentPhase === 'playing')) {
+      // router.replace(`/game/${room.id}`);
+    }
+  }, [room, router, gameState?.phase]);
+
+  const gamePhase = room?.phase || room?.gameState?.phase || gameState?.phase || 'loading';
+  const turnOrderRolls = gameState?.turnOrderRolls || [];
+  const message = gameState?.message || '';
+
+  const myColor = useMemo(() => {
+    if (!players || !players.length || !socket?.id) return null;
+    const myPlayer = players.find(p => p.id === socket.id);
+    return myPlayer?.color;
+  }, [players, socket?.id]);
+
+  const isMyTurn = useMemo(() => {
+    if (!gameState || !myColor) return false;
+    return gameState.currentPlayer === myColor;
+  }, [gameState, myColor]);
+  
   const [showTurnPopup, setShowTurnPopup] = useState(false);
   const [popupAnim] = useState(new Animated.Value(0));
 
   useEffect(() => {
-    console.log('--- DEBUG: Game State Update ---');
-    console.log('Raw Players Array:', JSON.stringify(players, null, 2));
+    console.log('--- DEBUG: Centralized State Update ---');
     console.log('Is My Turn:', isMyTurn);
+    console.log('My Color:', myColor);
     console.log('Game Phase:', gamePhase);
-    console.log('Current Player Color from GameState:', gameState?.currentPlayer);
-    console.log('My Socket ID:', socket?.id);
+    console.log('room?.phase:', room?.phase);
+    console.log('room?.gameState?.phase:', room?.gameState?.phase);
+    console.log('gameState?.phase:', gameState?.phase);
+    console.log('Current Player:', gameState?.currentPlayer);
+    console.log('Socket ID:', socket?.id);
+    console.log('Players Count:', players?.length);
+    console.log('Players:', players?.map(p => ({ id: p.id, color: p.color, nickname: p.nickname, isBot: p.isBot })));
+    console.log('Will show GameBoard:', (gamePhase === 'pre-game' || gamePhase === 'playing' || gamePhase === 'finished'));
+    console.log('Will show WaitingOverlay:', (gamePhase === 'waiting' || (players && players.length < 4)));
     console.log('---------------------------------');
-  }, [players, isMyTurn, gamePhase, gameState?.currentPlayer, socket?.id]);
+  }, [isMyTurn, myColor, gamePhase, room?.phase, room?.gameState?.phase, gameState?.phase, gameState?.currentPlayer, socket?.id, players]);
 
-  const playersInfo = useMemo(() => {
-    if (!players) return {};
-    return players.reduce((acc, player) => {
-      acc[player.color] = { nickname: player.nickname };
-      return acc;
-    }, {});
-  }, [players]);
+  // Zar atma butonu aktiflik mantığı
+// Pre-game (sıralama turu) boyunca Zar At herkes için aktif
+// Sadece oyun (playing) fazında, sıra kimdeyse onda aktif
+const canRollDice = gamePhase === 'pre-game'
+  ? (!!myColor && !turnOrderRolls.some(r => r.color === myColor))
+  : (isMyTurn && diceToShow === null);
 
-  // Mevcut oyuncunun rengini socket id'ye göre doğru bir şekilde bul
-  const myColor = players.find(p => p.id === socket.id)?.color;
+useEffect(() => {
+  console.log('[DEBUG][ZAR AT] canRollDice:', canRollDice, 'isTurnOrderPhase:', isTurnOrderPhase, 'myColor:', myColor, 'turnOrderRolls:', turnOrderRolls, 'isMyTurn:', isMyTurn, 'diceToShow:', diceToShow);
+}, [canRollDice, isTurnOrderPhase, myColor, turnOrderRolls, isMyTurn, diceToShow]);
+
+// AI modundaki gibi tam mapping (nickname, user_id, isBot)
+// AI modundaki formatla birebir aynı playersInfo mapping'i
+const playersInfo = useMemo(() => {
+  if (!players || !players.length) return {};
+  return players.reduce((acc, player) => {
+    acc[player.color] = {
+      nickname: player.nickname,
+      user_id: player.user_id,
+      isBot: player.isBot,
+      color: player.color,
+    };
+    return acc;
+  }, {});
+}, [players]);
 
   const rollDiceForTurnOrder = () => {
-    const playerHasRolled = gameState.turnOrderRolls.some(r => r.color === myColor);
-    if (!playerHasRolled) {
-      socket.emit('roll_dice_for_turn_order', { roomId });
+    if (socket && myColor) {
+      const playerHasRolled = turnOrderRolls.some(r => r.color === myColor);
+      if (!playerHasRolled) {
+        socket.emit('roll_dice_for_turn_order', { roomId });
+      }
     }
   };
 
   const rollDiceRegular = () => {
-    if (isMyTurn) {
+    if (socket && isMyTurn) {
       socket.emit('roll_dice', { roomId });
     }
   };
 
-  // --- Turn change popup animation ---
   useEffect(() => {
     if (gameState?.turn && gamePhase === 'playing') {
       setShowTurnPopup(true);
       Animated.sequence([
-        Animated.timing(popupAnim, {
-          toValue: 1,
-          duration: 500,
-          useNativeDriver: true,
-        }),
+        Animated.timing(popupAnim, { toValue: 1, duration: 500, useNativeDriver: true }),
         Animated.delay(1500),
-        Animated.timing(popupAnim, {
-          toValue: 0,
-          duration: 500,
-          useNativeDriver: true,
-        }),
+        Animated.timing(popupAnim, { toValue: 0, duration: 500, useNativeDriver: true }),
       ]).start(() => setShowTurnPopup(false));
     }
   }, [gameState?.turn, gamePhase]);
 
   const popupStyle = {
     opacity: popupAnim,
-    transform: [
-      {
-        translateY: popupAnim.interpolate({
-          inputRange: [0, 1],
-          outputRange: [50, 0],
-        }),
-      },
-    ],
+    transform: [{ translateY: popupAnim.interpolate({ inputRange: [0, 1], outputRange: [50, 0] }) }],
     backgroundColor: 'rgba(0,0,0,0.7)',
     padding: 15,
     borderRadius: 10,
@@ -104,15 +154,13 @@ const OnlineGameScreen = () => {
   const isTurnOrderPhase = gamePhase === 'pre-game';
 
   const currentPlayerInfo = useMemo(() => {
-    if (!gameState?.currentPlayer || !players?.length) {
-      return null;
-    }
+    if (!gameState?.currentPlayer || !players.length) return null;
     return players.find(p => p.color === gameState.currentPlayer);
   }, [gameState?.currentPlayer, players]);
 
   const diceToShow = useMemo(() => {
     if (isTurnOrderPhase) {
-      return turnOrderRolls?.length > 0 ? turnOrderRolls[turnOrderRolls.length - 1].roll : null;
+      return turnOrderRolls.length > 0 ? turnOrderRolls[turnOrderRolls.length - 1].roll : null;
     }
     return gameState?.diceValue;
   }, [isTurnOrderPhase, turnOrderRolls, gameState?.diceValue]);
@@ -123,25 +171,30 @@ const OnlineGameScreen = () => {
         alert(roomClosed.reason || 'Oda kapatıldı');
         router.replace('/(tabs)');
       }, 1000);
-      
       return () => clearTimeout(timer);
     }
+  }, [roomClosed, router]);
 
-    function handleLeftRoom() {
-      console.log('[Socket] Successfully left room, navigating to lobby.');
-      router.replace('/lobby');
+  useEffect(() => {
+    let unsubscribe;
+    const onBack = () => true; 
+
+    if (gamePhase === 'waiting' || gamePhase === 'pre-game') {
+      BackHandler.addEventListener('hardwareBackPress', onBack);
+      unsubscribe = navigation.addListener('beforeRemove', e => e.preventDefault());
+      navigation.setOptions?.({ gestureEnabled: false });
+    } else {
+      BackHandler.removeEventListener('hardwareBackPress', onBack);
+      if (unsubscribe) unsubscribe();
+      navigation.setOptions?.({ gestureEnabled: true });
     }
 
-    socket.on('left_room_success', handleLeftRoom);
-
     return () => {
-      socket.off('left_room_success', handleLeftRoom);
+      BackHandler.removeEventListener('hardwareBackPress', onBack);
+      if (unsubscribe) unsubscribe();
     };
-  }, [roomClosed, socket, router]);
+  }, [gamePhase, navigation]);
 
-
-
-  // Oda kapatıldıysa yükleme ekranı göster
   if (roomClosed.isClosed) {
     return (
       <ImageBackground 
@@ -154,223 +207,203 @@ const OnlineGameScreen = () => {
     );
   }
 
+  const renderWaitingOverlay = () => {
+  const maxPlayers = 4;
+  const currentPlayers = players || [];
+  const missingPlayers = maxPlayers - currentPlayers.length;
+  return (
+    <View style={styles.overlay}>
+      <LottieView
+        source={require('../../assets/animations/loading-online-players.json')}
+        style={{ width: 200, height: 200, marginBottom: 10 }}
+        autoPlay
+        loop
+      />
+      <Text style={[styles.loadingText, {marginBottom: 10}]}>Bekleme Odası</Text>
+      <View style={{width: '90%', backgroundColor: 'rgba(0,0,0,0.4)', borderRadius: 12, padding: 12, marginBottom: 10}}>
+        {currentPlayers.length === 0 ? (
+          <Text style={{color: '#fff', fontSize: 16, textAlign: 'center'}}>Bağlantı kuruluyor, oyuncular yükleniyor...</Text>
+        ) : (
+          <>
+            {currentPlayers.map((player, idx) => (
+              <View key={player.id || player.color || idx} style={{flexDirection: 'row', alignItems: 'center', marginBottom: 6}}>
+                <View style={{width: 18, height: 18, backgroundColor: COLORS[player.color], borderRadius: 4, marginRight: 8, borderWidth: 1, borderColor: '#fff'}} />
+                <Text style={{color: '#fff', fontWeight: 'bold', fontSize: 16}}>{player.nickname || 'Oyuncu'}</Text>
+                {player.isBot && <Text style={{color: '#ffd700', marginLeft: 6, fontSize: 13}}>(Bot)</Text>}
+              </View>
+            ))}
+            <Text style={{color: '#ccc', fontSize: 15, marginTop: 4}}>
+              {`${currentPlayers.length}/4 oyuncu, ${missingPlayers > 0 ? `${missingPlayers} oyuncu bekleniyor...` : 'Oyun başlamak üzere!'}`}
+            </Text>
+          </>
+        )}
+      </View>
+      <Text style={{color: '#fff', fontSize: 15, fontStyle: 'italic'}}>Oyun, tüm oyuncular katıldığında otomatik başlayacak.</Text>
+    </View>
+  );
+};
 
-const renderWaitingOverlay = () => (
-  <View style={styles.overlay}>
-    <LottieView
-      source={require('../../assets/animations/loading-online-players.json')}
-      style={{ width: 250, height: 250 }}
-      autoPlay
-      loop
-    />
-    <Text style={styles.loadingText}>Oyuncular bekleniyor...</Text>
-  </View>
-);
+  const renderTurnOrderRolls = () => (
+    <View style={styles.turnOrderContainer}>
+      <Text style={styles.turnOrderTitle}>Başlamak için en yüksek zarı at!</Text>
+      <View style={styles.rollsContainer}>
+        {turnOrderRolls.map((roll, index) => (
+          <Text key={index} style={[styles.rollText, { color: COLORS[roll.color] || '#FFF' }]}>
+            {playersInfo[roll.color]?.nickname}: {roll.roll}
+          </Text>
+        ))}
+      </View>
+    </View>
+  );
 
-// Geri tuşunu ve swipe-back gesture'ı devre dışı bırak (bekleme ekranında)
-useEffect(() => {
-  let unsubscribe;
-  const onBack = () => true;
+  const renderPlayerInfo = () => {
+    const getPlayerStatus = (playerColor) => {
+      if (gamePhase === 'finished') return winner === playerColor ? 'Kazandı!' : 'Kaybetti';
+      if (gameState?.currentPlayer === playerColor) return 'Sıra Sizde';
+      return 'Sıra Rakipte';
+    };
 
-  if (gamePhase === 'waiting') {
-    BackHandler.addEventListener('hardwareBackPress', onBack);
-    unsubscribe = navigation.addListener('beforeRemove', (e) => {
-      if (gamePhase === 'waiting') e.preventDefault();
-    });
-    // Expo Router/React Navigation swipe-back gesture'ı kapat
-    navigation.setOptions?.({ gestureEnabled: false });
-  } else {
-    // Diğer fazlarda swipe-back tekrar açılsın
-    navigation.setOptions?.({ gestureEnabled: true });
-  }
-
-  return () => {
-    BackHandler.removeEventListener('hardwareBackPress', onBack);
-    if (unsubscribe) unsubscribe();
+    return (
+      <View style={styles.playerInfoContainer}>
+        {players.map(player => (
+          <View key={player.color} style={styles.playerInfo}>
+            <View style={[styles.playerColorIndicator, { backgroundColor: COLORS[player.color] }]} />
+            <Text style={styles.playerNickname}>{player.nickname}</Text>
+            <Text style={styles.playerStatus}>{getPlayerStatus(player.color)}</Text>
+          </View>
+        ))}
+      </View>
+    );
   };
-}, [gamePhase, navigation]);
+
+  // --- AI MODUNDAKİYLE BİREBİR OYUN BİTİŞ MODALİ ---
+  const renderWinnerModal = () => (
+    <Modal
+      animationType="slide"
+      transparent={true}
+      visible={gamePhase === 'finished' && !!winner}
+      onRequestClose={() => {}}
+    >
+      <View style={styles.centeredView}>
+        <View style={styles.modalView}>
+          <Text style={styles.winnerText}>Kazanan</Text>
+          <Text style={styles.winnerName}>{winner && playersInfo ? playersInfo[winner]?.nickname : ''}</Text>
+          <Text style={styles.pointsWonText}>+10 Puan!</Text>
+          <LottieView
+            source={require("../../assets/animations/firstwinner.json")}
+            style={styles.lottieWinner}
+            autoPlay
+            loop={false}
+          />
+          <View style={styles.modalFooterButtons}>
+            <TouchableOpacity onPress={() => router.replace('/(tabs)')} style={styles.footerButton}>
+              <Text style={styles.footerButtonText}>Ana Menü</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+
+  const renderHeader = () => {
+    let title = 'Ludo Online';
+    if (gamePhase === 'pre-game') title = 'Sıra Belirleniyor...';
+    else if (gamePhase === 'playing' && currentPlayerInfo) title = `Sıra: ${currentPlayerInfo.nickname}`;
+    else if (gamePhase === 'finished' && winner) title = `Kazanan: ${playersInfo[winner]?.nickname}`;
+    else if (gamePhase === 'waiting') title = 'Oyuncular Bekleniyor...';
+
+    return <Text style={styles.headerTitle}>{title}</Text>;
+  };
 
   return (
     <ImageBackground 
       source={require('../../assets/images/wood-background.png')}
-      style={{flex: 1}}
+      style={styles.background}
       resizeMode="cover"
     >
       <SafeAreaView style={styles.container}>
-      {showTurnPopup && (
-        <Animated.View style={[styles.popupContainer, popupStyle]}>
-          <Text style={styles.popupText}>{playersInfo && playersInfo[gameState?.turn]?.nickname} Sırası</Text>
-        </Animated.View>
-      )}
+        {showTurnPopup && (
+          <Animated.View style={[styles.turnPopup, popupStyle]}>
+            <Text style={styles.turnPopupText}>Sıra Sende!</Text>
+          </Animated.View>
+        )}
 
+        {/* --- AI MODUNDAKİYLE BİREBİR HEADER --- */}
+        <View style={styles.header}>
+          <Text style={styles.turnText}>
+            {gamePhase === 'pre-game'
+              ? 'Sıra Belirleme Turu'
+              : `Sıra: ${playersInfo && (playersInfo[boardState?.currentPlayer]?.nickname || '')}`}
+          </Text>
+          <View style={[styles.turnColorBox, { backgroundColor: COLORS[boardState?.currentPlayer || ''] || '#888' }]} />
+        </View>
 
-      {/* Koşullu Render: Bekleme ekranı VEYA Oyun Alanı */}
-      {gamePhase === 'waiting' ? (
-        renderWaitingOverlay()
-      ) : (
-        /* Oyun Alanı (Tahta, Kontroller vb.) */
-        <>
-          <View style={styles.header}>
-            <Text style={styles.turnText}>
-              {(() => {
-                if (gamePhase === 'pre-game') {
-                  return 'Sıra Belirleme Turu';
-                }
-                if (gamePhase === 'playing') {
-                  if (isMyTurn) return 'Sıra Sende!';
-                  if (currentPlayerInfo) return `Sıra: ${currentPlayerInfo.nickname}`;
-                  return 'Sıra bekleniyor...';
-                }
-                if (gamePhase === 'finished') {
-                  return 'Oyun Bitti!';
-                }
-                return message;
-              })()}
-            </Text>
-            {gamePhase === 'playing' && currentPlayerInfo && (
-              <View style={[styles.turnColorBox, { backgroundColor: COLORS[currentPlayerInfo.color] }]} />
-            )}
-          </View>
+        {(gamePhase === 'waiting' || (players && players.length < 4)) && renderWaitingOverlay()}
 
+        {(gamePhase === 'pre-game' || gamePhase === 'playing' || gamePhase === 'finished') && (
+          <>
+            <GameBoard
+              {...boardState}
+              style={styles.gameBoard}
+            />
+            <View style={styles.bottomContainer}>
 
-
-          {(gamePhase === 'playing' || gamePhase === 'pre-game') && (
-            <View style={styles.gameContainer}>
-              {gameState?.pawns && (
-                <GameBoard
-                  style={styles.gameBoard}
-                  pawns={gameState.pawns}
-                  onPawnPress={movePawn}
-                  diceValue={gameState.diceValue}
-                  playersInfo={playersInfo}
-                  isMyTurn={isMyTurn}
-                  myColor={myColor}
-                  gamePhase={gamePhase}
-                />
-              )}
-            </View>
-          )}
-
-          <View style={styles.controlsContainer}>
-            {isTurnOrderPhase && (
-              <View style={styles.turnOrderContainer}>
-                <Text style={styles.gameMessage}>Başlamak için en yüksek zarı at!</Text>
-                {turnOrderRolls.length > 0 && (
-                  <View style={styles.rollsContainer}>
-                    {turnOrderRolls.map((roll, index) => (
-                      <Text key={index} style={styles.rollInfoText}>
-                        {`${roll.nickname}: ${roll.roll}`}
+              <View style={styles.controlsContainer}>
+                <View style={styles.messageContainer}>
+                  <Text style={styles.gameMessage}>{message}</Text>
+                </View>
+                {gamePhase === 'pre-game' && (
+                  <View style={styles.turnOrderContainer}>
+                    {turnOrderRolls.map((roll, idx) => (
+                      <Text key={idx} style={styles.turnOrderText}>
+                        {playersInfo && playersInfo[roll.color]?.nickname}: {roll.roll}
                       </Text>
                     ))}
                   </View>
                 )}
+                {Array.isArray(boardState?.moveHistory) && boardState.moveHistory.length > 0 && (
+                  <View style={styles.moveHistoryContainer}>
+                    {boardState.moveHistory.slice(-5).map((move, idx) => (
+                      <Text key={idx} style={styles.moveHistoryText}>
+                        {move}
+                    </Text>
+                  ))}
+                </View>
+              )}
+              <View style={styles.diceAndButtonContainer}>
+                {!winner && (
+                  <Dice number={diceToShow || 1} style={{ marginRight: 14 }} />
+                )}
+                {players && boardState?.currentPlayer && players.find(p => p.color === boardState.currentPlayer)?.isBot ? (
+                  <Text style={styles.aiThinkingText}>
+                    {(players.find(p => p.color === boardState.currentPlayer)?.nickname || 'Rakip') + ' düşünüyor...'}
+                  </Text>
+                ) : !winner ? (
+                  <TouchableOpacity
+                    onPress={isTurnOrderPhase ? rollDiceForTurnOrder : rollDiceRegular}
+                    disabled={!canRollDice}
+                    style={[
+                      styles.actionButton,
+                      !canRollDice && styles.disabledButton
+                    ]}
+                  >
+                    <Text style={styles.actionButtonText}>Zar At</Text>
+                  </TouchableOpacity>
+                ) : null}
               </View>
-            )}
-
-            <View style={styles.diceAndButtonContainer}>
-              {diceToShow !== null && diceToShow !== undefined && !winner && <Dice number={diceToShow} />}
-
-              <View style={styles.controls}>
-                {(() => {
-                  if (winner) return null;
-
-                  if (isTurnOrderPhase) {
-                    const playerHasRolled = turnOrderRolls.some(r => r.color === myColor);
-                    if (playerHasRolled) {
-                      return <Text style={styles.aiThinkingText}>Diğer oyuncuların zar atması bekleniyor...</Text>;
-                    }
-                    return (
-                      <TouchableOpacity onPress={rollDiceForTurnOrder} style={styles.actionButton}>
-                        <Text style={styles.actionButtonText}>Sıra İçin Zar At</Text>
-                      </TouchableOpacity>
-                    );
-                  }
-
-                  if (gamePhase === 'playing') {
-                    if (!isMyTurn) {
-                      return <Text style={styles.aiThinkingText}>{`Sıra: ${currentPlayerInfo?.nickname}`}</Text>;
-                    }
-                    return (
-                      <TouchableOpacity
-                        onPress={rollDiceRegular}
-                        disabled={gameState?.diceValue !== null}
-                        style={[styles.actionButton, gameState?.diceValue !== null && styles.disabledButton]}
-                      >
-                        <Text style={styles.actionButtonText}>Zar At</Text>
-                      </TouchableOpacity>
-                    );
-                  }
-                  return null;
-                })()}
-              </View>
-            </View>
-            <View style={styles.footerButtonsContainer}>
-              <TouchableOpacity onPress={() => socket.emit('leave_room')} style={styles.footerButton}>
-                <Text style={styles.footerButtonText}>Oyundan Çık</Text>
-              </TouchableOpacity>
             </View>
           </View>
         </>
       )}
 
-      {/* Kazanan Modalı */}
-      <Modal
-        animationType="slide"
-        transparent={true}
-        visible={gamePhase === 'finished'}
-        onRequestClose={() => router.back()}
-      >
-        <View style={styles.centeredView}>
-          <View style={styles.modalView}>
-            <Text style={styles.winnerText}>Kazanan</Text>
-            <Text style={styles.winnerName}>{winner && players.find(p => p.color === winner)?.nickname}</Text>
-            <LottieView
-              source={require('../../assets/animations/firstwinner.json')}
-              style={styles.lottieWinner}
-              autoPlay
-              loop={false}
-            />
-            <View style={styles.modalFooterButtons}>
-              <TouchableOpacity onPress={() => router.back()} style={styles.footerButton}>
-                <Text style={styles.footerButtonText}>Ana Menü</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
-      </SafeAreaView>
-    </ImageBackground>
-  );
-};
+      {renderWinnerModal()}
+    </SafeAreaView>
+  </ImageBackground>
+)};
 
 const styles = StyleSheet.create({
-  overlay: {
+  background: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.7)',
-    position: 'absolute',
-    top: 0, left: 0, right: 0, bottom: 0,
-    zIndex: 99,
-  },
-  exitButton: {
-    marginTop: 32,
-    backgroundColor: '#D32F2F',
-    paddingVertical: 14,
-    paddingHorizontal: 40,
-    borderRadius: 22,
-    elevation: 3,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-  },
-  exitButtonText: {
-    color: '#fff',
-    fontWeight: 'bold',
-    fontSize: 18,
-    letterSpacing: 1,
-    textAlign: 'center',
   },
   container: {
     flex: 1,
@@ -429,6 +462,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-around',
     alignItems: 'center',
     minHeight: 80,
+    width: '100%',
   },
   controls: {
     alignItems: 'center',
@@ -459,7 +493,7 @@ const styles = StyleSheet.create({
   },
   footerButtonsContainer: {
     flexDirection: 'row',
-    justifyContent: 'center',
+    justifyContent: 'space-around',
     marginTop: 15,
     width: '100%',
   },
@@ -470,7 +504,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
   },
   footerButtonText: {
-    color: 'white',
+    color: '#eee',
     fontSize: 16,
     fontWeight: 'bold',
   },
@@ -554,6 +588,44 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginTop: 20,
     width: '100%',
+  },
+  moveHistoryContainer: {
+    width: '100%',
+    backgroundColor: 'rgba(0,0,0,0.2)',
+    borderRadius: 10,
+    padding: 8,
+    marginBottom: 8,
+    alignItems: 'flex-start',
+  },
+  moveHistoryText: {
+    color: '#fff',
+    fontSize: 15,
+    fontStyle: 'italic',
+    marginBottom: 2,
+    marginLeft: 2,
+  },
+  turnOrderContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    // Sıra belirleme turunda siyah bar yok, sadece yazılar var
+    backgroundColor: 'transparent',
+    borderRadius: 10,
+    paddingVertical: 6,
+    paddingHorizontal: 14,
+    marginBottom: 7,
+    marginTop: 7,
+    minHeight: 32,
+  },
+  turnOrderText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginHorizontal: 7,
+    textShadowColor: 'rgba(0,0,0,0.7)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
+    // Her zaman beyaz ve yatayda, vertical stacking yok
   },
   // Loader stilleri
   overlay: {
