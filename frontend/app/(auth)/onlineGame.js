@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import { useAuth } from '../../store/AuthProvider';
 import { BackHandler } from 'react-native';
 import {
   ImageBackground,
@@ -20,6 +21,7 @@ import { COLORS } from '../../constants/game';
 import LottieView from 'lottie-react-native';
 
 const OnlineGameScreen = () => {
+  const { user } = useAuth();
   const { roomId } = useLocalSearchParams();
   const router = useRouter();
   const navigation = useNavigation();
@@ -61,15 +63,35 @@ const OnlineGameScreen = () => {
   const message = gameState?.message || '';
 
   const myColor = useMemo(() => {
-    if (!players || !players.length || !socket?.id) return null;
-    const myPlayer = players.find(p => p.id === socket.id);
-    return myPlayer?.color;
-  }, [players, socket?.id]);
+  if (!players || !players.length) return null;
+  // Önce user.id ile eşleşen player'ı bul
+  let myPlayer = user?.id ? players.find(p => p.id === user.id) : null;
+  // Yoksa socket.id ile eşleşen player'ı bul
+  if (!myPlayer && socket?.id) {
+    myPlayer = players.find(p => p.id === socket.id);
+  }
+  console.log('[DEBUG][MYCOLOR]', {
+    userId: user?.id,
+    socketId: socket?.id,
+    players: players.map(p => ({id: p.id, color: p.color, nickname: p.nickname})),
+    myColor: myPlayer?.color
+  });
+  return myPlayer?.color;
+}, [players, user?.id, socket?.id]);
 
   const isMyTurn = useMemo(() => {
-    if (!gameState || !myColor) return false;
-    return gameState.currentPlayer === myColor;
-  }, [gameState, myColor]);
+  if (!gameState || !myColor) return false;
+  const result = gameState.currentPlayer === myColor;
+  console.log('[DEBUG][IS_MY_TURN]', {
+    userId: user?.id,
+    socketId: socket?.id,
+    myColor,
+    currentPlayer: gameState.currentPlayer,
+    players: players?.map(p => ({id: p.id, color: p.color, nickname: p.nickname})),
+    result
+  });
+  return result;
+}, [gameState, myColor, user?.id, socket?.id, players]);
   
   const [showTurnPopup, setShowTurnPopup] = useState(false);
   const [popupAnim] = useState(new Animated.Value(0));
@@ -94,13 +116,44 @@ const OnlineGameScreen = () => {
   // Zar atma butonu aktiflik mantığı
 // Pre-game (sıralama turu) boyunca Zar At herkes için aktif
 // Sadece oyun (playing) fazında, sıra kimdeyse onda aktif
-const canRollDice = gamePhase === 'pre-game'
-  ? (!!myColor && !turnOrderRolls.some(r => r.color === myColor))
-  : (isMyTurn && diceToShow === null);
+const canRollDice = useMemo(() => {
+  let value;
+  if (gamePhase === 'pre-game') {
+    value = !!myColor && !turnOrderRolls.some(r => r.color === myColor);
+  } else {
+    value = isMyTurn && (diceToShow == null); // null veya undefined ise
+  }
+  console.log('[DEBUG][CAN_ROLL_DICE]', {
+    userId: user?.id,
+    socketId: socket?.id,
+    myColor,
+    isMyTurn,
+    diceToShow: typeof diceToShow === 'undefined' ? 'undefined' : diceToShow,
+    turnOrderRolls,
+    gamePhase,
+    players: players?.map(p => ({id: p.id, color: p.color, nickname: p.nickname})),
+    value
+  });
+  return value;
+}, [gamePhase, myColor, isMyTurn, diceToShow, turnOrderRolls, user?.id, socket?.id, players]);
 
 useEffect(() => {
   console.log('[DEBUG][ZAR AT] canRollDice:', canRollDice, 'isTurnOrderPhase:', isTurnOrderPhase, 'myColor:', myColor, 'turnOrderRolls:', turnOrderRolls, 'isMyTurn:', isMyTurn, 'diceToShow:', diceToShow);
 }, [canRollDice, isTurnOrderPhase, myColor, turnOrderRolls, isMyTurn, diceToShow]);
+
+useEffect(() => {
+  if (gamePhase === 'playing') {
+    console.log('[DEBUG][PLAYING]', {
+      userId: user?.id,
+      socketId: socket?.id,
+      isMyTurn,
+      diceToShow,
+      currentPlayer: gameState?.currentPlayer,
+      myColor,
+      players: players?.map(p => ({id: p.id, color: p.color, nickname: p.nickname}))
+    });
+  }
+}, [gamePhase, isMyTurn, diceToShow, gameState?.currentPlayer, myColor, user?.id, socket?.id, players]);
 
 // AI modundaki gibi tam mapping (nickname, user_id, isBot)
 // AI modundaki formatla birebir aynı playersInfo mapping'i
@@ -229,7 +282,7 @@ const playersInfo = useMemo(() => {
               <View key={player.id || player.color || idx} style={{flexDirection: 'row', alignItems: 'center', marginBottom: 6}}>
                 <View style={{width: 18, height: 18, backgroundColor: COLORS[player.color], borderRadius: 4, marginRight: 8, borderWidth: 1, borderColor: '#fff'}} />
                 <Text style={{color: '#fff', fontWeight: 'bold', fontSize: 16}}>{player.nickname || 'Oyuncu'}</Text>
-                {player.isBot && <Text style={{color: '#ffd700', marginLeft: 6, fontSize: 13}}>(Bot)</Text>}
+                
               </View>
             ))}
             <Text style={{color: '#ccc', fontSize: 15, marginTop: 4}}>
