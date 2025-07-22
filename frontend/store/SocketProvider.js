@@ -15,6 +15,7 @@ export const SocketProvider = ({ children }) => {
     const [isConnected, setIsConnected] = useState(false);
     const [room, setRoom] = useState(null);
     const [roomClosed, setRoomClosed] = useState({ isClosed: false, reason: '' });
+    const [socketId, setSocketId] = useState();
     const lastRoomIdRef = useRef(null); // Son girilen odayı saklamak için ref
 
     // Bağlantı yeniden kurulduğunda odaya tekrar katılmayı dene
@@ -70,11 +71,13 @@ export const SocketProvider = ({ children }) => {
                 // Listener'ları sadece bir kez, soket oluşturulduğunda ekle
                 socketRef.current.on('connect', () => {
                     console.log(`[SocketProvider] ✅ Sunucuya bağlanıldı! ID: ${socketRef.current.id}`);
+                    setSocketId(socketRef.current.id);
                     setIsConnected(true);
                 });
 
                 socketRef.current.on('disconnect', (reason) => {
                     console.log(`[SocketProvider] ❌ Bağlantı kesildi: ${reason}`);
+                    setSocketId(undefined);
                     setIsConnected(false);
                 });
 
@@ -144,6 +147,7 @@ export const SocketProvider = ({ children }) => {
             room,
             setRoom, // Dışarıdan güncelleme için
             roomClosed,
+            socketId,
             // Game state values extracted from room
             gameState: room?.gameState,
             players: room?.players || [],

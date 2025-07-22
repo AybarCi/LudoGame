@@ -36,7 +36,8 @@ const OnlineGameScreen = () => {
     dice, 
     validMoves, 
     turnOrder, 
-    preGameRolls 
+    preGameRolls, 
+    socketId 
   } = useSocket(); 
 
   const { 
@@ -64,20 +65,30 @@ const OnlineGameScreen = () => {
 
   const myColor = useMemo(() => {
   if (!players || !players.length) return null;
-  // Önce user.id ile eşleşen player'ı bul
-  let myPlayer = user?.id ? players.find(p => p.id === user.id) : null;
-  // Yoksa socket.id ile eşleşen player'ı bul
-  if (!myPlayer && socket?.id) {
-    myPlayer = players.find(p => p.id === socket.id);
+  let myPlayer = null;
+  if (gamePhase === 'pre-game') {
+    // Sıralama turunda sadece socketId ile eşleşme yap
+    if (socketId) {
+      myPlayer = players.find(p => p.id === socketId);
+    }
+  } else {
+    // Oyun fazında önce user.id, yoksa socketId ile eşleşme yap
+    if (user?.id) {
+      myPlayer = players.find(p => p.id === user.id);
+    }
+    if (!myPlayer && socketId) {
+      myPlayer = players.find(p => p.id === socketId);
+    }
   }
   console.log('[DEBUG][MYCOLOR]', {
     userId: user?.id,
-    socketId: socket?.id,
+    socketId,
     players: players.map(p => ({id: p.id, color: p.color, nickname: p.nickname})),
-    myColor: myPlayer?.color
+    myColor: myPlayer?.color,
+    gamePhase
   });
   return myPlayer?.color;
-}, [players, user?.id, socket?.id]);
+}, [players, user?.id, socketId, gamePhase]);
 
   const isMyTurn = useMemo(() => {
   if (!gameState || !myColor) return false;
@@ -117,17 +128,32 @@ const OnlineGameScreen = () => {
 // Pre-game (sıralama turu) boyunca Zar At herkes için aktif
 // Sadece oyun (playing) fazında, sıra kimdeyse onda aktif
 const canRollDice = useMemo(() => {
-  let value;
+  // Sıralama turunda (pre-game) zar atma HERKESE açık olacak şekilde true dön
   if (gamePhase === 'pre-game') {
-    value = !!myColor && !turnOrderRolls.some(r => r.color === myColor);
-  } else {
-    value = isMyTurn && (diceToShow == null); // null veya undefined ise
+    return true;
   }
+  // Oyun fazında: sadece sıra kimdeyse ve zar gösterilmiyorsa aktif
+  let isCurrentPlayer = false;
+  if (gamePhase === 'playing' && players && players.length > 0 && gameState?.currentPlayer) {
+    // Öncelik: myColor eşleşirse
+    if (myColor && gameState.currentPlayer === myColor) {
+      isCurrentPlayer = true;
+    } else {
+      // Fallback: currentPlayer'a denk gelen oyuncunun kimliği socketId veya user.id ile eşleşiyor mu?
+      const currentPlayerObj = players.find(p => p.color === gameState.currentPlayer);
+      if (currentPlayerObj) {
+        if ((socketId && currentPlayerObj.id === socketId) || (user?.id && currentPlayerObj.id === user.id)) {
+          isCurrentPlayer = true;
+        }
+      }
+    }
+  }
+  const value = isCurrentPlayer && (diceToShow == null);
   console.log('[DEBUG][CAN_ROLL_DICE]', {
     userId: user?.id,
-    socketId: socket?.id,
+    socketId,
     myColor,
-    isMyTurn,
+    isCurrentPlayer,
     diceToShow: typeof diceToShow === 'undefined' ? 'undefined' : diceToShow,
     turnOrderRolls,
     gamePhase,
@@ -135,7 +161,8 @@ const canRollDice = useMemo(() => {
     value
   });
   return value;
-}, [gamePhase, myColor, isMyTurn, diceToShow, turnOrderRolls, user?.id, socket?.id, players]);
+}, [gamePhase, myColor, diceToShow, turnOrderRolls, user?.id, socketId, players, gameState?.currentPlayer]);
+
 
 useEffect(() => {
   console.log('[DEBUG][ZAR AT] canRollDice:', canRollDice, 'isTurnOrderPhase:', isTurnOrderPhase, 'myColor:', myColor, 'turnOrderRolls:', turnOrderRolls, 'isMyTurn:', isMyTurn, 'diceToShow:', diceToShow);
@@ -171,13 +198,38 @@ const playersInfo = useMemo(() => {
 }, [players]);
 
   const rollDiceForTurnOrder = () => {
-    if (socket && myColor) {
-      const playerHasRolled = turnOrderRolls.some(r => r.color === myColor);
-      if (!playerHasRolled) {
-        socket.emit('roll_dice_for_turn_order', { roomId });
+    if (!socket || !players || !players.length || gamePhase !== 'pre-game') return;
+    // 1. Öncelik: socketId ile bul
+    let me = socketId && players.find(p => p.id === socketId);
+    // 2. Öncelik: user.id ile bul (bazı edge-case'ler için)
+    if (!me && user?.id) me = players.find(p => p.id === user.id);
+    // 3. Öncelik: ilk bot olmayan player (en azından biri zar atabilsin)
+    if (!me) me = players.find(p => !p.isBot);
+    // 4. Hala yoksa: fallback ilk player
+    if (!me) me = players[0];
+    if (!me) {
+      console.error('[ZAR AT][CRITICAL] Sıralama turunda oyuncu bulunamadı! players:', players, 'socketId:', socketId, 'userId:', user?.id);
+      return;
+    }
+    const playerHasRolled = turnOrderRolls.some(r => r.color === me.color);
+    if (!playerHasRolled) {
+      socket.emit('roll_dice_for_turn_order', { roomId });
+    } else {
+      // Kullanıcıya görsel uyarı ver
+      if (typeof window !== 'undefined' && window.alert) {
+        window.alert('Bu turda zaten zar attınız!');
+      } else if (typeof global !== 'undefined' && global?.Expo) {
+        // Expo/React Native ortamı için basit bir Alert
+        try {
+          const { Alert } = require('react-native');
+          Alert.alert('Bilgi', 'Bu turda zaten zar attınız!');
+        } catch(e) {}
       }
+      console.warn('[ZAR AT] Bu oyuncu zaten zar attı:', me);
     }
   };
+
+
 
   const rollDiceRegular = () => {
     if (socket && isMyTurn) {
@@ -358,6 +410,22 @@ const playersInfo = useMemo(() => {
     </Modal>
   );
 
+  // Memoize boardState to prevent unnecessary re-renders and remounts
+  const stableBoardState = useMemo(() => {
+    // Only update if boardState reference changes
+    return boardState;
+  }, [boardState]);
+
+  // --- Pawn selection logic for multiplayer, mirrors AI mode ---
+  const handlePawnPress = (pawnId) => {
+    // Only allow move if it's my turn and there is a valid move for this pawn
+    if (!isMyTurn) return;
+    if (!Array.isArray(gameState?.validMoves) || !gameState.validMoves.includes(pawnId)) return;
+    if (typeof movePawn === 'function') {
+      movePawn(pawnId);
+    }
+  };
+
   const renderHeader = () => {
     let title = 'Ludo Online';
     if (gamePhase === 'pre-game') title = 'Sıra Belirleniyor...';
@@ -396,8 +464,10 @@ const playersInfo = useMemo(() => {
         {(gamePhase === 'pre-game' || gamePhase === 'playing' || gamePhase === 'finished') && (
           <>
             <GameBoard
-              {...boardState}
+              key={room?.id || 'main-board'}
+              {...stableBoardState}
               style={styles.gameBoard}
+              onPawnPress={handlePawnPress}
             />
             <View style={styles.bottomContainer}>
 
