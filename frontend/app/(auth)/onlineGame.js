@@ -13,7 +13,7 @@ import {
   ActivityIndicator
 } from 'react-native';
 import { useLocalSearchParams, useRouter, useNavigation } from 'expo-router';
-import GameBoard from '../../components/modules/GameBoard';
+import OnlineGameBoard from '../../components/modules/OnlineGameBoard';
 import Dice from '../../components/shared/Dice';
 import { useOnlineGameEngine } from '../../hooks/useOnlineGameEngine';
 import { useSocket } from '../../store/SocketProvider';
@@ -130,7 +130,10 @@ const OnlineGameScreen = () => {
 const canRollDice = useMemo(() => {
   // Sıralama turunda (pre-game) zar atma HERKESE açık olacak şekilde true dön
   if (gamePhase === 'pre-game') {
-    return true;
+    if (!myColor) return false; // Rengi olmayan oyuncu zar atamaz.
+    // Bu oyuncu daha önce sıralama için zar atmış mı kontrol et.
+    const playerHasRolled = turnOrderRolls.some(r => r.color === myColor);
+    return !playerHasRolled; // Eğer atmadıysa, buton aktif olsun.
   }
   // Oyun fazında: sadece sıra kimdeyse ve zar gösterilmiyorsa aktif
   let isCurrentPlayer = false;
@@ -169,84 +172,15 @@ useEffect(() => {
 }, [canRollDice, isTurnOrderPhase, myColor, turnOrderRolls, isMyTurn, diceToShow]);
 
 useEffect(() => {
-  if (gamePhase === 'playing') {
-    console.log('[DEBUG][PLAYING]', {
-      userId: user?.id,
-      socketId: socket?.id,
-      isMyTurn,
-      diceToShow,
-      currentPlayer: gameState?.currentPlayer,
-      myColor,
-      players: players?.map(p => ({id: p.id, color: p.color, nickname: p.nickname}))
-    });
+  if (gameState?.turn && gamePhase === 'playing') {
+    setShowTurnPopup(true);
+    Animated.sequence([
+      Animated.timing(popupAnim, { toValue: 1, duration: 500, useNativeDriver: true }),
+      Animated.delay(1500),
+      Animated.timing(popupAnim, { toValue: 0, duration: 500, useNativeDriver: true }),
+    ]).start(() => setShowTurnPopup(false));
   }
-}, [gamePhase, isMyTurn, diceToShow, gameState?.currentPlayer, myColor, user?.id, socket?.id, players]);
-
-// AI modundaki gibi tam mapping (nickname, user_id, isBot)
-// AI modundaki formatla birebir aynı playersInfo mapping'i
-const playersInfo = useMemo(() => {
-  if (!players || !players.length) return {};
-  return players.reduce((acc, player) => {
-    acc[player.color] = {
-      nickname: player.nickname,
-      user_id: player.user_id,
-      isBot: player.isBot,
-      color: player.color,
-    };
-    return acc;
-  }, {});
-}, [players]);
-
-  const rollDiceForTurnOrder = () => {
-    if (!socket || !players || !players.length || gamePhase !== 'pre-game') return;
-    // 1. Öncelik: socketId ile bul
-    let me = socketId && players.find(p => p.id === socketId);
-    // 2. Öncelik: user.id ile bul (bazı edge-case'ler için)
-    if (!me && user?.id) me = players.find(p => p.id === user.id);
-    // 3. Öncelik: ilk bot olmayan player (en azından biri zar atabilsin)
-    if (!me) me = players.find(p => !p.isBot);
-    // 4. Hala yoksa: fallback ilk player
-    if (!me) me = players[0];
-    if (!me) {
-      console.error('[ZAR AT][CRITICAL] Sıralama turunda oyuncu bulunamadı! players:', players, 'socketId:', socketId, 'userId:', user?.id);
-      return;
-    }
-    const playerHasRolled = turnOrderRolls.some(r => r.color === me.color);
-    if (!playerHasRolled) {
-      socket.emit('roll_dice_for_turn_order', { roomId });
-    } else {
-      // Kullanıcıya görsel uyarı ver
-      if (typeof window !== 'undefined' && window.alert) {
-        window.alert('Bu turda zaten zar attınız!');
-      } else if (typeof global !== 'undefined' && global?.Expo) {
-        // Expo/React Native ortamı için basit bir Alert
-        try {
-          const { Alert } = require('react-native');
-          Alert.alert('Bilgi', 'Bu turda zaten zar attınız!');
-        } catch(e) {}
-      }
-      console.warn('[ZAR AT] Bu oyuncu zaten zar attı:', me);
-    }
-  };
-
-
-
-  const rollDiceRegular = () => {
-    if (socket && isMyTurn) {
-      socket.emit('roll_dice', { roomId });
-    }
-  };
-
-  useEffect(() => {
-    if (gameState?.turn && gamePhase === 'playing') {
-      setShowTurnPopup(true);
-      Animated.sequence([
-        Animated.timing(popupAnim, { toValue: 1, duration: 500, useNativeDriver: true }),
-        Animated.delay(1500),
-        Animated.timing(popupAnim, { toValue: 0, duration: 500, useNativeDriver: true }),
-      ]).start(() => setShowTurnPopup(false));
-    }
-  }, [gameState?.turn, gamePhase]);
+}, [gameState?.turn, gamePhase]);
 
   const popupStyle = {
     opacity: popupAnim,
@@ -257,6 +191,16 @@ const playersInfo = useMemo(() => {
   };
   
   const isTurnOrderPhase = gamePhase === 'pre-game';
+
+  const playersInfo = useMemo(() => {
+    if (!players || !players.length) return {};
+    return players.reduce((acc, player) => {
+      if (player && player.color) {
+        acc[player.color] = player;
+      }
+      return acc;
+    }, {});
+  }, [players]);
 
   const currentPlayerInfo = useMemo(() => {
     if (!gameState?.currentPlayer || !players.length) return null;
@@ -426,6 +370,54 @@ const playersInfo = useMemo(() => {
     }
   };
 
+  const handleLeaveGame = () => {
+    if (socket && room?.id) {
+      console.log(`[Game] Leaving room: ${room.id}`);
+      socket.emit('leave_room', { roomId: room.id });
+      router.replace('/(tabs)');
+    }
+  };
+
+  const rollDiceForTurnOrder = () => {
+    if (!socket || !players || !players.length || gamePhase !== 'pre-game') return;
+    // 1. Öncelik: socketId ile bul
+    let me = socketId && players.find(p => p.id === socketId);
+    // 2. Öncelik: user.id ile bul (bazı edge-case'ler için)
+    if (!me && user?.id) me = players.find(p => p.id === user.id);
+    // 3. Öncelik: ilk bot olmayan player (en azından biri zar atabilsin)
+    if (!me) me = players.find(p => !p.isBot);
+    // 4. Hala yoksa: fallback ilk player
+    if (!me) me = players[0];
+    if (!me) {
+      console.error('[ZAR AT][CRITICAL] Sıralama turunda oyuncu bulunamadı! players:', players, 'socketId:', socketId, 'userId:', user?.id);
+      return;
+    }
+    const playerHasRolled = turnOrderRolls.some(r => r.color === me.color);
+    if (!playerHasRolled) {
+      socket.emit('roll_dice_for_turn_order', { roomId });
+    } else {
+      // Kullanıcıya görsel uyarı ver
+      if (typeof window !== 'undefined' && window.alert) {
+        window.alert('Bu turda zaten zar attınız!');
+      } else if (typeof global !== 'undefined' && global?.Expo) {
+        // Expo/React Native ortamı için basit bir Alert
+        try {
+          const { Alert } = require('react-native');
+          Alert.alert('Bilgi', 'Bu turda zaten zar attınız!');
+        } catch(e) {}
+      }
+      console.warn('[ZAR AT] Bu oyuncu zaten zar attı:', me);
+    }
+  };
+
+
+
+  const rollDiceRegular = () => {
+    if (socket && isMyTurn) {
+      socket.emit('roll_dice', { roomId });
+    }
+  };
+
   const renderHeader = () => {
     let title = 'Ludo Online';
     if (gamePhase === 'pre-game') title = 'Sıra Belirleniyor...';
@@ -463,7 +455,7 @@ const playersInfo = useMemo(() => {
 
         {(gamePhase === 'pre-game' || gamePhase === 'playing' || gamePhase === 'finished') && (
           <>
-            <GameBoard
+            <OnlineGameBoard
               key={room?.id || 'main-board'}
               {...stableBoardState}
               style={styles.gameBoard}

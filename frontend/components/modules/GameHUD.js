@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 
-const GameHUD = ({ onRollDice, diceValue, isMyTurn, message }) => {
+const GameHUD = ({ onRollDice, diceValue, isMyTurn, message, onLeaveGame }) => {
   return (
     <View style={styles.container}>
       <Text style={styles.message}>{message}</Text>
@@ -10,6 +10,9 @@ const GameHUD = ({ onRollDice, diceValue, isMyTurn, message }) => {
         disabled={!isMyTurn} 
         style={[styles.diceButton, !isMyTurn && styles.disabledButton]}>
         <Text style={styles.diceText}>{diceValue || '🎲'}</Text>
+      </TouchableOpacity>
+      <TouchableOpacity onPress={onLeaveGame} style={styles.leaveButton}>
+        <Text style={styles.leaveButtonText}>Oyundan Çık</Text>
       </TouchableOpacity>
     </View>
   );
@@ -47,6 +50,20 @@ const styles = StyleSheet.create({
   diceText: {
     fontSize: 50,
     fontWeight: 'bold',
+  },
+  leaveButton: {
+    marginTop: 20,
+    backgroundColor: '#e74c3c',
+    paddingVertical: 12,
+    paddingHorizontal: 25,
+    borderRadius: 25,
+    borderWidth: 2,
+    borderColor: '#c0392b',
+  },
+  leaveButtonText: {
+    color: 'white',
+    fontWeight: 'bold',
+    fontSize: 16,
   },
 });
 

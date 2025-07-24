@@ -16,7 +16,7 @@ const io = new Server(server, {
 });
 
 const PORT = 3001;
-const BOT_NAMES = ["Aslı", "Can", "Efe", "Gizem"];
+const BOT_NAMES = ["Aslı", "Can", "Efe", "Gizem","Cenk","Cihan", "Acar","Buse","Burcu","İlayda"];
 
 
 
@@ -585,6 +585,56 @@ io.on('connection', (socket) => {
         }
     });
 
+    socket.on('leave_room', ({ roomId }) => {
+        const room = rooms[roomId];
+        if (!room) {
+            console.log(`[Leave Room] Player ${socket.id} tried to leave a non-existent room: ${roomId}`);
+            return;
+        }
+
+        const playerIndex = room.players.findIndex(p => p.id === socket.id);
+        if (playerIndex === -1) {
+            console.log(`[Leave Room] Player ${socket.id} not found in room: ${roomId}`);
+            return;
+        }
+
+        const leavingPlayer = room.players[playerIndex];
+        console.log(`[Leave Room] Player ${leavingPlayer.nickname} (${socket.id}) is leaving room ${roomId}.`);
+
+        const realPlayers = room.players.filter(p => !p.isBot);
+
+        if (realPlayers.length <= 1) {
+            // This is the last human player, delete the room.
+            console.log(`[Leave Room] Last human player left. Deleting room ${roomId}.`);
+            deleteRoom(roomId, 'Odadaki son oyuncu da ayrıldı.');
+        } else {
+            // Replace the player with a bot.
+            const botNameIndex = Math.floor(Math.random() * BOT_NAMES.length);
+            const botName = BOT_NAMES[botNameIndex];
+
+            const botPlayer = {
+                id: `bot-${uuidv4()}`,
+                nickname: botName,
+                color: leavingPlayer.color,
+                isBot: true,
+                isReady: true,
+                pawns: leavingPlayer.pawns, // Keep the pawn state
+            };
+
+            room.players.splice(playerIndex, 1, botPlayer);
+            console.log(`[Leave Room] Player ${leavingPlayer.nickname} was replaced by bot ${botName} in room ${roomId}.`);
+
+            // If it was the leaving player's turn, advance the turn.
+            if (room.gameState.currentPlayer === leavingPlayer.color) {
+                console.log(`[Leave Room] It was the leaving player's turn. Advancing turn.`);
+                updateTurn(room);
+            } else {
+                // Otherwise, just update the room for everyone.
+                updateRoom(roomId);
+            }
+        }
+    });
+
     socket.on('disconnect', () => {
         console.log('Bir kullanıcı ayrıldı:', socket.id);
         const roomId = Object.keys(rooms).find(id => rooms[id].players.some(p => p.id === socket.id));
@@ -622,6 +672,6 @@ io.on('connection', (socket) => {
     });
 });
 
-server.listen(PORT, '192.168.1.6', () => {
-    console.log(`Sunucu ${PORT} portunda çalışıyor (192.168.1.6)...`);
+server.listen(PORT, '192.168.1.20', () => {
+    console.log(`Sunucu ${PORT} portunda çalışıyor (192.168.1.20)...`);
 });

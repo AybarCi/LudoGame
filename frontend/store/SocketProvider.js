@@ -98,7 +98,8 @@ export const SocketProvider = ({ children }) => {
                 // Oda güncellendiğinde tetiklenecek
                 socketRef.current.on('room_updated', (updatedRoom) => {
                     console.log('[SocketProvider] Oda güncellendi:', updatedRoom.id, 'Phase:', updatedRoom.gameState?.phase);
-                    setRoom(updatedRoom);
+                    console.log('[SocketProvider] players received:', updatedRoom.players);
+                    setRoom(prevRoom => ({ ...prevRoom, ...updatedRoom }));
                 });
             }
 
