@@ -1,5 +1,11 @@
 const express = require('express');
-const { PLAYER_COLORS, HOME_POSITIONS, START_POSITIONS, HOME_ENTRANCE, PATH_LENGTH, HOME_STRETCH_LENGTH, GOAL_POSITION, PATH_MAP, SAFE_SPOTS } = require('./constants');
+const { 
+    HOME_POSITIONS,
+    PATH_LENGTH,
+    START_OFFSET,
+    SAFE_SPOTS_GLOBAL,
+    GOAL_POSITION_INDEX
+} = require('./gameConstants');
 const http = require('http');
 const { Server } = require('socket.io');
 const cors = require('cors');
@@ -92,48 +98,26 @@ const deleteRoom = (roomId, reason) => {
 };
 
 const getValidMoves = (player, diceValue, room) => {
-    const { color, pawns } = player;
-    const { players } = room;
+    const { color } = player;
+    const { gameState } = room;
+    const playerPositions = gameState.positions[color];
     const moves = [];
 
-    const startPos = START_POSITIONS[color];
-    const homeEntry = HOME_ENTRANCE[color];
-    const playerPath = PATH_MAP[color];
-
-    pawns.forEach((pawn, pawnIndex) => {
-        const currentPos = pawn.position;
-
-        // Logic for pawns already on the board
-        if (currentPos < 100) {
-            const relativePosition = playerPath.indexOf(currentPos);
-            if (relativePosition === -1) return; // Should not happen, but a good safeguard
-
-            const newRelativePosition = relativePosition + diceValue;
-
-            if (newRelativePosition >= PATH_LENGTH) { // Pawn is entering the home stretch
-                const stepsIntoHome = newRelativePosition - PATH_LENGTH;
-                if (stepsIntoHome < HOME_STRETCH_LENGTH) {
-                    const targetPos = PATH_LENGTH + stepsIntoHome;
-                    const isOccupiedByOwnPawn = pawns.some(p => p.position === targetPos);
-                    if (!isOccupiedByOwnPawn) {
-                        moves.push({ pawnIndex, from: currentPos, to: targetPos, type: 'home' });
-                    }
-                }
-            } else { // Regular move on the main path
-                const targetPos = playerPath[newRelativePosition];
-                const isOccupiedByOwnPawn = pawns.some(p => p.position === targetPos);
-                if (!isOccupiedByOwnPawn) {
-                    moves.push({ pawnIndex, from: currentPos, to: targetPos, type: 'move' });
-                }
+    playerPositions.forEach((currentPos, pawnIndex) => {
+        // Piyon evdeyse (pozisyon < 0) ve 6 atıldıysa
+        if (currentPos < 0 && diceValue === 6) {
+            const startPosIndex = 0; // Her piyon kendi yolunun 0. indeksinden başlar
+            // Başlangıç pozisyonu dolu mu kontrol et
+            const isStartOccupiedByMe = playerPositions.some(p => p === startPosIndex);
+            if (!isStartOccupiedByMe) {
+                moves.push({ pawnIndex, from: currentPos, to: startPosIndex, type: 'enter' });
             }
-        }
-
-        // Separate logic for starting a pawn from home, only applicable on a roll of 6
-        if (diceValue === 6 && currentPos >= 100) {
-            const targetPos = startPos;
-            const isOccupiedByOwnPawn = pawns.some(p => p.position === targetPos);
-            if (!isOccupiedByOwnPawn) {
-                moves.push({ pawnIndex, from: currentPos, to: targetPos, type: 'start' });
+        } 
+        // Piyon zaten yoldaysa (pozisyon >= 0)
+        else if (currentPos >= 0 && currentPos < GOAL_POSITION_INDEX) {
+            const newPos = currentPos + diceValue;
+            if (newPos <= GOAL_POSITION_INDEX) {
+                 moves.push({ pawnIndex, from: currentPos, to: newPos, type: 'move' });
             }
         }
     });
@@ -142,41 +126,43 @@ const getValidMoves = (player, diceValue, room) => {
 };
 
 const handlePawnMove = (room, player, move) => {
-    const { players } = room;
     const { color } = player;
-    const pawnToMove = player.pawns[move.pawnIndex];
-    pawnToMove.position = move.to;
+    const { gameState } = room;
+    const movedPawnIndex = move.pawnIndex;
+    const newLocalPos = move.to;
+    let capturedAPawn = false; // Piyon yenip yenmediğini takip et
 
-    let capturedPawnInfo = null;
+    const movedPawnGlobalPos = (newLocalPos + START_OFFSET[color]) % PATH_LENGTH;
 
-    // Capture logic: only on the main path and not on safe spots.
-            if (move.to < PATH_LENGTH && !SAFE_SPOTS.includes(move.to)) {
-        for (const otherPlayer of players) {
-            if (otherPlayer.color !== color) {
-                for (let i = 0; i < otherPlayer.pawns.length; i++) {
-                    if (otherPlayer.pawns[i].position === move.to) {
-                        // A pawn was captured, send it home.
-                        otherPlayer.pawns[i].position = HOME_POSITIONS[otherPlayer.color][i];
-                        capturedPawnInfo = { color: otherPlayer.color, pawnIndex: i };
-                        console.log(`[Capture] ${color} captured ${otherPlayer.color}'s pawn at ${move.to}`);
-                        break; // Only one pawn can be captured at a time.
+    if (newLocalPos < PATH_LENGTH && !SAFE_SPOTS_GLOBAL.includes(movedPawnGlobalPos)) {
+        Object.keys(gameState.positions).forEach(otherColor => {
+            if (otherColor !== color) {
+                gameState.positions[otherColor] = gameState.positions[otherColor].map((otherPawnLocalPos, otherPawnIdx) => {
+                    if (otherPawnLocalPos < 0 || otherPawnLocalPos >= PATH_LENGTH) return otherPawnLocalPos;
+
+                    const otherPawnGlobalPos = (otherPawnLocalPos + START_OFFSET[otherColor]) % PATH_LENGTH;
+                    
+                    if (otherPawnGlobalPos === movedPawnGlobalPos) {
+                        console.log(`[Capture] ${color} captured ${otherColor}'s pawn at global pos ${movedPawnGlobalPos}`);
+                        capturedAPawn = true; // Piyon yendi!
+                        return HOME_POSITIONS[otherColor][otherPawnIdx];
                     }
-                }
+                    return otherPawnLocalPos;
+                });
             }
-            if (capturedPawnInfo) break;
-        }
+        });
     }
 
-    // Check for win condition
-    const pawnsInGoal = player.pawns.filter(p => p.position >= PATH_LENGTH).length;
+    gameState.positions[color][movedPawnIndex] = newLocalPos;
+
+    const pawnsInGoal = gameState.positions[color].filter(p => p === GOAL_POSITION_INDEX).length;
     if (pawnsInGoal === 4) {
-        room.gameState.phase = 'finished';
-        room.gameState.winner = color;
-        room.gameState.message = `${player.nickname} oyunu kazandı!`;
-        console.log(`[Game Over] Player ${player.nickname} (${color}) won the game in room ${room.id}.`);
+        gameState.winner = color;
+        gameState.phase = 'finished';
+        console.log(`[Game Over] Player ${color} has won!`);
     }
 
-    return capturedPawnInfo;
+    return capturedAPawn; // Piyon yenip yenmediğini döndür
 };
 
 const updateTurn = (room) => {
@@ -195,53 +181,67 @@ const updateTurn = (room) => {
     playBotTurnIfNeeded(room.id);
 };
 
-const playBotTurnIfNeeded = (roomId) => {
+const playBotTurnIfNeeded = async (roomId) => {
     const room = rooms[roomId];
-
-    // Safety check: Ensure the room, its game state, and the phase are correct before proceeding.
-    if (!room || !room.gameState || room.gameState.phase !== 'playing') {
-        // console.log(`[Bot Turn] Skipped for room ${roomId}. Reason: No room, no gameState, or phase is not 'playing'.`);
-        return;
-    }
+    if (!room || !room.gameState || room.gameState.phase !== 'playing') return;
 
     const currentPlayer = room.players.find(p => p.color === room.gameState.currentPlayer);
     if (!currentPlayer || !currentPlayer.isBot) return;
 
-    setTimeout(() => {
+    let keepRolling = true;
+
+    while (keepRolling) {
+        // Stop if the game is finished
+        if (room.gameState.phase === 'finished') {
+            updateRoom(roomId);
+            return;
+        }
+
+        // Wait a moment to simulate the bot 'thinking'
+        await new Promise(resolve => setTimeout(resolve, 1500));
+
         const diceValue = Math.floor(Math.random() * 6) + 1;
         room.gameState.diceValue = diceValue;
-        
-        const validMoves = getValidMoves(currentPlayer, diceValue, room);
-        room.gameState.validMoves = validMoves;
+        room.gameState.message = `${currentPlayer.nickname} ${diceValue} attı.`;
         updateRoom(roomId);
 
-        setTimeout(() => {
-            if (validMoves.length > 0) {
-                const chosenMove = validMoves[Math.floor(Math.random() * validMoves.length)];
-                
-                const capturedPawn = handlePawnMove(room, currentPlayer, chosenMove);
-                const pawnFinished = chosenMove.to === GOAL_POSITION;
-                const moveAgain = diceValue === 6 || capturedPawn || pawnFinished;
+        // Wait a moment to show the dice roll
+        await new Promise(resolve => setTimeout(resolve, 1000));
 
-                if (room.gameState.phase === 'finished') {
-                     updateRoom(roomId);
-                     return;
-                }
+        const validMoves = getValidMoves(currentPlayer, diceValue, room);
+        room.gameState.validMoves = validMoves;
 
-                if (moveAgain) {
-                    room.gameState.diceValue = null;
-                    room.gameState.validMoves = [];
-                    room.gameState.message = `${currentPlayer.nickname} tekrar oynayacak.`;
-                    updateRoom(roomId);
-                    playBotTurnIfNeeded(roomId);
-                } else {
-                    updateTurn(room);
-                }
-            } else {
-                updateTurn(room);
+        if (validMoves.length > 0) {
+            const chosenMove = validMoves[Math.floor(Math.random() * validMoves.length)];
+            
+            const capturedPawn = handlePawnMove(room, currentPlayer, chosenMove);
+            const pawnFinished = chosenMove.to === GOAL_POSITION_INDEX;
+            
+            // The bot gets to roll again if they roll a 6, capture a pawn, or get a pawn home.
+            keepRolling = diceValue === 6 || capturedPawn || pawnFinished;
+
+            room.gameState.message = `${currentPlayer.nickname} piyonunu oynadı.`;
+            updateRoom(roomId);
+
+            if (keepRolling) {
+                room.gameState.message = `${currentPlayer.nickname} tekrar oynayacak.`;
+                // CRITICAL: Reset dice value and moves before the next roll in the loop
+                room.gameState.diceValue = null;
+                room.gameState.validMoves = [];
+                updateRoom(roomId);
             }
-        }, 1000);
-    }, 1500);
+
+        } else {
+            // No valid moves, so the bot cannot roll again.
+            keepRolling = false;
+            room.gameState.message = `${currentPlayer.nickname} oynayacak hamlesi yok.`;
+            updateRoom(roomId);
+        }
+    }
+
+    // Wait a final moment before passing the turn
+    await new Promise(resolve => setTimeout(resolve, 1500));
+    updateTurn(room);
 };
 
 const determineTurnOrder = (roomId) => {
@@ -510,29 +510,44 @@ io.on('connection', (socket) => {
         }
     });
 
-    socket.on('move_pawn', ({ roomId, pawnId }) => {
+    socket.on('move_pawn', ({ roomId, move }) => {
         const room = rooms[roomId];
+        // Find the player by checking both the permanent userId and the temporary socketId
         // Find the player by checking both the permanent userId and the temporary socketId
         const player = room?.players.find(p => p.id === socket.userId || p.socketId === socket.id);
         if (!room || !player || player.color !== room.gameState.currentPlayer) return;
 
-        // --- YENİ GÜVENLİK KONTROLÜ ---
-        // Oyuncunun sadece kendi piyonunu oynayabildiğinden emin ol.
-        const pawnColor = pawnId.split('-')[0];
-        if (pawnColor !== player.color) {
-            console.error(`[SECURITY] Player ${player.nickname} (${player.color}) tried to move opponent's pawn ${pawnId}.`);
-            return; // Hamleyi reddet
+        console.log(`[SERVER LOG] Received 'move_pawn' from player: ${player.nickname} (${player.color})`);
+        console.log('[SERVER LOG] Move data received from client:', JSON.stringify(move, null, 2));
+        console.log('[SERVER LOG] Server-side valid moves:', JSON.stringify(room.gameState.validMoves, null, 2));
+
+        // --- YENİ GÜVENLİK KONTROLÜ (GEÇİCİ OLARAK DEVRE DIŞI) ---
+        // TODO: pawnId'nin istemciden gönderilmesi gerekiyor. Şimdilik bu kontrol atlanıyor.
+        // const pawnColor = pawnId.split('-')[0];
+        // if (pawnColor !== player.color) {
+        //     console.error(`[SECURITY] Player ${player.nickname} (${player.color}) tried to move opponent's pawn ${pawnId}.`);
+        //     return; // Hamleyi reddet
+        // }
+
+        // const [color, pawnIndexStr] = pawnId.split('-');
+        // const pawnIndex = parseInt(pawnIndexStr, 10);
+
+        const isValidMove = room.gameState.validMoves.some(validMove => 
+            validMove.pawnIndex === move.pawnIndex &&
+            validMove.from === move.from &&
+            validMove.to === move.to
+        );
+
+        if (!isValidMove) {
+            console.log('[SERVER LOG] Move validation FAILED. The move received from the client is not in the list of valid moves.');
+            return console.error('Geçersiz hamle denemesi!');
         }
 
-        const [color, pawnIndexStr] = pawnId.split('-');
-        const pawnIndex = parseInt(pawnIndexStr, 10);
+        console.log('[SERVER LOG] Move validation SUCCESSFUL. The move received from the client is valid.');
 
-        const move = room.gameState.validMoves.find(m => m.pawnIndex === pawnIndex);
-        if (!move) return console.error('Geçersiz hamle denemesi!');
-
-        const capturedPawn = handlePawnMove(room, player, move);
-        const pawnFinished = move.to === GOAL_POSITION;
-        const moveAgain = room.gameState.diceValue === 6 || capturedPawn || pawnFinished;
+        const capturedAPawn = handlePawnMove(room, player, move);
+        const pawnFinished = move.to === GOAL_POSITION_INDEX;
+        const moveAgain = room.gameState.diceValue === 6 || capturedAPawn || pawnFinished;
 
         if (room.gameState.phase === 'finished') {
             updateRoom(roomId);
@@ -692,6 +707,6 @@ io.on('connection', (socket) => {
     });
 });
 
-server.listen(PORT, '192.168.1.134', () => {
-    console.log(`Sunucu ${PORT} portunda çalışıyor (192.168.1.134)...`);
+server.listen(PORT, '10.22.111.93', () => {
+    console.log(`Sunucu ${PORT} portunda çalışıyor (10.22.111.93)...`);
 });

@@ -18,6 +18,22 @@ export const SocketProvider = ({ children }) => {
     const [socketId, setSocketId] = useState();
     const lastRoomIdRef = useRef(null); // Son girilen odayı saklamak için ref
 
+    const movePawn = useCallback((pawnId) => {
+        if (socketRef.current && room?.id) {
+            console.log(`[Socket] Emitting 'move_pawn' for pawn: ${pawnId}`);
+            socketRef.current.emit('move_pawn', { roomId: room.id, pawnId });
+        }
+    }, [room?.id]);
+
+    const disconnect = useCallback(() => {
+        if (!socketRef.current?.connected) {
+            console.log('[SocketProvider] Zaten bağlı değil.');
+            return;
+        }
+        console.log('[SocketProvider] Bağlantı manuel olarak kesiliyor.');
+        socketRef.current.disconnect();
+    }, []);
+
     // Bağlantı yeniden kurulduğunda odaya tekrar katılmayı dene
     useEffect(() => {
         if (isConnected && lastRoomIdRef.current && !room) {
@@ -56,16 +72,16 @@ export const SocketProvider = ({ children }) => {
                 }
 
                 console.log(`[SocketProvider] İlk bağlantı. Soket oluşturuluyor: ${socketUrl}`);
-                socketRef.current = io(socketUrl, {
-                    autoConnect: false, // Manuel olarak bağlanacağız
+                                socketRef.current = io(socketUrl, {
+                    auth: { userId: user.id },
+                    autoConnect: false, // We will connect manually
                     reconnection: true,
                     reconnectionAttempts: 5,
-                    reconnectionDelay: 1000,
+                    reconnectionDelay: 2000, // Increased delay for better recovery
                     timeout: 20000,
-                    forceNew: true,
-                    upgrade: true,
-                    rememberUpgrade: false,
                     transports: ['websocket', 'polling'],
+                    pingTimeout: 30000, // 30 seconds to wait for pong
+                    pingInterval: 25000, // 25 seconds between pings
                 });
 
                 // Listener'ları sadece bir kez, soket oluşturulduğunda ekle
@@ -99,7 +115,16 @@ export const SocketProvider = ({ children }) => {
                 socketRef.current.on('room_updated', (updatedRoom) => {
                     console.log('[SocketProvider] Oda güncellendi:', updatedRoom.id, 'Phase:', updatedRoom.gameState?.phase);
                     console.log('[SocketProvider] players received:', updatedRoom.players);
-                    setRoom(prevRoom => ({ ...prevRoom, ...updatedRoom }));
+                    setRoom(prevRoom => {
+                        const newRoom = { ...prevRoom, ...updatedRoom };
+                        if (prevRoom?.gameState && updatedRoom?.gameState) {
+                            newRoom.gameState = {
+                                ...prevRoom.gameState,
+                                ...updatedRoom.gameState,
+                            };
+                        }
+                        return newRoom;
+                    });
                 });
             }
 
@@ -133,14 +158,9 @@ export const SocketProvider = ({ children }) => {
             }
         };
 
-        const disconnect = () => {
-            if (!socketRef.current?.connected) {
-                console.log('[SocketProvider] Zaten bağlı değil.');
-                return;
-            }
-            console.log('[SocketProvider] Bağlantı manuel olarak kesiliyor.');
-            socketRef.current.disconnect();
-        };
+
+
+
 
         return {
             socket: socketRef.current,
@@ -149,6 +169,8 @@ export const SocketProvider = ({ children }) => {
             setRoom, // Dışarıdan güncelleme için
             roomClosed,
             socketId,
+            movePawn,
+            disconnect,
             // Game state values extracted from room
             gameState: room?.gameState,
             players: room?.players || [],

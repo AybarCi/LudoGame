@@ -15,7 +15,7 @@ import {
 import { useLocalSearchParams, useRouter, useNavigation } from 'expo-router';
 import OnlineGameBoard from '../../components/modules/OnlineGameBoard';
 import Dice from '../../components/shared/Dice';
-import { useOnlineGameEngine } from '../../hooks/useOnlineGameEngine';
+
 import { useSocket } from '../../store/SocketProvider';
 import { COLORS } from '../../constants/game';
 import LottieView from 'lottie-react-native';
@@ -33,21 +33,12 @@ const OnlineGameScreen = () => {
     players, 
     currentTurn, 
     winner, 
-    dice, 
     validMoves, 
-    turnOrder, 
-    preGameRolls, 
-    socketId 
+    socketId,
+    movePawn,
   } = useSocket(); 
 
-  const { 
-    createRoom, 
-    joinRoom, 
-    leaveRoom, 
-    rollDice, 
-    movePawn, 
-    boardState 
-  } = useOnlineGameEngine();
+
 
 
   // Multiplayer board burada açıldığı için navigation yapılmıyor.
@@ -60,35 +51,14 @@ const OnlineGameScreen = () => {
   }, [room, router, gameState?.phase]);
 
   const gamePhase = room?.phase || room?.gameState?.phase || gameState?.phase || 'loading';
-  const turnOrderRolls = gameState?.turnOrderRolls || [];
   const message = gameState?.message || '';
 
   const myColor = useMemo(() => {
-  if (!players || !players.length) return null;
-  let myPlayer = null;
-  if (gamePhase === 'pre-game') {
-    // Sıralama turunda sadece socketId ile eşleşme yap
-    if (socketId) {
-      myPlayer = players.find(p => p.id === socketId);
-    }
-  } else {
-    // Oyun fazında önce user.id, yoksa socketId ile eşleşme yap
-    if (user?.id) {
-      myPlayer = players.find(p => p.id === user.id);
-    }
-    if (!myPlayer && socketId) {
-      myPlayer = players.find(p => p.id === socketId);
-    }
-  }
-  console.log('[DEBUG][MYCOLOR]', {
-    userId: user?.id,
-    socketId,
-    players: players.map(p => ({id: p.id, color: p.color, nickname: p.nickname})),
-    myColor: myPlayer?.color,
-    gamePhase
-  });
-  return myPlayer?.color;
-}, [players, user?.id, socketId, gamePhase]);
+    if (!players || !user) return null;
+    // Check for both user.id (for authenticated users) and socket.id (for guests/fallback)
+    const myPlayer = players.find((p) => p.id === user.id || p.id === socket.id);
+    return myPlayer?.color;
+  }, [players, user, socket.id]);
 
   const isMyTurn = useMemo(() => {
   if (!gameState || !myColor) return false;
@@ -128,48 +98,22 @@ const OnlineGameScreen = () => {
 // Pre-game (sıralama turu) boyunca Zar At herkes için aktif
 // Sadece oyun (playing) fazında, sıra kimdeyse onda aktif
 const canRollDice = useMemo(() => {
-  // Sıralama turunda (pre-game) zar atma HERKESE açık olacak şekilde true dön
   if (gamePhase === 'pre-game') {
-    if (!myColor) return false; // Rengi olmayan oyuncu zar atamaz.
-    // Bu oyuncu daha önce sıralama için zar atmış mı kontrol et.
-    const playerHasRolled = turnOrderRolls.some(r => r.color === myColor);
-    return !playerHasRolled; // Eğer atmadıysa, buton aktif olsun.
+    if (!myColor) return false;
+    const playerHasRolled = gameState?.turnOrderRolls?.some(r => r.color === myColor);
+    return !playerHasRolled;
   }
-  // Oyun fazında: sadece sıra kimdeyse ve zar gösterilmiyorsa aktif
-  let isCurrentPlayer = false;
-  if (gamePhase === 'playing' && players && players.length > 0 && gameState?.currentPlayer) {
-    // Öncelik: myColor eşleşirse
-    if (myColor && gameState.currentPlayer === myColor) {
-      isCurrentPlayer = true;
-    } else {
-      // Fallback: currentPlayer'a denk gelen oyuncunun kimliği socketId veya user.id ile eşleşiyor mu?
-      const currentPlayerObj = players.find(p => p.color === gameState.currentPlayer);
-      if (currentPlayerObj) {
-        if ((socketId && currentPlayerObj.id === socketId) || (user?.id && currentPlayerObj.id === user.id)) {
-          isCurrentPlayer = true;
-        }
-      }
-    }
+
+  if (gamePhase === 'playing') {
+    if (!isMyTurn) return false;
+    return gameState?.diceValue === null || gameState?.diceValue === undefined;
   }
-  const value = isCurrentPlayer && (diceToShow == null);
-  console.log('[DEBUG][CAN_ROLL_DICE]', {
-    userId: user?.id,
-    socketId,
-    myColor,
-    isCurrentPlayer,
-    diceToShow: typeof diceToShow === 'undefined' ? 'undefined' : diceToShow,
-    turnOrderRolls,
-    gamePhase,
-    players: players?.map(p => ({id: p.id, color: p.color, nickname: p.nickname})),
-    value
-  });
-  return value;
-}, [gamePhase, myColor, diceToShow, turnOrderRolls, user?.id, socketId, players, gameState?.currentPlayer]);
+
+  return false;
+}, [gamePhase, myColor, isMyTurn, gameState?.turnOrderRolls, gameState?.diceValue]);
 
 
-useEffect(() => {
-  console.log('[DEBUG][ZAR AT] canRollDice:', canRollDice, 'isTurnOrderPhase:', isTurnOrderPhase, 'myColor:', myColor, 'turnOrderRolls:', turnOrderRolls, 'isMyTurn:', isMyTurn, 'diceToShow:', diceToShow);
-}, [canRollDice, isTurnOrderPhase, myColor, turnOrderRolls, isMyTurn, diceToShow]);
+
 
 useEffect(() => {
   if (gameState?.turn && gamePhase === 'playing') {
@@ -190,7 +134,7 @@ useEffect(() => {
     borderRadius: 10,
   };
   
-  const isTurnOrderPhase = gamePhase === 'pre-game';
+
 
   const playersInfo = useMemo(() => {
     if (!players || !players.length) return {};
@@ -207,12 +151,24 @@ useEffect(() => {
     return players.find(p => p.color === gameState.currentPlayer);
   }, [gameState?.currentPlayer, players]);
 
-  const diceToShow = useMemo(() => {
-    if (isTurnOrderPhase) {
-      return turnOrderRolls.length > 0 ? turnOrderRolls[turnOrderRolls.length - 1].roll : null;
-    }
-    return gameState?.diceValue;
-  }, [isTurnOrderPhase, turnOrderRolls, gameState?.diceValue]);
+  const renderTurnOrderRolls = () => (
+    <View style={styles.turnOrderContainer}>
+      <Text style={styles.turnOrderTitle}>Sıralama için zar atın!</Text>
+      <View style={styles.turnOrderList}>
+        {gameState?.turnOrderRolls?.map((roll, index) => (
+          <View key={index} style={styles.turnOrderItem}>
+            <View style={styles.playerInfoRow}>
+              <View style={[styles.playerColorBox, { backgroundColor: COLORS[roll.color] }]} />
+              <Text style={styles.playerName}>{playersInfo[roll.color]?.nickname || '...'}</Text>
+            </View>
+            <Text style={styles.playerRoll}>{roll.roll}</Text>
+          </View>
+        ))}
+      </View>
+    </View>
+  );
+
+
 
   useEffect(() => {
     if (roomClosed.isClosed) {
@@ -292,18 +248,7 @@ useEffect(() => {
   );
 };
 
-  const renderTurnOrderRolls = () => (
-    <View style={styles.turnOrderContainer}>
-      <Text style={styles.turnOrderTitle}>Başlamak için en yüksek zarı at!</Text>
-      <View style={styles.rollsContainer}>
-        {turnOrderRolls.map((roll, index) => (
-          <Text key={index} style={[styles.rollText, { color: COLORS[roll.color] || '#FFF' }]}>
-            {playersInfo[roll.color]?.nickname}: {roll.roll}
-          </Text>
-        ))}
-      </View>
-    </View>
-  );
+
 
   const renderPlayerInfo = () => {
     const getPlayerStatus = (playerColor) => {
@@ -336,7 +281,7 @@ useEffect(() => {
       <View style={styles.centeredView}>
         <View style={styles.modalView}>
           <Text style={styles.winnerText}>Kazanan</Text>
-          <Text style={styles.winnerName}>{winner && playersInfo ? playersInfo[winner]?.nickname : ''}</Text>
+          <Text style={styles.winnerName}>{winner && playersInfo && playersInfo[winner] ? playersInfo[winner].nickname : ''}</Text>
           <Text style={styles.pointsWonText}>+10 Puan!</Text>
           <LottieView
             source={require("../../assets/animations/firstwinner.json")}
@@ -354,19 +299,26 @@ useEffect(() => {
     </Modal>
   );
 
-  // Memoize boardState to prevent unnecessary re-renders and remounts
-  const stableBoardState = useMemo(() => {
-    // Only update if boardState reference changes
-    return boardState;
-  }, [boardState]);
+
 
   // --- Pawn selection logic for multiplayer, mirrors AI mode ---
-  const handlePawnPress = (pawnId) => {
-    // Only allow move if it's my turn and there is a valid move for this pawn
-    if (!isMyTurn) return;
-    if (!Array.isArray(gameState?.validMoves) || !gameState.validMoves.includes(pawnId)) return;
-    if (typeof movePawn === 'function') {
-      movePawn(pawnId);
+  const handlePawnPress = (pawnIndex, position) => {
+    if (!isMyTurn || !room?.gameState?.diceValue || !room?.gameState?.validMoves) return;
+
+    console.log(`[CLIENT LOG] Pawn clicked. Index: ${pawnIndex}, Position: ${position}`);
+    console.log('[CLIENT LOG] Valid moves received from server:', JSON.stringify(room.gameState.validMoves, null, 2));
+
+    // Correctly find the move using the pawn's index and current position.
+    const chosenMove = room.gameState.validMoves.find(
+      (move) => move.pawnIndex === pawnIndex && move.from === position
+    );
+
+    if (chosenMove) {
+      const moveData = { roomId: room.id, move: chosenMove };
+      console.log('[CLIENT LOG] Pawn is valid. Sending `move_pawn` event with data:', JSON.stringify(moveData, null, 2));
+      socket.emit('move_pawn', moveData);
+    } else {
+      console.log('[CLIENT LOG] Clicked pawn is not in the list of valid moves.');
     }
   };
 
@@ -379,54 +331,34 @@ useEffect(() => {
   };
 
   const rollDiceForTurnOrder = () => {
-    if (!socket || !players || !players.length || gamePhase !== 'pre-game') return;
-    // 1. Öncelik: socketId ile bul
-    let me = socketId && players.find(p => p.id === socketId);
-    // 2. Öncelik: user.id ile bul (bazı edge-case'ler için)
-    if (!me && user?.id) me = players.find(p => p.id === user.id);
-    // 3. Öncelik: ilk bot olmayan player (en azından biri zar atabilsin)
-    if (!me) me = players.find(p => !p.isBot);
-    // 4. Hala yoksa: fallback ilk player
-    if (!me) me = players[0];
-    if (!me) {
-      console.error('[ZAR AT][CRITICAL] Sıralama turunda oyuncu bulunamadı! players:', players, 'socketId:', socketId, 'userId:', user?.id);
-      return;
-    }
-    const playerHasRolled = turnOrderRolls.some(r => r.color === me.color);
-    if (!playerHasRolled) {
-      socket.emit('roll_dice_for_turn_order', { roomId });
+    console.log('[ACTION] rollDiceForTurnOrder fonksiyonu çağrıldı.');
+    console.log('[ACTION] Socket bağlantısı var mı?:', !!socket);
+    console.log('[ACTION] Oda ID:', room?.id);
+    if (socket && room?.id) {
+      console.log(`[ACTION] Sunucuya 'roll_dice_turn_order' gönderiliyor. Oda: ${room.id}`);
+      socket.emit('roll_dice_turn_order', { roomId: room.id });
     } else {
-      // Kullanıcıya görsel uyarı ver
-      if (typeof window !== 'undefined' && window.alert) {
-        window.alert('Bu turda zaten zar attınız!');
-      } else if (typeof global !== 'undefined' && global?.Expo) {
-        // Expo/React Native ortamı için basit bir Alert
-        try {
-          const { Alert } = require('react-native');
-          Alert.alert('Bilgi', 'Bu turda zaten zar attınız!');
-        } catch(e) {}
-      }
-      console.warn('[ZAR AT] Bu oyuncu zaten zar attı:', me);
+      console.error('[HATA] Zar atılamadı. Socket veya Oda ID eksik.', {
+        socketMevcut: !!socket,
+        odaId: room?.id
+      });
     }
   };
-
-
 
   const rollDiceRegular = () => {
-    if (socket && isMyTurn) {
-      socket.emit('roll_dice', { roomId });
+    if (socket && isMyTurn && room?.id) {
+      console.log(`[ACTION] Sunucuya 'roll_dice' gönderiliyor. Oda: ${room.id}`);
+      socket.emit('roll_dice', { roomId: room.id });
+    } else {
+       console.error('[HATA] Zar atılamadı. Socket, sıra veya oda ID eksik.', {
+        socketMevcut: !!socket,
+        isMyTurn,
+        odaId: room?.id
+      });
     }
   };
 
-  const renderHeader = () => {
-    let title = 'Ludo Online';
-    if (gamePhase === 'pre-game') title = 'Sıra Belirleniyor...';
-    else if (gamePhase === 'playing' && currentPlayerInfo) title = `Sıra: ${currentPlayerInfo.nickname}`;
-    else if (gamePhase === 'finished' && winner) title = `Kazanan: ${playersInfo[winner]?.nickname}`;
-    else if (gamePhase === 'waiting') title = 'Oyuncular Bekleniyor...';
 
-    return <Text style={styles.headerTitle}>{title}</Text>;
-  };
 
   return (
     <ImageBackground 
@@ -441,80 +373,77 @@ useEffect(() => {
           </Animated.View>
         )}
 
-        {/* --- AI MODUNDAKİYLE BİREBİR HEADER --- */}
         <View style={styles.header}>
           <Text style={styles.turnText}>
             {gamePhase === 'pre-game'
               ? 'Sıra Belirleme Turu'
-              : `Sıra: ${playersInfo && (playersInfo[boardState?.currentPlayer]?.nickname || '')}`}
+              : `Sıra: ${playersInfo && gameState?.currentPlayer && (playersInfo[gameState.currentPlayer]?.nickname || '...')}`}
           </Text>
-          <View style={[styles.turnColorBox, { backgroundColor: COLORS[boardState?.currentPlayer || ''] || '#888' }]} />
+          <View style={[styles.turnColorBox, { backgroundColor: COLORS[gameState?.currentPlayer] || '#888' }]} />
         </View>
 
-        {(gamePhase === 'waiting' || (players && players.length < 4)) && renderWaitingOverlay()}
+        {(gamePhase === 'waiting' || (gamePhase !== 'finished' && (!players || players.length < 4))) && renderWaitingOverlay()}
 
         {(gamePhase === 'pre-game' || gamePhase === 'playing' || gamePhase === 'finished') && (
           <>
             <OnlineGameBoard
-              key={room?.id || 'main-board'}
-              {...stableBoardState}
+              players={room.players}
+              gameState={room.gameState}
+              diceValue={room.gameState.diceValue}
+              onPawnPress={(pawnIndex, position) => handlePawnPress(pawnIndex, position)}
+              currentPlayer={room.gameState.currentPlayer}
+              validMoves={room.gameState.validMoves}
+              myColor={myColor}
+              isMyTurn={isMyTurn}
               style={styles.gameBoard}
-              onPawnPress={handlePawnPress}
+              playersInfo={playersInfo}
             />
-            <View style={styles.bottomContainer}>
 
-              <View style={styles.controlsContainer}>
-                <View style={styles.messageContainer}>
-                  <Text style={styles.gameMessage}>{message}</Text>
-                </View>
-                {gamePhase === 'pre-game' && (
-                  <View style={styles.turnOrderContainer}>
-                    {turnOrderRolls.map((roll, idx) => (
-                      <Text key={idx} style={styles.turnOrderText}>
-                        {playersInfo && playersInfo[roll.color]?.nickname}: {roll.roll}
-                      </Text>
-                    ))}
+            <View style={styles.controlsContainer}>
+              {/* Show turn order rolls in pre-game, or the game message otherwise */}
+              {gamePhase === 'pre-game' 
+                ? renderTurnOrderRolls()
+                : (
+                  <View style={styles.messageContainer}>
+                    <Text style={styles.gameMessage}>{message || ' '}</Text>
                   </View>
-                )}
-                {Array.isArray(boardState?.moveHistory) && boardState.moveHistory.length > 0 && (
-                  <View style={styles.moveHistoryContainer}>
-                    {boardState.moveHistory.slice(-5).map((move, idx) => (
-                      <Text key={idx} style={styles.moveHistoryText}>
-                        {move}
-                    </Text>
-                  ))}
-                </View>
-              )}
+                )
+              }
+
+              {/* Dice and Roll Button Area */}
               <View style={styles.diceAndButtonContainer}>
-                {!winner && (
-                  <Dice number={diceToShow || 1} style={{ marginRight: 14 }} />
-                )}
-                {players && boardState?.currentPlayer && players.find(p => p.color === boardState.currentPlayer)?.isBot ? (
-                  <Text style={styles.aiThinkingText}>
-                    {(players.find(p => p.color === boardState.currentPlayer)?.nickname || 'Rakip') + ' düşünüyor...'}
-                  </Text>
-                ) : !winner ? (
-                  <TouchableOpacity
-                    onPress={isTurnOrderPhase ? rollDiceForTurnOrder : rollDiceRegular}
-                    disabled={!canRollDice}
-                    style={[
-                      styles.actionButton,
-                      !canRollDice && styles.disabledButton
-                    ]}
-                  >
-                    <Text style={styles.actionButtonText}>Zar At</Text>
-                  </TouchableOpacity>
-                ) : null}
+                {/* The Dice itself, only shown in 'playing' phase when there's a value */}
+                {(gamePhase === 'playing' && gameState?.diceValue) && <Dice number={gameState?.diceValue} />}
+                
+                {/* The Roll Dice button container */}
+                <View style={styles.controls}>
+                  {gamePhase !== 'finished' && (
+                    <TouchableOpacity
+                      onPress={gamePhase === 'pre-game' ? rollDiceForTurnOrder : rollDiceRegular}
+                      disabled={!canRollDice}
+                      style={[styles.actionButton, !canRollDice && styles.disabledButton]}
+                    >
+                      <Text style={styles.actionButtonText}>Zar At</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              </View>
+
+              {/* Footer Buttons */}
+              <View style={styles.footerButtonsContainer}>
+                <TouchableOpacity onPress={handleLeaveGame} style={styles.footerButton}>
+                  <Text style={styles.footerButtonText}>Oyundan Ayrıl</Text>
+                </TouchableOpacity>
               </View>
             </View>
-          </View>
-        </>
-      )}
+          </>
+        )}
 
-      {renderWinnerModal()}
-    </SafeAreaView>
-  </ImageBackground>
-)};
+        {renderWinnerModal()}
+      </SafeAreaView>
+    </ImageBackground>
+  );
+};
 
 const styles = StyleSheet.create({
   background: {
@@ -577,12 +506,33 @@ const styles = StyleSheet.create({
     justifyContent: 'space-around',
     alignItems: 'center',
     minHeight: 80,
-    width: '100%',
   },
   controls: {
     alignItems: 'center',
     justifyContent: 'center',
     minWidth: 120,
+  },
+  aiThinkingText: {
+    fontSize: 16,
+    fontStyle: 'italic',
+    color: '#ccc',
+  },
+  actionButton: {
+    width: 120,
+    height: 50,
+    backgroundColor: '#0d6efd',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 8,
+  },
+  actionButtonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  disabledButton: {
+    backgroundColor: '#6c757d',
+    opacity: 0.7,
   },
   aiThinkingText: {
     fontSize: 16,
@@ -720,29 +670,56 @@ const styles = StyleSheet.create({
     marginLeft: 2,
   },
   turnOrderContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
+    width: '100%',
     alignItems: 'center',
-    // Sıra belirleme turunda siyah bar yok, sadece yazılar var
-    backgroundColor: 'transparent',
-    borderRadius: 10,
-    paddingVertical: 6,
-    paddingHorizontal: 14,
-    marginBottom: 7,
-    marginTop: 7,
-    minHeight: 32,
+    marginBottom: 10,
+    paddingHorizontal: 10,
   },
-  turnOrderText: {
-    color: '#fff',
-    fontSize: 16,
+  turnOrderTitle: {
+    fontSize: 22,
     fontWeight: 'bold',
-    marginHorizontal: 7,
-    textShadowColor: 'rgba(0,0,0,0.7)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 3,
-    // Her zaman beyaz ve yatayda, vertical stacking yok
+    color: '#FFD700',
+    marginBottom: 15,
+    textShadowColor: 'rgba(0, 0, 0, 0.75)',
+    textShadowOffset: { width: -1, height: 1 },
+    textShadowRadius: 10,
   },
-  // Loader stilleri
+  turnOrderList: {
+    width: '90%',
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+    borderRadius: 10,
+    padding: 10,
+  },
+  turnOrderItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  playerInfoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  playerColorBox: {
+    width: 20,
+    height: 20,
+    borderRadius: 4,
+    marginRight: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.5)',
+  },
+  playerName: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  playerRoll: {
+    color: 'white',
+    fontSize: 20,
+    fontWeight: 'bold',
+  },
   overlay: {
     position: 'absolute',
     top: 0,

@@ -127,13 +127,15 @@ const generateBoardLayout = (pawns, currentPlayer, diceValue) => {
       // Hem 'start' hem de -1 pozisyonundaki piyonları say
       const pawnsInBase = pawns.filter(p => p.color === pawn.color && (p.position === -1 || p.position === 'start'));
       const pawnIndex = pawnsInBase.findIndex(p => p.id === pawn.id);
+      // Piyonun kendi sırasını (0-3) kullanmak yerine, evdeki piyonlar arasındaki sırasını buluyoruz.
       const pawnSpots = [[1, 1], [1, 4], [4, 1], [4, 4]]; // Evdeki 4 piyonun konumu
       if (pawnIndex !== -1) {
         const [r, c] = pawnSpots[pawnIndex];
         layout[(base[0] + r) * GRID_SIZE + (base[1] + c)].pawns.push(pawn);
       }
     } else if (pawn.position >= 0 && pawn.position <= 55) { // On main path
-      const absPos = PATH_MAP[pawn.color].path[pawn.position];
+      const startPos = PATH_MAP[pawn.color].start;
+      const absPos = (startPos + pawn.position) % 56;
       const coords = MAIN_PATH_COORDS[absPos];
       if (coords) {
         const [r, c] = coords;
@@ -156,7 +158,18 @@ const generateBoardLayout = (pawns, currentPlayer, diceValue) => {
   return layout;
 };
 
-const OnlineGameBoard = ({ pawns, onPawnPress, currentPlayer, diceValue, playersInfo, style }) => {
+const OnlineGameBoard = ({ players = [], gameState = {}, onPawnPress, currentPlayer, diceValue, playersInfo, style }) => {
+  // Tek doğru kaynak olan gameState.positions'tan piyonları oluştur
+  const pawns = players.flatMap(player => {
+    const playerPositions = gameState.positions[player.color] || [];
+    return playerPositions.map((position, pawnIndex) => ({
+      position: position,
+      color: player.color,
+      id: `${player.color}-${pawnIndex}`,
+      pawnIndex: pawnIndex
+    }));
+  });
+
   // Prop guard: undefined veya yanlış tip gelirse default değer kullan
   const safePawns = Array.isArray(pawns) ? pawns : [];
   const safeCurrentPlayer = typeof currentPlayer === 'string' ? currentPlayer : null;
@@ -218,9 +231,10 @@ const OnlineGameBoard = ({ pawns, onPawnPress, currentPlayer, diceValue, players
 
         return (
           <View key={index} style={cellStyle}>
+            <Text style={styles.cellNumber}>{index}</Text>
             {cell.homeStretchEntranceFor && !cell.pawns.length && <Arrow color={cell.homeStretchEntranceFor} />}
-            {cell.pawns.map(pawn => (
-              <Pawn key={pawn.id} color={pawn.color} onPress={() => onPawnPress(pawn.id)} />
+            {cell.pawns.map((pawn, pawnIndex) => (
+              <Pawn key={pawn.id} color={pawn.color} onPress={() => onPawnPress(pawn.pawnIndex, pawn.position)} />
             ))}
           </View>
         );
@@ -240,10 +254,11 @@ const OnlineGameBoard = ({ pawns, onPawnPress, currentPlayer, diceValue, players
 const styles = StyleSheet.create({
   cellNumber: {
     position: 'absolute',
-    fontSize: 9,
+    top: 1,
+    left: 1,
+    fontSize: 8,
     fontWeight: 'bold',
-    color: 'black',
-    opacity: 0.6,
+    color: 'rgba(0,0,0,0.4)',
   },
   board: {
     width: '100%',
