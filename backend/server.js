@@ -104,21 +104,30 @@ const getValidMoves = (player, diceValue, room) => {
     const moves = [];
 
     playerPositions.forEach((currentPos, pawnIndex) => {
-        // Piyon evdeyse (pozisyon < 0) ve 6 atıldıysa
-        if (currentPos < 0 && diceValue === 6) {
-            const startPosIndex = 0; // Her piyon kendi yolunun 0. indeksinden başlar
-            // Başlangıç pozisyonu dolu mu kontrol et
-            const isStartOccupiedByMe = playerPositions.some(p => p === startPosIndex);
-            if (!isStartOccupiedByMe) {
-                moves.push({ pawnIndex, from: currentPos, to: startPosIndex, type: 'enter' });
+        // Piyon evdeyse ve 6 atıldıysa
+        if (currentPos < 0) {
+            if (diceValue === 6) {
+                const startPos = 0;
+                const isStartOccupied = playerPositions.some(p => p === startPos);
+                if (!isStartOccupied) {
+                    moves.push({ pawnIndex, from: currentPos, to: startPos, type: 'enter' });
+                }
             }
-        } 
-        // Piyon zaten yoldaysa (pozisyon >= 0)
-        else if (currentPos >= 0 && currentPos < GOAL_POSITION_INDEX) {
-            const newPos = currentPos + diceValue;
-            if (newPos <= GOAL_POSITION_INDEX) {
-                 moves.push({ pawnIndex, from: currentPos, to: newPos, type: 'move' });
-            }
+            return; // Sonraki piyona geç
+        }
+
+        // Piyon oyun alanındaysa
+        const newPos = currentPos + diceValue;
+
+        // Hedefi geçmemeli
+        if (newPos > GOAL_POSITION_INDEX) {
+            return;
+        }
+
+        // Kendi piyonunun üzerine gelmemeli
+        const isOccupiedBySelf = playerPositions.some((p, idx) => idx !== pawnIndex && p === newPos);
+        if (!isOccupiedBySelf) {
+            moves.push({ pawnIndex, from: currentPos, to: newPos, type: 'move' });
         }
     });
 
@@ -128,41 +137,47 @@ const getValidMoves = (player, diceValue, room) => {
 const handlePawnMove = (room, player, move) => {
     const { color } = player;
     const { gameState } = room;
-    const movedPawnIndex = move.pawnIndex;
-    const newLocalPos = move.to;
-    let capturedAPawn = false; // Piyon yenip yenmediğini takip et
+    const { positions } = gameState;
+    const { pawnIndex, to: newLocalPos } = move;
+    let capturedAPawn = false;
 
+    // 1. Piyon Kırma Mantığı: ÖNCE KIR, SONRA GİT
     const movedPawnGlobalPos = (newLocalPos + START_OFFSET[color]) % PATH_LENGTH;
 
+    // Güvenli alanlar hariç, hedefte rakip piyon var mı diye kontrol et
     if (newLocalPos < PATH_LENGTH && !SAFE_SPOTS_GLOBAL.includes(movedPawnGlobalPos)) {
-        Object.keys(gameState.positions).forEach(otherColor => {
+        // .map() kullanmak yerine, durumu doğrudan değiştirelim.
+        for (const otherColor in positions) {
             if (otherColor !== color) {
-                gameState.positions[otherColor] = gameState.positions[otherColor].map((otherPawnLocalPos, otherPawnIdx) => {
-                    if (otherPawnLocalPos < 0 || otherPawnLocalPos >= PATH_LENGTH) return otherPawnLocalPos;
-
-                    const otherPawnGlobalPos = (otherPawnLocalPos + START_OFFSET[otherColor]) % PATH_LENGTH;
-                    
-                    if (otherPawnGlobalPos === movedPawnGlobalPos) {
-                        console.log(`[Capture] ${color} captured ${otherColor}'s pawn at global pos ${movedPawnGlobalPos}`);
-                        capturedAPawn = true; // Piyon yendi!
-                        return HOME_POSITIONS[otherColor][otherPawnIdx];
+                positions[otherColor].forEach((otherPawnPos, otherPawnIdx) => {
+                    if (otherPawnPos < 0 || otherPawnPos >= PATH_LENGTH) {
+                        return; // Evdeki veya bitiş yolundaki piyonları es geç
                     }
-                    return otherPawnLocalPos;
+                    const otherPawnGlobalPos = (otherPawnPos + START_OFFSET[otherColor]) % PATH_LENGTH;
+
+                    // Eğer rakip piyon bizim hedefimizdeyse, ONU EVİNE GÖNDER
+                    if (otherPawnGlobalPos === movedPawnGlobalPos) {
+                        console.log(`[Capture] ${color} pawn captures ${otherColor} pawn at global pos ${movedPawnGlobalPos}`);
+                        positions[otherColor][otherPawnIdx] = HOME_POSITIONS[otherColor][otherPawnIdx];
+                        capturedAPawn = true;
+                    }
                 });
             }
-        });
+        }
     }
 
-    gameState.positions[color][movedPawnIndex] = newLocalPos;
+    // 2. Hareket Eden Piyonun Pozisyonunu GÜNCELLE
+    positions[color][pawnIndex] = newLocalPos;
 
-    const pawnsInGoal = gameState.positions[color].filter(p => p === GOAL_POSITION_INDEX).length;
+    // 3. Kazanma Kontrolü
+    const pawnsInGoal = positions[color].filter(p => p === GOAL_POSITION_INDEX).length;
     if (pawnsInGoal === 4) {
         gameState.winner = color;
         gameState.phase = 'finished';
         console.log(`[Game Over] Player ${color} has won!`);
     }
 
-    return capturedAPawn; // Piyon yenip yenmediğini döndür
+    return capturedAPawn;
 };
 
 const updateTurn = (room) => {
@@ -517,6 +532,12 @@ io.on('connection', (socket) => {
         const player = room?.players.find(p => p.id === socket.userId || p.socketId === socket.id);
         if (!room || !player || player.color !== room.gameState.currentPlayer) return;
 
+        // --- KRİTİK HATA AYIKLAMA --- //
+        console.log(`[MOVE_PAWN] Received from ${player.nickname} (${player.color}).`);
+        console.log(`[MOVE_PAWN] Client sent move:`, JSON.stringify(move, null, 2));
+        console.log(`[MOVE_PAWN] Server's valid moves:`, JSON.stringify(room.gameState.validMoves, null, 2));
+        // --------------------------- //
+
         console.log(`[SERVER LOG] Received 'move_pawn' from player: ${player.nickname} (${player.color})`);
         console.log('[SERVER LOG] Move data received from client:', JSON.stringify(move, null, 2));
         console.log('[SERVER LOG] Server-side valid moves:', JSON.stringify(room.gameState.validMoves, null, 2));
@@ -538,30 +559,32 @@ io.on('connection', (socket) => {
             validMove.to === move.to
         );
 
-        if (!isValidMove) {
-            console.log('[SERVER LOG] Move validation FAILED. The move received from the client is not in the list of valid moves.');
-            return console.error('Geçersiz hamle denemesi!');
-        }
+        if (isValidMove) {
+            const capturedAPawn = handlePawnMove(room, player, move);
+            const pawnFinished = move.to === GOAL_POSITION_INDEX;
+            const diceValue = room.gameState.diceValue;
 
-        console.log('[SERVER LOG] Move validation SUCCESSFUL. The move received from the client is valid.');
+            // Oyuncu 6 attığında, piyon yediğinde veya piyonu bitirdiğinde tekrar oynar.
+            const getsAnotherTurn = diceValue === 6 || capturedAPawn || pawnFinished;
 
-        const capturedAPawn = handlePawnMove(room, player, move);
-        const pawnFinished = move.to === GOAL_POSITION_INDEX;
-        const moveAgain = room.gameState.diceValue === 6 || capturedAPawn || pawnFinished;
+            if (room.gameState.phase === 'finished') {
+                updateRoom(roomId);
+                return;
+            }
 
-        if (room.gameState.phase === 'finished') {
-            updateRoom(roomId);
-            return;
-        }
-
-        if (moveAgain) {
-            room.gameState.diceValue = null;
-            room.gameState.validMoves = [];
-            room.gameState.message = `${player.nickname} tekrar oynayacak.`;
+            if (getsAnotherTurn) {
+                // Oyuncu tekrar oynayacak, sırayı değiştirme.
+                room.gameState.message = `${player.nickname} bir daha oynayacak.`;
+                room.gameState.diceValue = null; // Yeni zar atabilmesi için zarı sıfırla
+                room.gameState.validMoves = [];
+                updateRoom(roomId);
+            } else {
+                // Sıradaki oyuncuya geç.
+                updateTurn(room);
+            }
         } else {
-            updateTurn(room);
+            console.error(`[SECURITY] Invalid move received from ${player.nickname}:`, move);
         }
-        updateRoom(roomId);
     });
 
     socket.on('leave_room', () => {
