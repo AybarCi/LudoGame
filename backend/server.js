@@ -1,11 +1,32 @@
 const express = require('express');
-const { 
-    HOME_POSITIONS,
-    PATH_LENGTH,
-    START_OFFSET,
-    SAFE_SPOTS_GLOBAL,
-    GOAL_POSITION_INDEX
-} = require('./gameConstants');
+
+// --- Game Constants ---
+const PAWN_COUNT = 4;
+const PATH_LENGTH = 52;
+const HOME_STRETCH_LENGTH = 6;
+const GOAL_START_INDEX = PATH_LENGTH + HOME_STRETCH_LENGTH; // 58. The first of the 4 goal slots.
+const MAX_POSITION_INDEX = GOAL_START_INDEX + PAWN_COUNT - 1; // 61. The last goal slot.
+
+const START_OFFSET = {
+  red: 0,
+  green: 13,
+  yellow: 26,
+  blue: 39,
+};
+
+const SAFE_SPOTS_GLOBAL = [0, 8, 13, 21, 26, 34, 39, 47];
+
+const isGameWon = (playerPositions) => {
+    const goalPawns = playerPositions.filter(pos => pos >= GOAL_START_INDEX);
+    return goalPawns.length === PAWN_COUNT;
+};
+
+const HOME_POSITIONS = {
+    red: [-1, -1, -1, -1],
+    green: [-1, -1, -1, -1],
+    yellow: [-1, -1, -1, -1],
+    blue: [-1, -1, -1, -1],
+};
 const http = require('http');
 const { Server } = require('socket.io');
 const cors = require('cors');
@@ -100,81 +121,128 @@ const deleteRoom = (roomId, reason) => {
 const getValidMoves = (player, diceValue, room) => {
     const { color } = player;
     const { gameState } = room;
-    const playerPositions = gameState.positions[color];
-    const moves = [];
+    const { positions } = gameState;
+    const playerPositions = positions[color];
+    const validMoves = [];
+
+    // Create a flat list of all pawns on the main path with their global positions
+    const allPawnsOnPath = [];
+    for (const c in positions) {
+        positions[c].forEach((pos, idx) => {
+            if (pos >= 0 && pos < PATH_LENGTH) { // Pawns on the main 52-square path
+                allPawnsOnPath.push({
+                    color: c,
+                    pawnIndex: idx,
+                    localPos: pos,
+                    globalPos: (pos + START_OFFSET[c]) % PATH_LENGTH
+                });
+            }
+        });
+    }
 
     playerPositions.forEach((currentPos, pawnIndex) => {
-        // Piyon evdeyse ve 6 atıldıysa
+        if (currentPos >= GOAL_START_INDEX) return; // Finished pawns don't move
+
+        // Case 1: Pawn is at home
         if (currentPos < 0) {
             if (diceValue === 6) {
-                const startPos = 0;
+                const startPos = 0; // Local start position
                 const isStartOccupied = playerPositions.some(p => p === startPos);
                 if (!isStartOccupied) {
-                    moves.push({ pawnIndex, from: currentPos, to: startPos, type: 'enter' });
+                    validMoves.push({ pawnIndex, from: currentPos, to: startPos, type: 'enter' });
                 }
             }
-            return; // Sonraki piyona geç
+            return; // Next pawn
         }
 
-        // Piyon oyun alanındaysa
+        // Case 2: Pawn is on the board
         const newPos = currentPos + diceValue;
+        if (newPos > MAX_POSITION_INDEX) return; // Overshot the goal
 
-        // Hedefi geçmemeli
-        if (newPos > GOAL_POSITION_INDEX) {
-            return;
-        }
-
-        // Kendi piyonunun üzerine gelmemeli
+        // Rule: Cannot land on your own pawn
         const isOccupiedBySelf = playerPositions.some((p, idx) => idx !== pawnIndex && p === newPos);
-        if (!isOccupiedBySelf) {
-            moves.push({ pawnIndex, from: currentPos, to: newPos, type: 'move' });
+        if (isOccupiedBySelf) return;
+
+        // --- Path Blocking Check ---
+        const path = [];
+        for (let i = 1; i < diceValue; i++) {
+            const stepPos = currentPos + i;
+            if (stepPos >= GOAL_START_INDEX) break; // Don't check blocking within home stretch
+            path.push(stepPos);
         }
+
+        const globalPath = path.map(p => (p + START_OFFSET[color]) % PATH_LENGTH);
+        const isPathBlockedByOwnPawn = globalPath.some(pathGlobalPos => 
+            allPawnsOnPath.some(pawn => pawn.color === color && pawn.globalPos === pathGlobalPos)
+        );
+
+        if (isPathBlockedByOwnPawn) return; // Path is blocked by one of your own pawns, invalid move
+
+
+
+        validMoves.push({ pawnIndex, from: currentPos, to: newPos, type: 'move' });
     });
 
-    return moves;
+    return validMoves;
 };
 
 const handlePawnMove = (room, player, move) => {
     const { color } = player;
     const { gameState } = room;
     const { positions } = gameState;
-    const { pawnIndex, to: newLocalPos } = move;
+    const { pawnIndex, from: fromLocalPos, to: toLocalPos, type } = move;
     let capturedAPawn = false;
 
-    // 1. Piyon Kırma Mantığı: ÖNCE KIR, SONRA GİT
-    const movedPawnGlobalPos = (newLocalPos + START_OFFSET[color]) % PATH_LENGTH;
+    // If pawn is entering the board (from home), just update its position and exit.
+    // This is a robust check that doesn't rely on the client sending `type`.
+    if (fromLocalPos < 0) {
+        positions[color][pawnIndex] = toLocalPos;
+        // Check for win condition right after moving into a goal slot from home (unlikely but possible)
+        if (isGameWon(positions[color])) {
+            room.gameState.phase = 'finished';
+            room.gameState.winner = color;
+            console.log(`Player ${color} has won the game!`);
+        }
+        return false; // No capture can happen on entering.
+    }
 
-    // Güvenli alanlar hariç, hedefte rakip piyon var mı diye kontrol et
-    if (newLocalPos < PATH_LENGTH && !SAFE_SPOTS_GLOBAL.includes(movedPawnGlobalPos)) {
-        // .map() kullanmak yerine, durumu doğrudan değiştirelim.
-        for (const otherColor in positions) {
-            if (otherColor !== color) {
-                positions[otherColor].forEach((otherPawnPos, otherPawnIdx) => {
-                    if (otherPawnPos < 0 || otherPawnPos >= PATH_LENGTH) {
-                        return; // Evdeki veya bitiş yolundaki piyonları es geç
-                    }
-                    const otherPawnGlobalPos = (otherPawnPos + START_OFFSET[otherColor]) % PATH_LENGTH;
+    // 1. Piyon Kırma Mantığı (Pass-Through Capture)
+        const diceValue = toLocalPos - fromLocalPos;
+    const path = [];
+    // Piyonun geçtiği her kareyi (son kare dahil) yola ekle
+    for (let i = 1; i <= diceValue; i++) {
+        const stepPos = fromLocalPos + i;
+        if (stepPos >= PATH_LENGTH) break; // Bitiş yoluna girenleri kırma kontrolüne dahil etme
+        path.push(stepPos);
+    }
 
-                    // Eğer rakip piyon bizim hedefimizdeyse, ONU EVİNE GÖNDER
-                    if (otherPawnGlobalPos === movedPawnGlobalPos) {
-                        console.log(`[Capture] ${color} pawn captures ${otherColor} pawn at global pos ${movedPawnGlobalPos}`);
-                        positions[otherColor][otherPawnIdx] = HOME_POSITIONS[otherColor][otherPawnIdx];
-                        capturedAPawn = true;
-                    }
-                });
-            }
+    const globalPath = path.map(p => (p + START_OFFSET[color]) % PATH_LENGTH);
+
+    for (const otherColor in positions) {
+        if (otherColor !== color) {
+            positions[otherColor].forEach((otherPawnPos, otherPawnIdx) => {
+                if (otherPawnPos < 0 || otherPawnPos >= PATH_LENGTH) return;
+
+                const otherPawnGlobalPos = (otherPawnPos + START_OFFSET[otherColor]) % PATH_LENGTH;
+
+                // Eğer rakip piyon, bizim piyonun geçtiği yoldaysa VE güvenli bir alanda DEĞİLSE, onu kır.
+                if (globalPath.includes(otherPawnGlobalPos) && !SAFE_SPOTS_GLOBAL.includes(otherPawnGlobalPos)) {
+                    console.log(`[Capture] ${color} pawn captures ${otherColor} pawn at global pos ${otherPawnGlobalPos}`);
+                    positions[otherColor][otherPawnIdx] = -1; // Send pawn home
+                    capturedAPawn = true;
+                }
+            });
         }
     }
 
     // 2. Hareket Eden Piyonun Pozisyonunu GÜNCELLE
-    positions[color][pawnIndex] = newLocalPos;
+    positions[color][pawnIndex] = toLocalPos;
 
     // 3. Kazanma Kontrolü
-    const pawnsInGoal = positions[color].filter(p => p === GOAL_POSITION_INDEX).length;
-    if (pawnsInGoal === 4) {
-        gameState.winner = color;
-        gameState.phase = 'finished';
-        console.log(`[Game Over] Player ${color} has won!`);
+    if (isGameWon(positions[color])) {
+        room.gameState.status = 'finished';
+        room.gameState.winner = color;
+        console.log(`Player ${color} has won the game!`);
     }
 
     return capturedAPawn;
@@ -230,7 +298,7 @@ const playBotTurnIfNeeded = async (roomId) => {
             const chosenMove = validMoves[Math.floor(Math.random() * validMoves.length)];
             
             const capturedPawn = handlePawnMove(room, currentPlayer, chosenMove);
-            const pawnFinished = chosenMove.to === GOAL_POSITION_INDEX;
+                const pawnFinished = chosenMove.to >= GOAL_START_INDEX;
             
             // The bot gets to roll again if they roll a 6, capture a pawn, or get a pawn home.
             keepRolling = diceValue === 6 || capturedPawn || pawnFinished;
@@ -318,6 +386,17 @@ io.on('connection', (socket) => {
     socket.on('get_rooms', (callback) => {
         const roomDetails = Object.values(rooms).map(r => ({ id: r.id, playerCount: r.players.length, phase: r.gameState.phase }));
         if (typeof callback === 'function') callback(roomDetails);
+    });
+
+    socket.on('debug_get_room_state', (roomId) => {
+        const room = rooms[roomId];
+        if (room) {
+            console.log(`--- DEBUG STATE FOR ROOM ${roomId} --`);
+            console.log(JSON.stringify(room, null, 2));
+            console.log(`---------------------------------`);
+        } else {
+            console.log(`--- DEBUG: Room ${roomId} not found.`);
+        }
     });
 
     socket.on('get_room_state', (roomId, callback) => {
@@ -561,7 +640,7 @@ io.on('connection', (socket) => {
 
         if (isValidMove) {
             const capturedAPawn = handlePawnMove(room, player, move);
-            const pawnFinished = move.to === GOAL_POSITION_INDEX;
+            const pawnFinished = move.to >= GOAL_START_INDEX;
             const diceValue = room.gameState.diceValue;
 
             // Oyuncu 6 attığında, piyon yediğinde veya piyonu bitirdiğinde tekrar oynar.
@@ -730,6 +809,6 @@ io.on('connection', (socket) => {
     });
 });
 
-server.listen(PORT, '10.22.111.93', () => {
-    console.log(`Sunucu ${PORT} portunda çalışıyor (10.22.111.93)...`);
+server.listen(PORT, '0.0.0.0', () => {
+    console.log(`Sunucu ${PORT} portunda tüm arayüzlerde çalışıyor...`);
 });
