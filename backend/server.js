@@ -93,7 +93,7 @@ const deleteRoom = (roomId, reason) => {
 
 const getValidMoves = (player, diceValue, room) => {
     const { color, pawns } = player;
-    const { players } = room.gameState;
+    const { players } = room;
     const moves = [];
 
     const startPos = START_POSITIONS[color];
@@ -103,37 +103,37 @@ const getValidMoves = (player, diceValue, room) => {
     pawns.forEach((pawn, pawnIndex) => {
         const currentPos = pawn.position;
 
-        // 1. Handle starting a pawn from home
-        if (currentPos >= 100 && diceValue === 6) {
-            const targetPos = startPos;
-            const isOccupiedByOwnPawn = pawns.some(p => p.position === targetPos);
-            if (!isOccupiedByOwnPawn) {
-                moves.push({ pawnIndex, from: currentPos, to: targetPos, type: 'start' });
-            }
-        }
-        // 2. Handle moves for pawns already on the board
-        else if (currentPos < 100) {
+        // Logic for pawns already on the board
+        if (currentPos < 100) {
             const relativePosition = playerPath.indexOf(currentPos);
+            if (relativePosition === -1) return; // Should not happen, but a good safeguard
+
             const newRelativePosition = relativePosition + diceValue;
 
-            // 2a. Handle finishing a pawn
-            if (newRelativePosition >= PATH_LENGTH) {
+            if (newRelativePosition >= PATH_LENGTH) { // Pawn is entering the home stretch
                 const stepsIntoHome = newRelativePosition - PATH_LENGTH;
                 if (stepsIntoHome < HOME_STRETCH_LENGTH) {
-                    const targetPos = PATH_LENGTH + stepsIntoHome; // e.g., 56, 57, ...
+                    const targetPos = PATH_LENGTH + stepsIntoHome;
                     const isOccupiedByOwnPawn = pawns.some(p => p.position === targetPos);
-                     if (!isOccupiedByOwnPawn) {
+                    if (!isOccupiedByOwnPawn) {
                         moves.push({ pawnIndex, from: currentPos, to: targetPos, type: 'home' });
                     }
                 }
-            }
-            // 2b. Handle a regular move on the main path
-            else {
+            } else { // Regular move on the main path
                 const targetPos = playerPath[newRelativePosition];
                 const isOccupiedByOwnPawn = pawns.some(p => p.position === targetPos);
                 if (!isOccupiedByOwnPawn) {
                     moves.push({ pawnIndex, from: currentPos, to: targetPos, type: 'move' });
                 }
+            }
+        }
+
+        // Separate logic for starting a pawn from home, only applicable on a roll of 6
+        if (diceValue === 6 && currentPos >= 100) {
+            const targetPos = startPos;
+            const isOccupiedByOwnPawn = pawns.some(p => p.position === targetPos);
+            if (!isOccupiedByOwnPawn) {
+                moves.push({ pawnIndex, from: currentPos, to: targetPos, type: 'start' });
             }
         }
     });
@@ -142,7 +142,7 @@ const getValidMoves = (player, diceValue, room) => {
 };
 
 const handlePawnMove = (room, player, move) => {
-    const { players } = room.gameState;
+    const { players } = room;
     const { color } = player;
     const pawnToMove = player.pawns[move.pawnIndex];
     pawnToMove.position = move.to;
@@ -150,7 +150,7 @@ const handlePawnMove = (room, player, move) => {
     let capturedPawnInfo = null;
 
     // Capture logic: only on the main path and not on safe spots.
-    if (move.to < PATH_LENGTH && !SAFE_POSITIONS.includes(move.to)) {
+            if (move.to < PATH_LENGTH && !SAFE_SPOTS.includes(move.to)) {
         for (const otherPlayer of players) {
             if (otherPlayer.color !== color) {
                 for (let i = 0; i < otherPlayer.pawns.length; i++) {
@@ -232,6 +232,8 @@ const playBotTurnIfNeeded = (roomId) => {
                     room.gameState.diceValue = null;
                     room.gameState.validMoves = [];
                     room.gameState.message = `${currentPlayer.nickname} tekrar oynayacak.`;
+                    updateRoom(roomId);
+                    playBotTurnIfNeeded(roomId);
                 } else {
                     updateTurn(room);
                 }
@@ -256,10 +258,8 @@ const determineTurnOrder = (roomId) => {
         room.gameState.phase = 'playing';
         room.gameState.message = `${room.gameState.turnOrderRolls[0].nickname} oyuna başlıyor!`
         
-        // Emit game_started event to all players in the room
-        room.players.forEach(player => {
-            io.to(player.id).emit('game_started', room);
-        });
+        // Oyunun başladığını odadaki herkese duyur
+        io.to(roomId).emit('game_started', room);
         
         updateRoom(roomId);
         playBotTurnIfNeeded(roomId); // İlk oyuncu botsa, oynaması için tetikle
@@ -295,6 +295,9 @@ const handleBotTurnOrderRolls = (roomId) => {
 
 // --- Socket.IO Bağlantı Mantığı ---
 io.on('connection', (socket) => {
+  // İstemciden gelen kimliği sunucudaki soket nesnesine ata
+  socket.userId = socket.handshake.auth.userId;
+
     console.log('Bir kullanıcı bağlandı:', socket.id);
 
     socket.on('get_rooms', (callback) => {
@@ -316,10 +319,11 @@ io.on('connection', (socket) => {
         }
     });
 
-    socket.on('create_room', ({ nickname, playerCount }, callback) => {
+        socket.on('create_room', ({ nickname, playerCount, userId }, callback) => {
         const roomId = uuidv4().substring(0, 6);
         const hostPlayer = {
-            id: socket.id,
+            id: socket.userId, // Kalıcı kimlik
+            socketId: socket.id, // Geçici bağlantı kimliği
             nickname,
             color: 'red',
             isBot: false,
@@ -387,61 +391,51 @@ io.on('connection', (socket) => {
             console.log(`[Auto Start] Room ${roomId} starting pre-game after waiting period.`);
             updateRoom(roomId);
         }, 20000);
+
+        // Botların sıralama turu için zar atmasını tetikle
+        handleBotTurnOrderRolls(roomId);
     });
 
-    socket.on('join_room', ({ roomId, nickname }, callback) => {
-        const room = rooms[roomId];
-        if (!room) {
-            return callback({ success: false, message: 'Oda bulunamadı.' });
-        }
+        socket.on('join_room', ({ roomId, nickname }, callback) => {
+      const room = rooms[roomId];
+      if (!room) {
+        return callback({ success: false, message: 'Oda bulunamadı.' });
+      }
+      if (room.players.find(p => p.id === socket.userId)){
+        return callback({ success: false, message: 'Zaten bu odadasınız.' });
+      }
+      if (room.players.length >= 4) {
+        return callback({ success: false, message: 'Oda dolu.' });
+      }
 
-        // Reconnect logic
-        const disconnectedPlayer = room.players.find(p => p.nickname === nickname && p.disconnected);
-        if (disconnectedPlayer) {
-            clearTimeout(disconnectedPlayer.disconnectTimer);
-            delete disconnectedPlayer.disconnected;
-            delete disconnectedPlayer.disconnectTimer;
-            disconnectedPlayer.id = socket.id; // Update socket id
-            socket.join(roomId);
-            console.log(`[Reconnect] Player ${nickname} reconnected to room ${roomId}.`);
-            updateRoom(roomId);
-            return callback({ success: true, room });
-        }
+      const availableColors = PLAYER_COLORS.filter(c => !room.players.some(p => p.color === c));
+      if (availableColors.length === 0) {
+        return callback({ success: false, message: 'Uygun renk bulunamadı.' });
+      }
 
-        if (room.players.length >= 4) {
-            return callback({ success: false, message: 'Oda dolu.' });
-        }
-
-        const color = ['red', 'green', 'blue', 'yellow'].find(c => !room.players.some(p => p.color === c));
-        if (!color) {
-            return callback({ success: false, message: 'Oda için uygun renk bulunamadı.'});
-        }
-        const player = {
-            id: socket.id,
+        const newPlayer = {
+            id: socket.userId, // Kalıcı kimlik
+            socketId: socket.id, // Geçici bağlantı kimliği
             nickname,
-            color,
+            color: availableColors[0],
             isBot: false,
             isReady: true,
-            pawns: HOME_POSITIONS[color].map(pos => ({ position: pos }))
+            pawns: HOME_POSITIONS[availableColors[0]].map(pos => ({ position: pos }))
         };
-        room.players.push(player);
-        socket.join(roomId);
 
-        if (typeof callback === 'function') callback({ success: true, room });
+      room.players.push(newPlayer);
+      socket.join(roomId);
 
-        console.log(`[Player Joined] ${nickname} joined room ${roomId}. Total players: ${room.players.length}`);
+      console.log(`[Player Joined] ${nickname} (ID: ${socket.userId}) joined room ${roomId}.`);
 
-        // Eğer katılan oyuncuyla oda dolduysa, oyunu başlat
-        if (room.players.length === 4) {
-            room.gameState.phase = 'pre-game';
-            console.log(`[Room Full] Room ${roomId} is now full, starting pre-game.`);
-            if(roomTimeouts[roomId]) {
-                clearTimeout(roomTimeouts[roomId]);
-                delete roomTimeouts[roomId];
-            }
-        }
+      io.to(roomId).emit('room_updated', room);
+      updateLobby();
 
-        updateRoom(roomId);
+      if (room.players.filter(p => !p.isBot).length === room.playerCount) {
+        startPreGame(room);
+      }
+
+      if (callback) callback({ success: true, room });
         broadcastRoomList();
 
         // 20 saniye bekleme süresi başlat (eğer oda dolmadıysa)
@@ -481,7 +475,8 @@ io.on('connection', (socket) => {
 
     socket.on('roll_dice_for_turn_order', ({ roomId }) => {
         const room = rooms[roomId];
-        const player = room?.players.find(p => p.id === socket.id);
+        // Find the player by checking both the permanent userId and the temporary socketId
+        const player = room?.players.find(p => p.id === socket.userId || p.socketId === socket.id);
         if (!room || !player || room.gameState.phase !== 'pre-game') return;
         if (room.gameState.turnOrderRolls.some(r => r.color === player.color)) return;
 
@@ -495,7 +490,8 @@ io.on('connection', (socket) => {
 
     socket.on('roll_dice', ({ roomId }) => {
         const room = rooms[roomId];
-        const player = room?.players.find(p => p.id === socket.id);
+        // Find the player by checking both the permanent userId and the temporary socketId
+        const player = room?.players.find(p => p.id === socket.userId || p.socketId === socket.id);
         if (!room || !player || player.color !== room.gameState.currentPlayer || room.gameState.diceValue) return;
 
         const diceValue = Math.floor(Math.random() * 6) + 1;
@@ -516,7 +512,8 @@ io.on('connection', (socket) => {
 
     socket.on('move_pawn', ({ roomId, pawnId }) => {
         const room = rooms[roomId];
-        const player = room?.players.find(p => p.id === socket.id);
+        // Find the player by checking both the permanent userId and the temporary socketId
+        const player = room?.players.find(p => p.id === socket.userId || p.socketId === socket.id);
         if (!room || !player || player.color !== room.gameState.currentPlayer) return;
 
         // --- YENİ GÜVENLİK KONTROLÜ ---
@@ -635,6 +632,29 @@ io.on('connection', (socket) => {
         }
     });
 
+    socket.on('roll_dice_turn_order', ({ roomId }) => {
+        const room = rooms[roomId];
+        if (!room || room.gameState.phase !== 'pre-game') return;
+
+        // Oyuncuyu socket.id veya socket.userId ile bul
+        const player = room.players.find(p => p.id === socket.id || p.id === socket.userId);
+
+        if (player) {
+            const alreadyRolled = room.gameState.turnOrderRolls.some(r => r.color === player.color);
+            if (!alreadyRolled) {
+                const roll = Math.floor(Math.random() * 6) + 1;
+                room.gameState.turnOrderRolls.push({ nickname: player.nickname, roll, color: player.color });
+                console.log(`[Turn Order] Player ${player.nickname} rolled a ${roll} in room ${roomId}`);
+                
+                updateRoom(roomId);
+                determineTurnOrder(roomId); // Her atıştan sonra sırayı belirlemeyi dene
+
+                // İnsan oyuncu attıktan sonra botları tetikle
+                handleBotTurnOrderRolls(roomId);
+            }
+        }
+    });
+
     socket.on('disconnect', () => {
         console.log('Bir kullanıcı ayrıldı:', socket.id);
         const roomId = Object.keys(rooms).find(id => rooms[id].players.some(p => p.id === socket.id));
@@ -672,6 +692,6 @@ io.on('connection', (socket) => {
     });
 });
 
-server.listen(PORT, '192.168.1.20', () => {
-    console.log(`Sunucu ${PORT} portunda çalışıyor (192.168.1.20)...`);
+server.listen(PORT, '192.168.1.134', () => {
+    console.log(`Sunucu ${PORT} portunda çalışıyor (192.168.1.134)...`);
 });
