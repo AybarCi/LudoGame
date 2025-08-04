@@ -4,56 +4,15 @@ import { View, StyleSheet, Alert, ActivityIndicator, ImageBackground } from 'rea
 import { Button, Text } from '@rneui/themed';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../../store/AuthProvider';
-import { supabase } from '../../services/supabase';
+
 
 const HomeScreen = () => {
   const router = useRouter();
-      const { user, signOut, loading } = useAuth();
-  const [profile, setProfile] = useState(null);
-
-  useEffect(() => {
-    const storeNickname = async (nickname) => {
-      try {
-        await AsyncStorage.setItem('user_nickname', nickname);
-        console.log(`[Storage] Nickname '${nickname}' saved successfully.`);
-      } catch (e) {
-        console.error('[Storage] Failed to save nickname.', e);
-      }
-    };
-
-    const fetchProfile = async () => {
-      if (user) {
-        const { data, error } = await supabase
-          .from('profiles')
-          .select('score, level')
-          .eq('id', user.id)
-          .single();
-        
-        if (error) {
-          console.error('Error fetching profile:', error.message);
-        } else {
-          setProfile(data);
-        }
-
-        // Store the nickname for later use in other screens
-        if (user.user_metadata?.username) {
-          storeNickname(user.user_metadata.username);
-        }
-      }
-    };
-
-    fetchProfile();
-  }, [user]);
-
-  useEffect(() => {
-    // If loading is finished and there's no user, redirect to login
-    if (!loading && !user) {
-      router.replace('/');
-    }
-  }, [user, loading, router]);
+  const { user, signOut } = useAuth();
+  const [loading, setLoading] = useState(false);
 
   const handlePlayWithAI = () => {
-    const playerNickname = user?.user_metadata?.username || 'Oyuncu 1';
+    const playerNickname = user?.nickname || 'Oyuncu 1';
     const playersInfo = {
       red: { nickname: playerNickname, type: 'human' },
       green: { nickname: 'Cansu', type: 'ai' },
@@ -75,7 +34,7 @@ const HomeScreen = () => {
     router.push('/lobby');
   };
 
-  if (loading || !user) {
+  if (!user) {
     return (
       <View style={styles.container}>
         <ActivityIndicator size="large" />
@@ -90,20 +49,18 @@ const HomeScreen = () => {
       resizeMode="cover"
     >
       <View style={styles.topContainer}>
-        <Text h4 style={styles.welcomeText}>Hoş Geldin, {user?.user_metadata?.username || user?.email}!</Text>
+        <Text h4 style={styles.welcomeText}>Hoş Geldin, {user?.nickname || 'Misafir'}!</Text>
         
-        {profile && (
-          <View style={styles.profileInfoContainer}>
-            <View style={styles.statsContainer}>
-              <View style={styles.statBadge}>
-                <Text style={styles.statText}>Seviye: {profile.level}</Text>
-              </View>
-              <View style={styles.statBadge}>
-                <Text style={styles.statText}>Puan: {profile.score}</Text>
-              </View>
+        <View style={styles.profileInfoContainer}>
+          <View style={styles.statsContainer}>
+            <View style={styles.statBadge}>
+              <Text style={styles.statText}>Puan: {user?.score || 0}</Text>
+            </View>
+            <View style={styles.statBadge}>
+              <Text style={styles.statText}>Seviye: {Math.floor((user?.score || 0) / 100) + 1}</Text>
             </View>
           </View>
-        )}
+        </View>
       </View>
 
       <View style={styles.bottomContainer}>
@@ -154,9 +111,7 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     color: '#fff',
     fontSize: 24,
-    textShadowColor: 'rgba(0, 0, 0, 0.75)',
-    textShadowOffset: {width: -1, height: 1},
-    textShadowRadius: 10
+    textShadow: '-1px 1px 10px rgba(0, 0, 0, 0.75)',
   },
   infoText: {
     fontFamily: 'Poppins_600SemiBold',
@@ -164,9 +119,7 @@ const styles = StyleSheet.create({
     fontSize: 20,
     color: '#FFFFFF',
     textAlign: 'center',
-    textShadowColor: 'rgba(0, 0, 0, 0.75)',
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 8,
+    textShadow: '1px 1px 8px rgba(0, 0, 0, 0.75)',
   },
   profileInfoContainer: {
     alignItems: 'center',
@@ -193,9 +146,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#FFFFFF',
     fontFamily: 'Poppins_600SemiBold',
-    textShadowColor: 'rgba(0, 0, 0, 0.6)',
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 3,
+    textShadow: '1px 1px 3px rgba(0, 0, 0, 0.6)',
   },
   buttonContainer: {
     width: '80%',

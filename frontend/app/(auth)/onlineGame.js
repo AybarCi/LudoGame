@@ -25,6 +25,9 @@ const OnlineGameScreen = () => {
   const { roomId } = useLocalSearchParams();
   const router = useRouter();
   const navigation = useNavigation();
+  const [loading, setLoading] = useState(false);
+  const [timeLeft, setTimeLeft] = useState(20);
+  const [isCreator, setIsCreator] = useState(false);
   const { 
     socket, 
     room, 
@@ -42,13 +45,39 @@ const OnlineGameScreen = () => {
 
 
   // Multiplayer board burada açıldığı için navigation yapılmıyor.
+  // useEffect(() => {
+  //   // Oyun 'pre-game' veya 'playing' fazına geçtiğinde gameboard'a yönlendir
+  //   const currentPhase = room?.phase || room?.gameState?.phase || gameState?.phase;
+  //   if (room && room.id && (currentPhase === 'pre-game' || currentPhase === 'playing')) {
+  //     router.replace(`/game/${room.id}`);
+  //   }
+  // }, [room, router, gameState?.phase]);
+
+  // Check if current user is the room creator and start countdown
   useEffect(() => {
-    // Oyun 'pre-game' veya 'playing' fazına geçtiğinde gameboard'a yönlendir
-    const currentPhase = room?.phase || room?.gameState?.phase || gameState?.phase;
-    if (room && room.id && (currentPhase === 'pre-game' || currentPhase === 'playing')) {
-      // router.replace(`/game/${room.id}`);
+    if (room && players && players.length > 0) {
+      const firstPlayer = players[0];
+      const amICreator = firstPlayer && (firstPlayer.id === user?.id || firstPlayer.id === socket?.id);
+      setIsCreator(amICreator);
+      
+      // Start countdown only for room creator and only in waiting phase
+      if (amICreator && gamePhase === 'waiting' && players.length < 4) {
+        const interval = setInterval(() => {
+          setTimeLeft(prev => {
+            if (prev <= 1) {
+              clearInterval(interval);
+              return 0;
+            }
+            return prev - 1;
+          });
+        }, 1000);
+        
+        return () => clearInterval(interval);
+      } else if (gamePhase !== 'waiting') {
+        setTimeLeft(20); // Reset timer when game starts
+      }
     }
-  }, [room, router, gameState?.phase]);
+  }, [room, players, user?.id, socket?.id, gamePhase]);
 
   const gamePhase = room?.phase || room?.gameState?.phase || gameState?.phase || 'loading';
   const message = gameState?.message || '';
@@ -174,7 +203,7 @@ useEffect(() => {
     if (roomClosed.isClosed) {
       const timer = setTimeout(() => {
         alert(roomClosed.reason || 'Oda kapatıldı');
-        router.replace('/(tabs)');
+        router.replace('/(auth)/home');
       }, 1000);
       return () => clearTimeout(timer);
     }
@@ -240,10 +269,24 @@ useEffect(() => {
             <Text style={{color: '#ccc', fontSize: 15, marginTop: 4}}>
               {`${currentPlayers.length}/4 oyuncu, ${missingPlayers > 0 ? `${missingPlayers} oyuncu bekleniyor...` : 'Oyun başlamak üzere!'}`}
             </Text>
+            {isCreator && missingPlayers > 0 && timeLeft > 0 && (
+               <Text style={{color: '#FFD700', fontSize: 14, marginTop: 8, textAlign: 'center', fontWeight: 'bold'}}>
+                 {`Oyun başlıyor: ${timeLeft} saniye`}
+               </Text>
+             )}
+             {isCreator && timeLeft === 0 && missingPlayers > 0 && (
+               <Text style={{color: '#FF6B6B', fontSize: 14, marginTop: 8, textAlign: 'center', fontWeight: 'bold'}}>
+                 Oyun başlıyor...
+               </Text>
+             )}
           </>
         )}
       </View>
-      <Text style={{color: '#fff', fontSize: 15, fontStyle: 'italic'}}>Oyun, tüm oyuncular katıldığında otomatik başlayacak.</Text>
+      <Text style={{color: '#fff', fontSize: 15, fontStyle: 'italic'}}>
+         {isCreator && missingPlayers > 0 
+           ? 'Oda kurucusu olarak 20 saniye sonra oyun başlayacak.' 
+           : 'Oyun, tüm oyuncular katıldığında otomatik başlayacak.'}
+       </Text>
     </View>
   );
 };
@@ -290,7 +333,7 @@ useEffect(() => {
             loop={false}
           />
           <View style={styles.modalFooterButtons}>
-            <TouchableOpacity onPress={() => router.replace('/(tabs)')} style={styles.footerButton}>
+            <TouchableOpacity onPress={() => router.replace('/(auth)/home')} style={styles.footerButton}>
               <Text style={styles.footerButtonText}>Ana Menü</Text>
             </TouchableOpacity>
           </View>
@@ -326,7 +369,7 @@ useEffect(() => {
     if (socket && room?.id) {
       console.log(`[Game] Leaving room: ${room.id}`);
       socket.emit('leave_room', { roomId: room.id });
-      router.replace('/(tabs)');
+      router.replace('/(auth)/home');
     }
   };
 
@@ -412,8 +455,14 @@ useEffect(() => {
 
               {/* Dice and Roll Button Area */}
               <View style={styles.diceAndButtonContainer}>
-                {/* The Dice itself, only shown in 'playing' phase when there's a value */}
-                {(gamePhase === 'playing' && gameState?.diceValue) && <Dice number={gameState?.diceValue} />}
+                {/* The Dice itself, shown in 'playing' phase when there's a value, or in 'pre-game' phase when current player has rolled */}
+                {((gamePhase === 'playing' && gameState?.diceValue) || 
+                  (gamePhase === 'pre-game' && gameState?.turnOrderRolls && myColor && gameState.turnOrderRolls.find(roll => roll.color === myColor))) && 
+                  <Dice number={
+                    gamePhase === 'playing' 
+                      ? gameState?.diceValue 
+                      : gameState?.turnOrderRolls?.find(roll => roll.color === myColor)?.roll
+                  } />}
                 
                 {/* The Roll Dice button container */}
                 <View style={styles.controls}>
@@ -736,6 +785,28 @@ const styles = StyleSheet.create({
     fontSize: 18,
     color: 'white',
     fontWeight: 'bold',
+  },
+  turnPopup: {
+    position: 'absolute',
+    top: '15%',
+    alignSelf: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 20,
+    zIndex: 10,
+  },
+  turnPopupText: {
+    color: 'white',
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  pointsWonText: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: '#4CAF50',
+    marginTop: 5,
+    marginBottom: 10,
   },
 });
 

@@ -34,11 +34,8 @@ const styles = StyleSheet.create({
     height: '80%',
     justifyContent: 'center',
     alignItems: 'center',
-    // Adding a shadow for depth
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 2,
+    borderRadius: 50,
+    boxShadow: '0px 2px 2px rgba(0, 0, 0, 0.3)',
     elevation: 5, // for Android
   },
 });

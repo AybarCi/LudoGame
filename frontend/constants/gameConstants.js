@@ -18,7 +18,7 @@ export const START_OFFSET = {
 export const HOME_STRETCH_ENTRY_POINT = 51; // Local position 50 is the last square on main path before turning home.
 
 // Global indices of squares that are safe from capture
-export const SAFE_SPOTS_GLOBAL = [0, 8, 13, 21, 26, 34, 39, 47];
+export const SAFE_SPOTS_GLOBAL = [0, 8, 21, 34, 39, 47];
 
 /**
  * Checks if a player has won by getting all their pawns into the goal slots.

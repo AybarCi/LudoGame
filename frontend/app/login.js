@@ -1,32 +1,34 @@
 import React, { useState } from 'react';
 import { View, StyleSheet, Alert, ActivityIndicator, ImageBackground } from 'react-native';
 import { Input, Button, Text } from '@rneui/themed';
-import { useAuth } from '../store/AuthProvider'; // Import useAuth
+import { useAuth } from '../store/AuthProvider';
 
 const LoginScreen = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [username, setUsername] = useState('');
-  const { signIn, signUp, loading } = useAuth(); // Use global state and functions
+  const [nickname, setNickname] = useState('');
+  const [isRegistering, setIsRegistering] = useState(false);
+  const { signIn, signUp, loading } = useAuth();
 
   async function handleSignIn() {
     const { error } = await signIn(email, password);
     if (error) {
       Alert.alert('Giriş Hatası', error.message);
     }
-    // On success, the AuthProvider's onAuthStateChange will trigger the redirect.
   }
 
   async function handleSignUp() {
-    if (!username) {
+    if (!nickname) {
       Alert.alert('Kayıt Hatası', 'Lütfen bir rumuz girin.');
       return;
     }
-    const { error } = await signUp(email, password, username);
+    const { error } = await signUp(email, password, nickname);
     if (error) {
       Alert.alert('Kayıt Hatası', error.message);
+    } else {
+      Alert.alert('Başarılı', 'Kayıt başarılı! Lütfen giriş yapın.');
+      setIsRegistering(false);
     }
-    // On success, a confirmation email is sent, and the user can now sign in.
   }
 
   return (
@@ -35,49 +37,64 @@ const LoginScreen = () => {
       style={styles.container}
       resizeMode="cover"
     >
-      <Text h4 style={styles.title}>Giriş Yap veya Kayıt Ol</Text>
-      <View style={styles.formContainer}>
+      <View style={styles.overlay}>
+        <Text h2 style={styles.title}>
+          {isRegistering ? 'Kayıt Ol' : 'Ludo Turco'}
+        </Text>
+
         <Input
-          label="Email"
-          placeholder="email@adres.com"
-          value={email}
+          placeholder='E-posta'
+          leftIcon={{ type: 'font-awesome', name: 'envelope', color: 'white' }}
           onChangeText={setEmail}
-          autoCapitalize={'none'}
-          containerStyle={styles.inputContainer}
+          value={email}
+          inputContainerStyle={styles.inputContainer}
+          inputStyle={styles.inputText}
+          placeholderTextColor="#ccc"
+          autoCapitalize="none"
         />
+
         <Input
-          label="Şifre"
-          placeholder="Şifreniz"
-          value={password}
+          placeholder='Şifre'
+          leftIcon={{ type: 'font-awesome', name: 'lock', color: 'white' }}
           onChangeText={setPassword}
+          value={password}
           secureTextEntry
-          containerStyle={styles.inputContainer}
+          inputContainerStyle={styles.inputContainer}
+          inputStyle={styles.inputText}
+          placeholderTextColor="#ccc"
+          autoCapitalize="none"
         />
-        <Input
-          label="Rumuz (Sadece kayıt olurken)"
-          placeholder="Oyuncu123"
-          value={username}
-          onChangeText={setUsername}
-          autoCapitalize={'none'}
-          containerStyle={styles.inputContainer}
-        />
-      </View>
-      <View style={styles.buttonContainer}>
-        <Button
-          title={loading ? 'Giriş Yapılıyor...' : 'Giriş Yap'}
-          onPress={handleSignIn}
-          disabled={loading}
-          buttonStyle={[styles.button, { marginBottom: 10 }]}
-          icon={loading && <ActivityIndicator color="#fff" style={{ marginRight: 10 }} />}
-        />
-        <Button
-          title={loading ? 'Kayıt Olunuyor...' : 'Kayıt Ol'}
-          onPress={handleSignUp}
-          disabled={loading}
-          buttonStyle={[styles.button, styles.secondaryButton]}
-          titleStyle={styles.secondaryButtonTitle}
-          icon={loading && <ActivityIndicator style={{ marginRight: 10 }} />}
-        />
+
+        {isRegistering && (
+          <Input
+            placeholder='Rumuz'
+            leftIcon={{ type: 'font-awesome', name: 'user', color: 'white' }}
+            onChangeText={setNickname}
+            value={nickname}
+            inputContainerStyle={styles.inputContainer}
+            inputStyle={styles.inputText}
+            placeholderTextColor="#ccc"
+            autoCapitalize="none"
+          />
+        )}
+
+        {loading ? (
+          <ActivityIndicator size="large" color="#fff" />
+        ) : (
+          <>
+            <Button 
+              title={isRegistering ? 'Kayıt Ol' : 'Giriş Yap'}
+              buttonStyle={styles.button}
+              onPress={isRegistering ? handleSignUp : handleSignIn}
+            />
+            <Button 
+              title={isRegistering ? 'Zaten hesabın var mı? Giriş Yap' : 'Hesap Oluştur'}
+              type="clear"
+              titleStyle={styles.switchText}
+              onPress={() => setIsRegistering(!isRegistering)}
+            />
+          </>
+        )}
       </View>
     </ImageBackground>
   );
@@ -87,53 +104,42 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
   },
-  formContainer: {
-    width: '90%',
-    backgroundColor: 'rgba(255, 255, 255, 0.6)',
-    padding: 20,
-    borderRadius: 10,
+  overlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-    elevation: 5,
+    padding: 20,
   },
   title: {
-    marginBottom: 20,
-    color: '#fff',
-    fontWeight: 'bold',
-    fontSize: 24,
+    color: 'white',
+    marginBottom: 40,
     textShadowColor: 'rgba(0, 0, 0, 0.75)',
     textShadowOffset: {width: -1, height: 1},
     textShadowRadius: 10
   },
   inputContainer: {
-    width: '100%',
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    borderRadius: 25,
+    borderBottomWidth: 0,
+    paddingHorizontal: 15,
     marginBottom: 15,
   },
+  inputText: {
+    color: 'white',
+  },
   button: {
+    backgroundColor: '#ff4d4d',
+    borderRadius: 25,
+    paddingVertical: 12,
+    paddingHorizontal: 30,
     width: 250,
-    borderRadius: 10,
-    backgroundColor: '#c5363e',
+    elevation: 3,
   },
-  buttonContainer: {
-    marginTop: 40,
-  },
-  secondaryButton: {
-    backgroundColor: 'transparent',
-    borderColor: '#fff',
-    borderWidth: 2,
-  },
-  secondaryButtonTitle: {
-    fontWeight: 'bold',
-    color: '#fff'
+  switchText: {
+    color: '#fff',
+    marginTop: 15,
   },
 });
 

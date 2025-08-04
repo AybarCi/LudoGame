@@ -1,5 +1,5 @@
 import { AuthProvider, useAuth } from '../store/AuthProvider';
-import { SocketProvider } from '../store/SocketProvider';
+import { SocketProvider, useSocket } from '../store/SocketProvider';
 import { Stack, SplashScreen, useRouter, useSegments } from 'expo-router';
 import { ActivityIndicator, ImageBackground, StyleSheet } from 'react-native';
 import { useFonts, Poppins_400Regular, Poppins_600SemiBold, Poppins_700Bold } from '@expo-google-fonts/poppins';
@@ -16,9 +16,17 @@ function InitialLayout() {
     Poppins_700Bold,
   });
 
-  const { session, loading } = useAuth();
+  const { session, loading, user } = useAuth();
+  const { connect } = useSocket();
   const router = useRouter();
   const segments = useSegments();
+
+  // Socket bağlantısını otomatik olarak başlat
+  useEffect(() => {
+    if (user && connect) {
+      connect(user);
+    }
+  }, [user, connect]);
 
   useEffect(() => {
     if (fontError) throw fontError;
@@ -31,18 +39,23 @@ function InitialLayout() {
   useEffect(() => {
     if (!fontsLoaded || loading) return;
 
-    const inAuthGroup = segments[0] === '(auth)';
+    // Add a small delay to ensure the layout is fully mounted
+    const timer = setTimeout(() => {
+      const inAuthGroup = segments[0] === '(auth)';
 
-    if (session && !inAuthGroup) {
-      router.replace('/(auth)/home');
-    } else if (!session && inAuthGroup) {
-      router.replace('/login');
-    } else if (!session && !inAuthGroup) {
-      if (segments[0] !== 'login') {
+      if (session && !inAuthGroup) {
+        router.replace('/(auth)/home');
+      } else if (!session && inAuthGroup) {
         router.replace('/login');
+      } else if (!session && !inAuthGroup) {
+        if (segments[0] !== 'login') {
+          router.replace('/login');
+        }
       }
-    }
-  }, [session, loading, fontsLoaded, segments]);
+    }, 100);
+
+    return () => clearTimeout(timer);
+  }, [session, loading, fontsLoaded, segments, router]);
 
   if (!fontsLoaded || loading) {
     return (

@@ -134,8 +134,7 @@ const generateBoardLayout = (pawns, currentPlayer, diceValue) => {
         layout[(base[0] + r) * GRID_SIZE + (base[1] + c)].pawns.push(pawn);
       }
     } else if (pawn.position >= 0 && pawn.position <= 55) { // On main path
-      const startPos = PATH_MAP[pawn.color].start;
-      const absPos = (startPos + pawn.position) % 56;
+      const absPos = PATH_MAP[pawn.color].path[pawn.position];
       const coords = MAIN_PATH_COORDS[absPos];
       if (coords) {
         const [r, c] = coords;
@@ -231,7 +230,7 @@ const OnlineGameBoard = ({ players = [], gameState = {}, onPawnPress, currentPla
 
         return (
           <View key={index} style={cellStyle}>
-            <Text style={styles.cellNumber}>{index}</Text>
+            {/* <Text style={styles.cellNumber}>{index}</Text> */}
             {cell.homeStretchEntranceFor && !cell.pawns.length && <Arrow color={cell.homeStretchEntranceFor} />}
             {cell.pawns.map((pawn, pawnIndex) => (
               <Pawn key={pawn.id} color={pawn.color} onPress={() => onPawnPress(pawn.pawnIndex, pawn.position)} />

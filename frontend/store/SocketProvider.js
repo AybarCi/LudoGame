@@ -65,11 +65,8 @@ export const SocketProvider = ({ children }) => {
 
             // Soket örneği daha önce oluşturulmadıysa oluştur (Lazy Initialization)
             if (!socketRef.current) {
-                const socketUrl = process.env.EXPO_PUBLIC_SOCKET_URL;
-                if (!socketUrl) {
-                    console.error('[FATAL] EXPO_PUBLIC_SOCKET_URL tanımlı değil. Bağlantı kurulamıyor.');
-                    return;
-                }
+                const socketUrl = process.env.EXPO_PUBLIC_SOCKET_URL || 'http://localhost:3001';
+                console.log(`[SocketProvider] Socket URL: ${socketUrl}`);
 
                 console.log(`[SocketProvider] İlk bağlantı. Soket oluşturuluyor: ${socketUrl}`);
                                 socketRef.current = io(socketUrl, {
@@ -126,11 +123,26 @@ export const SocketProvider = ({ children }) => {
                         return newRoom;
                     });
                 });
+
+                // Oyun başladığında tetiklenecek
+                socketRef.current.on('game_started', (updatedRoom) => {
+                    console.log('[SocketProvider] Oyun başladı! Room:', updatedRoom.id, 'Phase:', updatedRoom.gameState?.phase);
+                    setRoom(prevRoom => {
+                        const newRoom = { ...prevRoom, ...updatedRoom };
+                        if (prevRoom?.gameState && updatedRoom?.gameState) {
+                            newRoom.gameState = {
+                                ...prevRoom.gameState,
+                                ...updatedRoom.gameState,
+                            };
+                        }
+                        return newRoom;
+                    });
+                });
             }
 
             // Kullanıcı bilgileriyle birlikte manuel olarak bağlan
             console.log(`[SocketProvider] Kullanıcı ile bağlantı başlatılıyor: ${user.id}`);
-            socketRef.current.auth = { userId: user.id, nickname: user.user_metadata?.nickname };
+            socketRef.current.auth = { userId: user.id, nickname: user.nickname };
             socketRef.current.connect();
         };
 

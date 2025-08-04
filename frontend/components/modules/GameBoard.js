@@ -270,10 +270,7 @@ const styles = StyleSheet.create({
     borderLeftWidth: 1,
     borderRightWidth: 1,
     elevation: 5, // for Android shadow
-    shadowColor: 'gold', // for iOS shadow
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.9,
-    shadowRadius: 3,
+    boxShadow: '0px 0px 3px rgba(255, 215, 0, 0.9)', // for web shadow
   },
   nickname: {
     position: 'absolute',

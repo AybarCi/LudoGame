@@ -224,9 +224,7 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     textAlign: 'center',
     marginBottom: 15,
-    textShadowColor: 'rgba(0, 0, 0, 0.8)',
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 5,
+    textShadow: '1px 1px 5px rgba(0, 0, 0, 0.8)',
   },
   createButton: {
     backgroundColor: '#e53935', 
