@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, Text } from 'react-native';
 import {
   COLORS,
@@ -37,7 +37,7 @@ const TRANSPARENT_COLORS = global.TRANSPARENT_COLORS || {
 };
 // Tüm sabitler constants/game.js'de yoksa fallback olarak burada tanımlı.
 
-import Pawn from '../shared/Pawn';
+import AnimatedPawn from '../shared/AnimatedPawn';
 
 // --- CONSTANTS FOR VISUAL CUES ---
 
@@ -157,11 +157,71 @@ const generateBoardLayout = (pawns, currentPlayer, diceValue) => {
 };
 
 const GameBoard = ({ pawns, onPawnPress, currentPlayer, diceValue, playersInfo, style }) => {
+  // Hareket animasyonlarını yönetmek için state'ler
+  const [movingPawns, setMovingPawns] = useState(new Set());
+  const [lastPawns, setLastPawns] = useState([]);
+
   // Prop guard: undefined veya yanlış tip gelirse default değer kullan
   const safePawns = Array.isArray(pawns) ? pawns : [];
   const safeCurrentPlayer = typeof currentPlayer === 'string' ? currentPlayer : null;
   const safeDiceValue = typeof diceValue === 'number' ? diceValue : null;
   const safePlayersInfo = typeof playersInfo === 'object' && playersInfo !== null ? playersInfo : {};
+
+  // Piyon hareketlerini tespit et ve animasyon başlat
+  useEffect(() => {
+    if (lastPawns.length > 0 && safePawns.length > 0) {
+      const newMovingPawns = new Set();
+      
+      // Her piyon için pozisyon değişikliklerini kontrol et
+      safePawns.forEach((currentPawn) => {
+        const lastPawn = lastPawns.find(p => p.id === currentPawn.id);
+        if (lastPawn && lastPawn.position !== currentPawn.position) {
+          // Piyon hareket etti
+          newMovingPawns.add(currentPawn.id);
+          
+          // Hareket mesafesini hesapla
+          let moveSteps = 1;
+          if (typeof currentPawn.position === 'number' && typeof lastPawn.position === 'number') {
+            if (lastPawn.position === -1 && currentPawn.position === 0) {
+              moveSteps = 1; // Evden çıkış
+            } else if (lastPawn.position >= 0 && currentPawn.position >= 0) {
+              moveSteps = Math.abs(currentPawn.position - lastPawn.position);
+            }
+          }
+          
+          console.log(`[Animation] Pawn ${currentPawn.id} moving from ${lastPawn.position} to ${currentPawn.position}, steps: ${moveSteps}`);
+        }
+      });
+      
+      if (newMovingPawns.size > 0) {
+        setMovingPawns(newMovingPawns);
+        
+        // Animasyon tamamlandıktan sonra moving state'i temizle
+        setTimeout(() => {
+          setMovingPawns(new Set());
+        }, newMovingPawns.size * 300 + 500); // Her step 300ms + buffer
+      }
+    }
+    
+    setLastPawns([...safePawns]);
+  }, [safePawns]);
+
+  // Hareket eden piyon için step sayısını hesapla
+  const getMoveSteps = (pawnId) => {
+    if (!lastPawns.length || !movingPawns.has(pawnId)) return 0;
+    
+    const currentPawn = safePawns.find(p => p.id === pawnId);
+    const lastPawn = lastPawns.find(p => p.id === pawnId);
+    
+    if (currentPawn && lastPawn && typeof currentPawn.position === 'number' && typeof lastPawn.position === 'number') {
+      if (lastPawn.position === -1 && currentPawn.position === 0) {
+        return 1; // Evden çıkış
+      } else if (lastPawn.position >= 0 && currentPawn.position >= 0) {
+        return Math.abs(currentPawn.position - lastPawn.position);
+      }
+    }
+    return 1;
+  };
 
   const boardLayout = generateBoardLayout(safePawns, safeCurrentPlayer, safeDiceValue);
 
@@ -219,9 +279,20 @@ const GameBoard = ({ pawns, onPawnPress, currentPlayer, diceValue, playersInfo, 
         return (
           <View key={index} style={cellStyle}>
             {cell.homeStretchEntranceFor && !cell.pawns.length && <Arrow color={cell.homeStretchEntranceFor} />}
-            {cell.pawns.map(pawn => (
-              <Pawn key={pawn.id} color={pawn.color} onPress={() => onPawnPress(pawn.id)} />
-            ))}
+            {cell.pawns.map(pawn => {
+              const isMoving = movingPawns.has(pawn.id);
+              const moveSteps = getMoveSteps(pawn.id);
+              
+              return (
+                <AnimatedPawn 
+                  key={pawn.id} 
+                  color={pawn.color} 
+                  onPress={() => onPawnPress(pawn.id)}
+                  isMoving={isMoving}
+                  moveSteps={moveSteps}
+                />
+              );
+            })}
           </View>
         );
       })}

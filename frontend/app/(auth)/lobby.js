@@ -1,9 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { View, Text, Button, FlatList, StyleSheet, ActivityIndicator, TouchableOpacity, ImageBackground, Modal } from 'react-native';
+import { View, Text, Button, FlatList, StyleSheet, ActivityIndicator, TouchableOpacity, ImageBackground, Modal, Animated, Dimensions } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons } from '@expo/vector-icons';
 import { useSocket } from '@/store/SocketProvider';
 import { useAuth } from '@/store/AuthProvider';
 import { useRouter } from 'expo-router';
+
+const { width, height } = Dimensions.get('window');
 
 const Lobby = () => {
   const { socket } = useSocket();
@@ -12,6 +16,46 @@ const Lobby = () => {
   const [rooms, setRooms] = useState({});
   const [isLoading, setIsLoading] = useState(true);
   const [showSelfJoinModal, setShowSelfJoinModal] = useState(false);
+  
+  // Animation values
+  const fadeAnim = new Animated.Value(0);
+  const slideAnim = new Animated.Value(50);
+  const scaleAnim = new Animated.Value(0.9);
+  const [buttonAnims] = useState(() => 
+    Array.from({ length: 10 }, () => new Animated.Value(0))
+  );
+
+  useEffect(() => {
+    // Start animations
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 800,
+        useNativeDriver: true,
+      }),
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 800,
+        useNativeDriver: true,
+      }),
+      Animated.timing(scaleAnim, {
+        toValue: 1,
+        duration: 800,
+        useNativeDriver: true,
+      }),
+    ]).start();
+
+    // Stagger button animations
+    const buttonAnimations = buttonAnims.map((anim, index) => 
+      Animated.timing(anim, {
+        toValue: 1,
+        duration: 600,
+        delay: index * 100,
+        useNativeDriver: true,
+      })
+    );
+    Animated.stagger(100, buttonAnimations).start();
+  }, []);
 
   useEffect(() => {
     if (!socket) {
@@ -141,68 +185,184 @@ const Lobby = () => {
   const roomList = Object.values(rooms);
 
   return (
-    <ImageBackground 
-      source={require('../../assets/images/wood-background.png')} 
-      style={styles.container}
-      resizeMode="cover"
-    >
-      {/* Main content area */}
-      <View style={styles.mainContent}>
-        <TouchableOpacity style={styles.createButton} onPress={handleCreateRoom}>
-          <Text style={styles.createButtonText}>Oda Kur</Text>
-        </TouchableOpacity>
-        
-        <View style={styles.listContainer}>
-          <FlatList
-            data={roomList}
-            keyExtractor={(item) => item.id}
-            renderItem={({ item }) => (
-              <View style={styles.roomItem}>
-                <View>
-                  <Text style={styles.roomName}>{`Oda #${item.id.slice(-5)}`}</Text>
-                  <Text style={styles.playerCount}>{`Oyuncular: ${typeof item.playerCount === 'number' ? item.playerCount : 0} / 4`}</Text>
-                </View>
-                <TouchableOpacity 
-                  style={[styles.joinButton, ((item.playerCount || 0) >= 4 || item.isGameStarted) && styles.joinButtonDisabled]}
-                  onPress={() => handleJoinRoom(item.id)}
-                  disabled={(item.playerCount || 0) >= 4 || item.isGameStarted}
-                >
-                  <Text style={styles.joinButtonText}>{item.isGameStarted ? 'Oynanıyor' : 'Katıl'}</Text>
-                </TouchableOpacity>
-              </View>
-            )}
-            ListHeaderComponent={<Text style={styles.title}>Aktif Odalar</Text>}
-            ListEmptyComponent={<Text style={styles.emptyText}>Henüz kimse oda kurmamış. İlk odayı sen kur!</Text>}
-            contentContainerStyle={styles.listContent}
-          />
-        </View>
-      </View>
-
-      {/* Bottom button area */}
-      <View style={styles.footer}>
-        <TouchableOpacity style={styles.backButton} onPress={() => router.push('/(auth)/home')}>
-          <Text style={styles.backButtonText}>Geri Dön</Text>
-        </TouchableOpacity>
-      </View>
-
-      <Modal
-        transparent={true}
-        visible={showSelfJoinModal}
-        animationType="fade"
-        onRequestClose={() => setShowSelfJoinModal(false)}
+    <View style={styles.container}>
+      <LinearGradient
+        colors={['#667eea', '#764ba2', '#f093fb']}
+        style={styles.gradient}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContainer}>
-            <Text style={styles.modalTitle}>Uyarı</Text>
-            <Text style={styles.modalText}>Kendi kurduğunuz bir odaya dışarıdan katılamazsınız.</Text>
-            <TouchableOpacity style={styles.modalButton} onPress={() => setShowSelfJoinModal(false)}>
-              <Text style={styles.modalButtonText}>Anladım</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
+        <Animated.View 
+          style={[
+            styles.mainContent,
+            {
+              opacity: fadeAnim,
+              transform: [
+                { translateY: slideAnim },
+                { scale: scaleAnim }
+              ]
+            }
+          ]}
+        >
+          {/* Header */}
+          <Animated.View style={[styles.headerContainer, { opacity: fadeAnim }]}>
+            <View style={styles.titleContainer}>
+              <Ionicons name="home" size={32} color="#fff" style={styles.titleIcon} />
+              <Text style={styles.mainTitle}>Oyun Lobisi</Text>
+            </View>
+            <Text style={styles.subtitle}>Arkadaşlarınla oyna veya yeni oda kur</Text>
+          </Animated.View>
 
-    </ImageBackground>
+          {/* Create Room Button */}
+          <Animated.View 
+            style={[
+              styles.createButtonContainer,
+              {
+                opacity: buttonAnims[0],
+                transform: [{ scale: buttonAnims[0] }]
+              }
+            ]}
+          >
+            <TouchableOpacity style={styles.createButton} onPress={handleCreateRoom}>
+              <LinearGradient
+                colors={['#ff6b6b', '#ee5a24']}
+                style={styles.buttonGradient}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+              >
+                <View style={styles.buttonContent}>
+                  <Ionicons name="add-circle" size={24} color="#fff" />
+                  <Text style={styles.createButtonText}>Yeni Oda Kur</Text>
+                </View>
+              </LinearGradient>
+            </TouchableOpacity>
+          </Animated.View>
+        
+          {/* Rooms List */}
+          <Animated.View 
+            style={[
+              styles.listContainer,
+              {
+                opacity: buttonAnims[1],
+                transform: [{ translateY: buttonAnims[1].interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [30, 0]
+                })}]
+              }
+            ]}
+          >
+            <FlatList
+              data={roomList}
+              keyExtractor={(item) => item.id}
+              renderItem={({ item, index }) => (
+                <Animated.View
+                  style={[
+                    styles.roomItem,
+                    {
+                      opacity: buttonAnims[Math.min(index + 2, buttonAnims.length - 1)],
+                      transform: [{ scale: buttonAnims[Math.min(index + 2, buttonAnims.length - 1)] }]
+                    }
+                  ]}
+                >
+                  <View style={styles.roomInfo}>
+                    <View style={styles.roomHeader}>
+                      <Ionicons name="people" size={20} color="#fff" />
+                      <Text style={styles.roomName}>{`Oda #${item.id.slice(-5)}`}</Text>
+                    </View>
+                    <Text style={styles.playerCount}>
+                      <Ionicons name="person" size={14} color="#bbb" />
+                      {` ${typeof item.playerCount === 'number' ? item.playerCount : 0} / 4 Oyuncu`}
+                    </Text>
+                    {item.isGameStarted && (
+                      <View style={styles.gameStatusContainer}>
+                        <Ionicons name="play-circle" size={14} color="#4ecdc4" />
+                        <Text style={styles.gameStatus}>Oyun Devam Ediyor</Text>
+                      </View>
+                    )}
+                  </View>
+                  <TouchableOpacity 
+                    style={[
+                      styles.joinButton, 
+                      ((item.playerCount || 0) >= 4 || item.isGameStarted) && styles.joinButtonDisabled
+                    ]}
+                    onPress={() => handleJoinRoom(item.id)}
+                    disabled={(item.playerCount || 0) >= 4 || item.isGameStarted}
+                  >
+                    <LinearGradient
+                      colors={((item.playerCount || 0) >= 4 || item.isGameStarted) 
+                        ? ['#95a5a6', '#7f8c8d'] 
+                        : ['#4ecdc4', '#44a08d']
+                      }
+                      style={styles.joinButtonGradient}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 0 }}
+                    >
+                      <Ionicons 
+                        name={item.isGameStarted ? "play" : "enter"} 
+                        size={16} 
+                        color="#fff" 
+                        style={styles.joinButtonIcon}
+                      />
+                      <Text style={styles.joinButtonText}>
+                        {item.isGameStarted ? 'Oynanıyor' : 'Katıl'}
+                      </Text>
+                    </LinearGradient>
+                  </TouchableOpacity>
+                </Animated.View>
+              )}
+              ListHeaderComponent={
+                <View style={styles.listHeader}>
+                  <Ionicons name="list" size={24} color="#fff" />
+                  <Text style={styles.listTitle}>Aktif Odalar</Text>
+                </View>
+              }
+              ListEmptyComponent={
+                <View style={styles.emptyContainer}>
+                  <Ionicons name="home-outline" size={48} color="rgba(255,255,255,0.6)" />
+                  <Text style={styles.emptyText}>Henüz kimse oda kurmamış</Text>
+                  <Text style={styles.emptySubtext}>İlk odayı sen kur ve arkadaşlarını davet et!</Text>
+                </View>
+              }
+              contentContainerStyle={styles.listContent}
+              showsVerticalScrollIndicator={false}
+            />
+          </Animated.View>
+        </Animated.View>
+
+        {/* Bottom Navigation */}
+        <Animated.View 
+          style={[
+            styles.footer,
+            {
+              opacity: fadeAnim,
+              transform: [{ translateY: slideAnim }]
+            }
+          ]}
+        >
+          <TouchableOpacity style={styles.backButton} onPress={() => router.push('/(auth)/home')}>
+            <Ionicons name="arrow-back" size={20} color="#fff" style={styles.backButtonIcon} />
+            <Text style={styles.backButtonText}>Ana Menü</Text>
+          </TouchableOpacity>
+        </Animated.View>
+
+        <Modal
+          transparent={true}
+          visible={showSelfJoinModal}
+          animationType="fade"
+          onRequestClose={() => setShowSelfJoinModal(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContainer}>
+              <Text style={styles.modalTitle}>Uyarı</Text>
+              <Text style={styles.modalText}>Kendi kurduğunuz bir odaya dışarıdan katılamazsınız.</Text>
+              <TouchableOpacity style={styles.modalButton} onPress={() => setShowSelfJoinModal(false)}>
+                <Text style={styles.modalButtonText}>Anladım</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
+       </LinearGradient>
+     </View>
   );
 };
 
@@ -210,165 +370,263 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
+  gradient: {
+    flex: 1,
+  },
   mainContent: {
     flex: 1,
-    paddingTop: 60, // Adjust for status bar
+    paddingTop: 60,
   },
-  centered: {
-    justifyContent: 'center',
+  headerContainer: {
     alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 20,
   },
-  title: {
-    fontSize: 24,
-    fontFamily: 'Poppins_700Bold',
-    color: '#ffffff',
+  titleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  titleIcon: {
+    marginRight: 12,
+  },
+  mainTitle: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: '#fff',
+    textShadowColor: 'rgba(0, 0, 0, 0.3)',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 3,
+  },
+  subtitle: {
+    fontSize: 16,
+    color: 'rgba(255, 255, 255, 0.8)',
     textAlign: 'center',
-    marginBottom: 15,
-    textShadow: '1px 1px 5px rgba(0, 0, 0, 0.8)',
+    marginTop: 5,
+  },
+  createButtonContainer: {
+    paddingHorizontal: 20,
+    marginBottom: 20,
   },
   createButton: {
-    backgroundColor: '#e53935', 
-    paddingVertical: 15,
-    borderRadius: 10,
-    alignItems: 'center', 
-    marginHorizontal: 20, 
-    marginTop: 20,
-    marginBottom: 20,
+    borderRadius: 15,
+    overflow: 'hidden',
+    elevation: 8,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
-    shadowRadius: 3,
+    shadowRadius: 8,
+  },
+  buttonGradient: {
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+    borderRadius: 15,
+  },
+  buttonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   createButtonText: {
-    color: '#FFFFFF',
+    color: '#fff',
     fontSize: 18,
     fontWeight: 'bold',
+    marginLeft: 8,
   },
   listContainer: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
     borderRadius: 20,
-    paddingVertical: 20, // Vertical padding remains
-    paddingHorizontal: 10, // Horizontal padding is reduced
     marginHorizontal: 20,
-    marginBottom: 20, // Added space between list and back button
+    marginBottom: 20,
+    backdropFilter: 'blur(10px)',
   },
   listContent: {
-    // Horizontal padding removed to allow items to fill the container
+    paddingTop: 20,
     paddingBottom: 20,
+    paddingHorizontal: 15,
   },
-  footer: {
-    paddingBottom: 50, 
-    paddingHorizontal: 20,
-  },
-  backButton: {
-    backgroundColor: 'transparent',
-    paddingVertical: 12,
-    paddingHorizontal: 30,
-    borderRadius: 10,
+  listHeader: {
+    flexDirection: 'row',
     alignItems: 'center',
-    borderWidth: 2,
-    borderColor: 'rgba(255, 255, 255, 0.8)',
+    justifyContent: 'center',
+    marginBottom: 20,
   },
-  backButtonText: {
-    color: '#ffffff',
-    fontSize: 18,
-    fontFamily: 'Poppins_600SemiBold',
+  listTitle: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: '#fff',
+    marginLeft: 8,
+    textShadowColor: 'rgba(0, 0, 0, 0.3)',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 3,
   },
   roomItem: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 28, // Final increase to vertical padding
-    paddingHorizontal: 30,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    borderRadius: 10,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    borderRadius: 15,
+    padding: 20,
     marginBottom: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  roomInfo: {
+    flex: 1,
+  },
+  roomHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
   },
   roomName: {
     fontSize: 18,
-    fontFamily: 'Poppins_600SemiBold',
-    color: '#ffffff',
+    fontWeight: 'bold',
+    color: '#fff',
+    marginLeft: 8,
   },
   playerCount: {
     fontSize: 14,
-    color: '#ffffff',
-    marginTop: 5,
+    color: 'rgba(255, 255, 255, 0.8)',
+    marginBottom: 4,
+  },
+  gameStatusContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  gameStatus: {
+    fontSize: 12,
+    color: '#4ecdc4',
+    marginLeft: 4,
+    fontWeight: '500',
   },
   joinButton: {
-    backgroundColor: '#007AFF',
-    paddingVertical: 10,
+    borderRadius: 12,
+    overflow: 'hidden',
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+  },
+  joinButtonGradient: {
+    paddingVertical: 12,
     paddingHorizontal: 20,
-    borderRadius: 5,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  joinButtonIcon: {
+    marginRight: 6,
   },
   joinButtonText: {
-    color: '#FFFFFF',
+    color: '#fff',
     fontWeight: 'bold',
-  },
-  emptyText: {
-    textAlign: 'center',
-    color: '#ffffff',
-    fontSize: 16,
-    fontFamily: 'Poppins_600SemiBold',
-    marginTop: 50,
-    textShadowColor: 'rgba(0, 0, 0, 0.8)',
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 5,
-    paddingHorizontal: 20,
+    fontSize: 14,
   },
   joinButtonDisabled: {
-    backgroundColor: '#A9A9A9', 
+    opacity: 0.6,
+  },
+  emptyContainer: {
+    alignItems: 'center',
+    paddingVertical: 40,
+    paddingHorizontal: 20,
+  },
+  emptyText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#fff',
+    textAlign: 'center',
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  emptySubtext: {
+    fontSize: 14,
+    color: 'rgba(255, 255, 255, 0.7)',
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  footer: {
+    paddingBottom: 40,
+    paddingHorizontal: 20,
+  },
+  backButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    paddingVertical: 14,
+    paddingHorizontal: 24,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+  },
+  backButtonIcon: {
+    marginRight: 8,
+  },
+  backButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  joinButtonDisabled: {
+    opacity: 0.6,
   },
   loadingText: {
     marginTop: 10,
     fontSize: 16,
+    color: '#fff',
   },
-  // Modal Styles
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
     justifyContent: 'center',
     alignItems: 'center',
   },
   modalContainer: {
     width: '85%',
-    backgroundColor: '#F3E9DD',
-    borderRadius: 15,
-    padding: 25,
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    borderRadius: 20,
+    padding: 30,
     alignItems: 'center',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
+    shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.3,
-    shadowRadius: 5,
-    elevation: 10,
-    borderWidth: 2,
-    borderColor: '#C1A27B',
+    shadowRadius: 12,
+    elevation: 15,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
   },
   modalTitle: {
-    fontSize: 22,
-    fontFamily: 'Poppins_700Bold',
-    color: '#5D4037',
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#333',
     marginBottom: 15,
+    textAlign: 'center',
   },
   modalText: {
     fontSize: 16,
-    fontFamily: 'Poppins_400Regular',
-    color: '#6D4C41',
+    color: '#666',
     textAlign: 'center',
     marginBottom: 25,
     lineHeight: 24,
   },
   modalButton: {
-    backgroundColor: '#e53935',
-    paddingVertical: 12,
+    backgroundColor: '#ff6b6b',
+    paddingVertical: 14,
     paddingHorizontal: 40,
-    borderRadius: 10,
-    elevation: 3,
+    borderRadius: 12,
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
   },
   modalButtonText: {
-    color: '#FFFFFF',
+    color: '#fff',
     fontSize: 16,
-    fontFamily: 'Poppins_600SemiBold',
+    fontWeight: 'bold',
   },
 });
 

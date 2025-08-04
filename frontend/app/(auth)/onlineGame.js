@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useAuth } from '../../store/AuthProvider';
-import { BackHandler } from 'react-native';
+import { BackHandler, Dimensions } from 'react-native';
 import {
   ImageBackground,
   SafeAreaView,
@@ -12,13 +12,18 @@ import {
   TouchableOpacity,
   ActivityIndicator
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, useRouter, useNavigation } from 'expo-router';
 import OnlineGameBoard from '../../components/modules/OnlineGameBoard';
 import Dice from '../../components/shared/Dice';
+import ChatComponent from '../../components/modules/ChatComponent';
 
 import { useSocket } from '../../store/SocketProvider';
 import { COLORS } from '../../constants/game';
 import LottieView from 'lottie-react-native';
+import { Ionicons } from '@expo/vector-icons';
+
+const { width, height } = Dimensions.get('window');
 
 const OnlineGameScreen = () => {
   const { user } = useAuth();
@@ -28,6 +33,21 @@ const OnlineGameScreen = () => {
   const [loading, setLoading] = useState(false);
   const [timeLeft, setTimeLeft] = useState(20);
   const [isCreator, setIsCreator] = useState(false);
+  const [isChatVisible, setIsChatVisible] = useState(false);
+  const [unreadMessageCount, setUnreadMessageCount] = useState(0);
+  const [chatWarning, setChatWarning] = useState('');
+  const [chatBlocked, setChatBlocked] = useState(false);
+  const [chatBlockDuration, setChatBlockDuration] = useState(0);
+
+  const handleProfanityWarning = (data) => {
+    setChatWarning(data.message);
+  };
+
+  const handleMessageBlocked = (data) => {
+    setChatBlocked(true);
+    setChatBlockDuration(data.blockDuration);
+  };
+
   const { 
     socket, 
     room, 
@@ -39,10 +59,17 @@ const OnlineGameScreen = () => {
     validMoves, 
     socketId,
     movePawn,
-  } = useSocket(); 
+    chatMessages,
+    sendMessage,
+    onProfanityWarning,
+    onMessageBlocked,
+  } = useSocket({
+    onProfanityWarning: handleProfanityWarning,
+    onMessageBlocked: handleMessageBlocked
+  }); 
 
-
-
+  // Current user tanımlaması
+  const currentUser = user;
 
   // Multiplayer board burada açıldığı için navigation yapılmıyor.
   // useEffect(() => {
@@ -154,6 +181,24 @@ useEffect(() => {
     ]).start(() => setShowTurnPopup(false));
   }
 }, [gameState?.turn, gamePhase]);
+
+  // Chat mesajları için unread sayısını takip et
+  useEffect(() => {
+    if (!isChatVisible && chatMessages && chatMessages.length > 0) {
+      // Chat kapalıyken yeni mesaj gelirse unread sayısını artır
+      const lastMessage = chatMessages[chatMessages.length - 1];
+      if (lastMessage && lastMessage.userId !== currentUser?.id) {
+        setUnreadMessageCount(prev => prev + 1);
+      }
+    }
+  }, [chatMessages, isChatVisible, currentUser]);
+
+  // Chat açıldığında unread sayısını sıfırla
+  useEffect(() => {
+    if (isChatVisible) {
+      setUnreadMessageCount(0);
+    }
+  }, [isChatVisible]);
 
   const popupStyle = {
     opacity: popupAnim,
@@ -417,12 +462,30 @@ useEffect(() => {
         )}
 
         <View style={styles.header}>
-          <Text style={styles.turnText}>
-            {gamePhase === 'pre-game'
-              ? 'Sıra Belirleme Turu'
-              : `Sıra: ${playersInfo && gameState?.currentPlayer && (playersInfo[gameState.currentPlayer]?.nickname || '...')}`}
-          </Text>
-          <View style={[styles.turnColorBox, { backgroundColor: COLORS[gameState?.currentPlayer] || '#888' }]} />
+          <View style={styles.headerCenter}>
+            <Text style={styles.turnText}>
+              {gamePhase === 'pre-game'
+                ? 'Sıra Belirleme Turu'
+                : `Sıra: ${playersInfo && gameState?.currentPlayer && (playersInfo[gameState.currentPlayer]?.nickname || '...')}`}
+            </Text>
+            <View style={[styles.turnColorBox, { backgroundColor: COLORS[gameState?.currentPlayer] || '#888' }]} />
+          </View>
+          <TouchableOpacity 
+            style={styles.chatButton}
+            onPress={() => {
+              console.log('Chat button pressed, current state:', isChatVisible);
+              setIsChatVisible(!isChatVisible);
+            }}
+          >
+            <Ionicons name="chatbubble-outline" size={24} color="white" />
+            {unreadMessageCount > 0 && (
+              <View style={styles.chatBadge}>
+                <Text style={styles.chatBadgeText}>
+                  {unreadMessageCount > 99 ? '99+' : unreadMessageCount}
+                </Text>
+              </View>
+            )}
+          </TouchableOpacity>
         </View>
 
         {(gamePhase === 'waiting' || (gamePhase !== 'finished' && (!players || players.length < 4))) && renderWaitingOverlay()}
@@ -485,6 +548,25 @@ useEffect(() => {
                 </TouchableOpacity>
               </View>
             </View>
+
+            {/* Chat Component */}
+            <ChatComponent
+              isVisible={isChatVisible}
+              onToggle={() => {
+                console.log('Chat toggle pressed, current state:', isChatVisible);
+                setIsChatVisible(!isChatVisible);
+              }}
+              messages={chatMessages || []}
+              onSendMessage={sendMessage}
+              currentUser={{ id: user?.id, nickname: user?.nickname }}
+              warningMessage={chatWarning}
+              isBlocked={chatBlocked}
+              blockDuration={chatBlockDuration}
+              onProfanityWarning={handleProfanityWarning}
+              onMessageBlocked={handleMessageBlocked}
+            />
+            
+
           </>
         )}
 
@@ -508,10 +590,41 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    justifyContent: 'space-between',
     padding: 10,
     backgroundColor: 'rgba(0, 0, 0, 0.4)',
     borderRadius: 10,
+  },
+  headerCenter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flex: 1,
+  },
+  chatButton: {
+    padding: 8,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    position: 'relative',
+  },
+  chatBadge: {
+    position: 'absolute',
+    top: -5,
+    right: -5,
+    backgroundColor: '#ff4444',
+    borderRadius: 10,
+    minWidth: 20,
+    height: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: 'white',
+  },
+  chatBadgeText: {
+    color: 'white',
+    fontSize: 12,
+    fontWeight: 'bold',
+    textAlign: 'center',
   },
   turnText: {
     fontSize: 22,

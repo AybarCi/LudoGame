@@ -9,6 +9,7 @@ import {
   View,
   TouchableOpacity
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useAuth } from '../../store/AuthProvider';
 import { useSocket } from '../../store/SocketProvider';
@@ -113,10 +114,9 @@ const GameScreen = () => {
   };
 
   return (
-    <ImageBackground 
-      source={require('../../assets/images/wood-background.png')}
+    <LinearGradient
+      colors={['#1a1a2e', '#16213e', '#0f3460']}
       style={{flex: 1}}
-      resizeMode="cover"
     >
       <SafeAreaView style={styles.container}>
       {showTurnPopup && (
@@ -226,7 +226,7 @@ const GameScreen = () => {
       </Modal>
 
       </SafeAreaView>
-    </ImageBackground>
+    </LinearGradient>
   );
 };
 

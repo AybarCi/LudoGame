@@ -1,5 +1,5 @@
-import React from 'react';
-import { View, StyleSheet, Text } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, StyleSheet, Text, ImageBackground } from 'react-native';
 import {
   COLORS,
   PATH_MAP,
@@ -37,7 +37,7 @@ const TRANSPARENT_COLORS = global.TRANSPARENT_COLORS || {
 };
 // Tüm sabitler constants/game.js'de yoksa fallback olarak burada tanımlı.
 
-import Pawn from '../shared/Pawn';
+import AnimatedPawn from '../shared/AnimatedPawn';
 
 // --- CONSTANTS FOR VISUAL CUES ---
 
@@ -158,6 +158,10 @@ const generateBoardLayout = (pawns, currentPlayer, diceValue) => {
 };
 
 const OnlineGameBoard = ({ players = [], gameState = {}, onPawnPress, currentPlayer, diceValue, playersInfo, style }) => {
+  // Hareket animasyonlarını yönetmek için state'ler
+  const [movingPawns, setMovingPawns] = useState(new Set());
+  const [lastGameState, setLastGameState] = useState(null);
+
   // Tek doğru kaynak olan gameState.positions'tan piyonları oluştur
   const pawns = players.flatMap(player => {
     const playerPositions = gameState.positions[player.color] || [];
@@ -169,6 +173,51 @@ const OnlineGameBoard = ({ players = [], gameState = {}, onPawnPress, currentPla
     }));
   });
 
+  // Piyon hareketlerini tespit et ve animasyon başlat
+  useEffect(() => {
+    if (lastGameState && gameState.positions) {
+      const newMovingPawns = new Set();
+      
+      // Her oyuncu için pozisyon değişikliklerini kontrol et
+      Object.keys(gameState.positions).forEach(color => {
+        const currentPositions = gameState.positions[color] || [];
+        const lastPositions = lastGameState.positions[color] || [];
+        
+        currentPositions.forEach((currentPos, pawnIndex) => {
+          const lastPos = lastPositions[pawnIndex];
+          if (lastPos !== undefined && lastPos !== currentPos) {
+            // Piyon hareket etti
+            const pawnId = `${color}-${pawnIndex}`;
+            newMovingPawns.add(pawnId);
+            
+            // Hareket mesafesini hesapla
+            let moveSteps = 1;
+            if (typeof currentPos === 'number' && typeof lastPos === 'number') {
+              if (lastPos === -1 && currentPos === 0) {
+                moveSteps = 1; // Evden çıkış
+              } else if (lastPos >= 0 && currentPos >= 0) {
+                moveSteps = Math.abs(currentPos - lastPos);
+              }
+            }
+            
+            console.log(`[Animation] Pawn ${pawnId} moving from ${lastPos} to ${currentPos}, steps: ${moveSteps}`);
+          }
+        });
+      });
+      
+      if (newMovingPawns.size > 0) {
+        setMovingPawns(newMovingPawns);
+        
+        // Animasyon tamamlandıktan sonra moving state'i temizle
+        setTimeout(() => {
+          setMovingPawns(new Set());
+        }, newMovingPawns.size * 300 + 500); // Her step 300ms + buffer
+      }
+    }
+    
+    setLastGameState(gameState);
+  }, [gameState.positions]);
+
   // Prop guard: undefined veya yanlış tip gelirse default değer kullan
   const safePawns = Array.isArray(pawns) ? pawns : [];
   const safeCurrentPlayer = typeof currentPlayer === 'string' ? currentPlayer : null;
@@ -177,16 +226,43 @@ const OnlineGameBoard = ({ players = [], gameState = {}, onPawnPress, currentPla
 
   const boardLayout = generateBoardLayout(safePawns, safeCurrentPlayer, safeDiceValue);
 
+  // Hareket eden piyon için step sayısını hesapla
+  const getMoveSteps = (pawnId) => {
+    if (!lastGameState || !movingPawns.has(pawnId)) return 0;
+    
+    const [color, pawnIndex] = pawnId.split('-');
+    const currentPos = gameState.positions[color]?.[parseInt(pawnIndex)];
+    const lastPos = lastGameState.positions[color]?.[parseInt(pawnIndex)];
+    
+    if (typeof currentPos === 'number' && typeof lastPos === 'number') {
+      if (lastPos === -1 && currentPos === 0) {
+        return 1; // Evden çıkış
+      } else if (lastPos >= 0 && currentPos >= 0) {
+        return Math.abs(currentPos - lastPos);
+      }
+    }
+    return 1;
+  };
+
   return (
-    <View style={[styles.board, style]}>
+    <ImageBackground 
+      source={require('../../assets/images/wood-background.png')}
+      style={[styles.board, style]}
+      resizeMode="cover"
+    >
       {boardLayout.map((cell, index) => {
         const backgroundColor =
           cell.type === 'base' ? TRANSPARENT_COLORS[cell.color] : // Use transparent colors for bases
-          cell.type === 'path' ? (cell.color === 'path' ? 'white' : COLORS[cell.color]) : // Use solid colors for home stretches
+          cell.type === 'path' ? (cell.color === 'path' ? 'rgba(255, 255, 255, 0.9)' : COLORS[cell.color]) : // Use solid colors for home stretches
           cell.type === 'goal' ? 'rgba(224, 224, 224, 0.3)' : // More transparent goal
           'transparent'; // Default to transparent to show the wood background
 
         const cellStyle = [styles.cell, { backgroundColor }];
+        
+        // Add border radius for home stretch paths
+        if (cell.type === 'path' && cell.color !== 'path') {
+          cellStyle.push({ borderRadius: 8 });
+        }
         if (cell.isHighlighted) {
           cellStyle.push(styles.highlightedCell);
         }
@@ -232,9 +308,20 @@ const OnlineGameBoard = ({ players = [], gameState = {}, onPawnPress, currentPla
           <View key={index} style={cellStyle}>
             {/* <Text style={styles.cellNumber}>{index}</Text> */}
             {cell.homeStretchEntranceFor && !cell.pawns.length && <Arrow color={cell.homeStretchEntranceFor} />}
-            {cell.pawns.map((pawn, pawnIndex) => (
-              <Pawn key={pawn.id} color={pawn.color} onPress={() => onPawnPress(pawn.pawnIndex, pawn.position)} />
-            ))}
+            {cell.pawns.map((pawn, pawnIndex) => {
+              const isMoving = movingPawns.has(pawn.id);
+              const moveSteps = getMoveSteps(pawn.id);
+              
+              return (
+                <AnimatedPawn 
+                  key={pawn.id} 
+                  color={pawn.color} 
+                  onPress={() => onPawnPress(pawn.pawnIndex, pawn.position)}
+                  isMoving={isMoving}
+                  moveSteps={moveSteps}
+                />
+              );
+            })}
           </View>
         );
       })}
@@ -246,7 +333,7 @@ const OnlineGameBoard = ({ players = [], gameState = {}, onPawnPress, currentPla
           {playersInfo.blue && <Text style={[styles.nickname, styles.nicknameBlue]}>{playersInfo.blue.nickname}</Text>}
         </>
       )}
-    </View>
+    </ImageBackground>
   );
 };
 
@@ -265,15 +352,23 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     position: 'relative',
+    borderRadius: 20,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 10,
+
   },
   cell: {
     width: `${100 / GRID_SIZE}%`,
     height: `${100 / GRID_SIZE}%`,
-    borderColor: '#999',
-    borderTopWidth: 0.5,
-    borderBottomWidth: 0.5,
-    borderLeftWidth: 0.5,
-    borderRightWidth: 0.5,
+    borderColor: 'rgba(255, 255, 255, 0.6)',
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+    borderLeftWidth: 1,
+    borderRightWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -292,11 +387,16 @@ const styles = StyleSheet.create({
   nickname: {
     position: 'absolute',
     fontWeight: 'bold',
-    color: '#000',
-    backgroundColor: 'rgba(255, 255, 255, 0.8)',
-    padding: 2,
-    borderRadius: 3,
+    color: '#fff',
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    padding: 6,
+    borderRadius: 12,
     fontSize: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 5,
   },
   nicknameRed: { bottom: '25%', left: '10%' },
   nicknameGreen: { top: '25%', left: '10%' },

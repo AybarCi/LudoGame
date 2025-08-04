@@ -6,6 +6,7 @@ const cors = require('cors');
 const { v4: uuidv4 } = require('uuid');
 const { findOrCreateUser } = require('./services/user-service');
 const { executeQuery, sql } = require('./db');
+const { checkProfanity, filterProfanity, profanityTracker, SEVERITY_LEVELS } = require('./utils/messageFilter');
 
 // --- Game Constants ---
 const PAWN_COUNT = 4;
@@ -16,7 +17,55 @@ const MAX_POSITION_INDEX = GOAL_START_INDEX + PAWN_COUNT - 1; // 61
 const START_OFFSET = { red: 41, green: 55, yellow: 13, blue: 27 };
 const SAFE_SPOTS_GLOBAL = [0, 8, 21, 34, 39, 47];
 const HOME_POSITIONS = { red: [-1, -1, -1, -1], green: [-1, -1, -1, -1], yellow: [-1, -1, -1, -1], blue: [-1, -1, -1, -1] };
-const AI_PLAYER_NAMES = ["Aslı", "Can", "Efe", "Gizem", "Cenk", "Cihan", "Acar", "Buse", "Burcu", "İlayda"];
+const AI_MALE_NAMES = [
+  "Ahmet", "Mehmet", "Mustafa", "Ali", "Hasan", "Hüseyin", "İbrahim", "İsmail", "Ömer", "Yusuf",
+  "Murat", "Emre", "Burak", "Serkan", "Özgür", "Tolga", "Kemal", "Erhan", "Fatih", "Selim",
+  "Cem", "Deniz", "Kaan", "Berk", "Arda", "Emir", "Eren", "Ege", "Alp", "Barış",
+  "Caner", "Doruk", "Furkan", "Gökhan", "Halil", "İlker", "Koray", "Levent", "Mert", "Onur",
+  "Ozan", "Polat", "Rıza", "Sinan", "Taner", "Uğur", "Volkan", "Yiğit", "Zafer", "Çağlar",
+  "Şahin", "Gürkan", "Tarık", "Serhat", "Orkun", "Kağan", "Batuhan", "Berkay", "Oğuz", "Tunç",
+  "Enes", "Yasin", "Recep", "Süleyman", "Abdurrahman", "Yunus", "Salih", "Ramazan", "Kadir", "Bilal",
+  "Erdem", "Gökay", "Hakan", "İlhan", "Kerem", "Mete", "Necati", "Orhan", "Poyraz", "Rüzgar",
+  "Sarp", "Tuncay", "Umut", "Veli", "Yavuz", "Zeki", "Çetin", "Şükrü", "Gürsel", "Tevfik"
+];
+
+const AI_FEMALE_NAMES = [
+  "Ayşe", "Fatma", "Emine", "Hatice", "Zeynep", "Elif", "Merve", "Özlem", "Sibel", "Gül",
+  "Esra", "Pınar", "Seda", "Burcu", "Aslı", "Gizem", "İlayda", "Buse", "Cansu", "Derya",
+  "Ebru", "Funda", "Gamze", "Hande", "İrem", "Jale", "Kübra", "Leman", "Melike", "Nalan",
+  "Oya", "Pelin", "Reyhan", "Selin", "Tuba", "Ülkü", "Vildan", "Yelda", "Zehra", "Çiğdem",
+  "Şule", "Gülşen", "Tuğba", "Serpil", "Özge", "Kıvılcım", "Begüm", "Berrak", "Özden", "Tülay",
+  "Emel", "Yasemin", "Rukiye", "Sümeyye", "Aysel", "Belgin", "Canan", "Dilek", "Esin", "Filiz",
+  "Gönül", "Hülya", "İnci", "Jülide", "Kezban", "Leyla", "Meryem", "Nurcan", "Ömür", "Perihan",
+  "Rabia", "Sevgi", "Tülin", "Ümran", "Vesile", "Yeliz", "Zeliha", "Çiçek", "Şebnem", "Gülhan",
+  "Tuğçe", "Serap", "Betül", "Büşra", "Özgül", "Tülün", "Ece", "Duygu", "Meltem", "Yıldız",
+  "Rüya", "Sıla", "Aylin", "Bengü", "Cemre", "Defne", "Ela", "Figen", "Gaye", "Hilal",
+  "İpek", "Kader", "Lale", "Mine", "Naz", "Rüveyda", "Seval", "Tijen", "Ufuk", "Veda",
+  "Zara", "Çağla", "Şeyda", "Gülizar"
+];
+
+// Rastgele AI ismi seçme fonksiyonu (cinsiyet dağılımı ile)
+const getRandomAIName = (usedNames = []) => {
+  // %60 erkek, %40 kadın dağılımı
+  const isMale = Math.random() < 0.6;
+  const namePool = isMale ? AI_MALE_NAMES : AI_FEMALE_NAMES;
+  
+  // Kullanılmamış isimleri filtrele
+  const availableNames = namePool.filter(name => !usedNames.includes(name));
+  
+  // Eğer o cinsiyetten isim kalmadıysa diğer cinsiyetten seç
+  if (availableNames.length === 0) {
+    const otherPool = isMale ? AI_FEMALE_NAMES : AI_MALE_NAMES;
+    const otherAvailable = otherPool.filter(name => !usedNames.includes(name));
+    if (otherAvailable.length > 0) {
+      return otherAvailable[Math.floor(Math.random() * otherAvailable.length)];
+    }
+    // Hiç isim kalmadıysa rastgele bir isim döndür
+    return namePool[Math.floor(Math.random() * namePool.length)];
+  }
+  
+  return availableNames[Math.floor(Math.random() * availableNames.length)];
+};
 const ROOM_TIMEOUT = 20000; // 20 seconds
 
 // --- Server Setup ---
@@ -423,12 +472,29 @@ const handlePawnMove = (room, player, move) => {
     if (isGameWon(positions[color])) {
         room.gameState.phase = 'finished';
         room.gameState.winner = color;
+        
+        // Oyun bittikten sonra sadece botlar kaldıysa odayı sil
+        setTimeout(async () => {
+            const humanPlayers = room.players.filter(p => !p.isBot);
+            if (humanPlayers.length === 0) {
+                console.log(`[Game Finished] Sadece botlar kaldı, oda siliniyor: ${room.id}`);
+                await deleteRoom(room.id, 'Oyun bitti ve sadece bot oyuncular kaldı');
+            }
+        }, 5000); // 5 saniye sonra kontrol et
     }
     
     return capturedAPawn;
 };
 
-const updateTurn = (room) => {
+const updateTurn = async (room) => {
+    // Sadece botlar kaldıysa odayı sil
+    const humanPlayers = room.players.filter(p => !p.isBot);
+    if (humanPlayers.length === 0) {
+        console.log(`[Update Turn] Sadece botlar kaldı, oda siliniyor: ${room.id}`);
+        await deleteRoom(room.id, 'Sadece bot oyuncular kaldı');
+        return;
+    }
+
     const { turnOrder, currentPlayer } = room.gameState;
     if (!turnOrder || turnOrder.length === 0) return;
     const currentIndex = turnOrder.indexOf(currentPlayer);
@@ -510,10 +576,10 @@ const playBotTurnIfNeeded = async (roomId) => {
         if (diceValue === 6 || capturedPawn || pawnFinished) {
             playBotTurnIfNeeded(roomId); // Play again
         } else {
-            updateTurn(room);
+            await updateTurn(room);
         }
     } else {
-        updateTurn(room);
+        await updateTurn(room);
     }
 };
 
@@ -553,11 +619,11 @@ const addAIPlayersToRoom = async (roomId) => {
     
     const availableColors = ['red', 'green', 'blue', 'yellow'].filter(c => !room.players.some(p => p.color === c));
     const usedAINames = room.players.filter(p => p.isBot).map(p => p.nickname);
-    const availableAINames = AI_PLAYER_NAMES.filter(name => !usedAINames.includes(name));
     
     for (let i = 0; i < neededPlayers && i < availableColors.length; i++) {
         const color = availableColors[i];
-        const aiName = availableAINames[i % availableAINames.length];
+        const aiName = getRandomAIName(usedAINames);
+        usedAINames.push(aiName); // Aynı oda içinde tekrar kullanılmasını önle
         const aiId = uuidv4();
         const dbPlayerId = uuidv4();
         
@@ -896,11 +962,11 @@ io.on('connection', (socket) => {
         updateRoom(roomId);
         if (validMoves.length === 0) {
             console.log(`[Game] ${player.nickname} has no valid moves`);
-            setTimeout(() => updateTurn(room), 1000);
+            setTimeout(async () => await updateTurn(room), 1000);
         }
     });
 
-    socket.on('move_pawn', ({ roomId, move }) => {
+    socket.on('move_pawn', async ({ roomId, move }) => {
         console.log(`[MOVE_PAWN] Received move_pawn event:`, { roomId, move });
         const room = rooms[roomId];
         if (!room) {
@@ -919,22 +985,95 @@ io.on('connection', (socket) => {
 
         console.log(`[MOVE_PAWN] ${player.nickname} moving pawn ${move.pawnIndex} from ${move.from} to ${move.to}`);
         const capturedPawn = handlePawnMove(room, player, move);
-        const pawnFinished = move.to === 59; // Goal position is 59
         const rolledSix = room.gameState.diceValue === 6;
 
-        console.log(`[MOVE_PAWN] Move results - Captured: ${capturedPawn}, Finished: ${pawnFinished}, Rolled Six: ${rolledSix}`);
+        console.log(`[MOVE_PAWN] Move results - Captured: ${capturedPawn}, Rolled Six: ${rolledSix}`);
 
         room.gameState.validMoves = [];
         room.gameState.diceValue = null;
         updateRoom(roomId);
 
-        if (rolledSix || capturedPawn || pawnFinished) {
+        if (rolledSix || capturedPawn) {
             console.log(`[MOVE_PAWN] ${player.nickname} gets another turn`);
             // Player gets another turn, do nothing, wait for next roll
         } else {
             console.log(`[MOVE_PAWN] ${player.nickname} turn ends, switching to next player`);
-            updateTurn(room);
+            await updateTurn(room);
         }
+    });
+
+    // Chat events
+    socket.on('send_message', ({ roomId, message }) => {
+        console.log(`[CHAT] Message from ${socket.id} in room ${roomId}: ${message}`);
+        const room = rooms[roomId];
+        if (!room) {
+            console.log(`[CHAT] Room not found: ${roomId}`);
+            return;
+        }
+        const player = room.players.find(p => p.socketId === socket.id);
+        if (!player) {
+            console.log(`[CHAT] Player not found for socket: ${socket.id}`);
+            return;
+        }
+
+        // Kullanıcının ceza durumunu kontrol et
+        const penalty = profanityTracker.checkPenalty(player.id);
+        if (penalty.shouldBlock) {
+            socket.emit('message_blocked', {
+                reason: penalty.reason,
+                duration: penalty.duration
+            });
+            console.log(`[CHAT] Message blocked for user ${player.nickname}: ${penalty.reason}`);
+            return;
+        }
+
+        // Mesajı küfür/hakaret açısından kontrol et
+        const profanityCheck = checkProfanity(message);
+        let finalMessage = message;
+        
+        if (profanityCheck.hasProfanity) {
+            console.log(`[CHAT] Profanity detected from ${player.nickname}:`, profanityCheck.foundWords);
+            
+            // İhlali kaydet
+            profanityTracker.recordViolation(player.id, profanityCheck.severity);
+            
+            // Mesajı filtrele
+            finalMessage = filterProfanity(message);
+            
+            // Kullanıcıya uyarı gönder
+            socket.emit('profanity_warning', {
+                severity: profanityCheck.severity,
+                message: profanityCheck.severity >= SEVERITY_LEVELS.HIGH 
+                    ? 'Ağır küfür/hakaret tespit edildi. Lütfen nezaket kurallarına uyun.'
+                    : 'Uygunsuz dil kullanımı tespit edildi. Lütfen daha nazik olun.'
+            });
+        }
+
+        const chatMessage = {
+            id: uuidv4(),
+            userId: player.id,
+            userName: player.nickname,
+            text: finalMessage,
+            timestamp: Date.now(),
+            isFiltered: profanityCheck.hasProfanity
+        };
+
+        // Initialize chat messages array if it doesn't exist
+        if (!room.chatMessages) {
+            room.chatMessages = [];
+        }
+
+        // Add message to room
+        room.chatMessages.push(chatMessage);
+
+        // Keep only last 100 messages
+        if (room.chatMessages.length > 100) {
+            room.chatMessages = room.chatMessages.slice(-100);
+        }
+
+        // Broadcast message to all players in the room
+        io.to(roomId).emit('new_message', chatMessage);
+        console.log(`[CHAT] Message broadcasted to room ${roomId}${profanityCheck.hasProfanity ? ' (filtered)' : ''}`);
     });
 
     socket.on('leave_room', async () => { await leaveRoomAsync(socket.id); });

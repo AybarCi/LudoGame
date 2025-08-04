@@ -5,8 +5,30 @@ import { io } from 'socket.io-client';
 const SocketContext = createContext(null);
 
 // 2. Kolay erişim için hook'u oluştur
-export const useSocket = () => {
-    return useContext(SocketContext);
+export const useSocket = ({
+  onGameUpdate,
+  onPlayerJoined,
+  onPlayerLeft,
+  onGameStarted,
+  onTurnUpdate,
+  onDiceRolled,
+  onPawnMoved,
+  onGameFinished,
+  onNewMessage,
+  onRoomUpdate,
+  onProfanityWarning,
+  onMessageBlocked
+} = {}) => {
+    const context = useContext(SocketContext);
+    
+    // Profanity callback'lerini set et
+    useEffect(() => {
+        if (context?.setProfanityCallbacks) {
+            context.setProfanityCallbacks(onProfanityWarning, onMessageBlocked);
+        }
+    }, [onProfanityWarning, onMessageBlocked, context?.setProfanityCallbacks]);
+    
+    return context;
 };
 
 // 3. Provider bileşenini oluştur
@@ -16,12 +38,26 @@ export const SocketProvider = ({ children }) => {
     const [room, setRoom] = useState(null);
     const [roomClosed, setRoomClosed] = useState({ isClosed: false, reason: '' });
     const [socketId, setSocketId] = useState();
+    const [chatMessages, setChatMessages] = useState([]);
     const lastRoomIdRef = useRef(null); // Son girilen odayı saklamak için ref
+    const profanityCallbacksRef = useRef({ onProfanityWarning: null, onMessageBlocked: null });
 
     const movePawn = useCallback((pawnId) => {
         if (socketRef.current && room?.id) {
             console.log(`[Socket] Emitting 'move_pawn' for pawn: ${pawnId}`);
             socketRef.current.emit('move_pawn', { roomId: room.id, pawnId });
+        }
+    }, [room?.id]);
+
+    const sendMessage = useCallback((message) => {
+        console.log('[SocketProvider] sendMessage called with:', message);
+        console.log('[SocketProvider] Socket connected:', socketRef.current?.connected);
+        console.log('[SocketProvider] Room ID:', room?.id);
+        if (socketRef.current && room?.id && message.trim()) {
+            console.log(`[Socket] Sending message: ${message}`);
+            socketRef.current.emit('send_message', { roomId: room.id, message: message.trim() });
+        } else {
+            console.log('[SocketProvider] Cannot send message - missing requirements');
         }
     }, [room?.id]);
 
@@ -51,6 +87,10 @@ export const SocketProvider = ({ children }) => {
     }, [isConnected, room]);
 
     // contextValue'yu memoize ederek gereksiz re-render'ları önle
+    const setProfanityCallbacks = useCallback((onProfanityWarning, onMessageBlocked) => {
+        profanityCallbacksRef.current = { onProfanityWarning, onMessageBlocked };
+    }, []);
+
     const contextValue = useMemo(() => {
         const connect = (user) => {
             // Zaten bağlıysa veya kullanıcı yoksa işlem yapma
@@ -108,10 +148,11 @@ export const SocketProvider = ({ children }) => {
                     }, 5000);
                 });
 
-                // Oda güncellendiğinde tetiklenecek
-                socketRef.current.on('room_updated', (updatedRoom) => {
-                    console.log('[SocketProvider] Oda güncellendi:', updatedRoom.id, 'Phase:', updatedRoom.gameState?.phase);
-                    console.log('[SocketProvider] players received:', updatedRoom.players);
+
+
+                // Oyun başladığında tetiklenecek
+                socketRef.current.on('game_started', (updatedRoom) => {
+                    console.log('[SocketProvider] Oyun başladı! Room:', updatedRoom.id, 'Phase:', updatedRoom.gameState?.phase);
                     setRoom(prevRoom => {
                         const newRoom = { ...prevRoom, ...updatedRoom };
                         if (prevRoom?.gameState && updatedRoom?.gameState) {
@@ -124,9 +165,43 @@ export const SocketProvider = ({ children }) => {
                     });
                 });
 
-                // Oyun başladığında tetiklenecek
-                socketRef.current.on('game_started', (updatedRoom) => {
-                    console.log('[SocketProvider] Oyun başladı! Room:', updatedRoom.id, 'Phase:', updatedRoom.gameState?.phase);
+                // Chat event'leri
+                socketRef.current.on('new_message', (message) => {
+                    console.log('[SocketProvider] Yeni mesaj alındı:', message);
+                    setChatMessages(prevMessages => {
+                        console.log('[SocketProvider] Önceki mesajlar:', prevMessages);
+                        const newMessages = [...prevMessages, message];
+                        console.log('[SocketProvider] Yeni mesajlar:', newMessages);
+                        return newMessages;
+                    });
+                });
+
+                // Küfür uyarısı
+                socketRef.current.on('profanity_warning', (data) => {
+                    console.log('[SocketProvider] Küfür uyarısı alındı:', data);
+                    if (profanityCallbacksRef.current.onProfanityWarning) {
+                        profanityCallbacksRef.current.onProfanityWarning(data);
+                    }
+                });
+
+                // Mesaj bloklandı
+                socketRef.current.on('message_blocked', (data) => {
+                    console.log('[SocketProvider] Mesaj bloklandı:', data);
+                    if (profanityCallbacksRef.current.onMessageBlocked) {
+                        profanityCallbacksRef.current.onMessageBlocked(data);
+                    }
+                });
+
+                // Odaya katılırken mevcut mesajları al
+                socketRef.current.on('room_updated', (updatedRoom) => {
+                    console.log('[SocketProvider] Oda güncellendi:', updatedRoom.id, 'Phase:', updatedRoom.gameState?.phase);
+                    console.log('[SocketProvider] players received:', updatedRoom.players);
+                    
+                    // Chat mesajlarını güncelle
+                    if (updatedRoom.chatMessages) {
+                        setChatMessages(updatedRoom.chatMessages);
+                    }
+                    
                     setRoom(prevRoom => {
                         const newRoom = { ...prevRoom, ...updatedRoom };
                         if (prevRoom?.gameState && updatedRoom?.gameState) {
@@ -192,12 +267,16 @@ export const SocketProvider = ({ children }) => {
             validMoves: room?.gameState?.validMoves || [],
             turnOrder: room?.gameState?.turnOrder || [],
             preGameRolls: room?.gameState?.turnOrderRolls || [],
+            // Chat functionality
+            chatMessages,
+            sendMessage,
+            setProfanityCallbacks,
             connect,
             joinRoom,
             leaveRoom,
             disconnect,
         };
-    }, [isConnected, room]); // isConnected veya room değiştiğinde contextValue yeniden hesaplanır
+    }, [isConnected, room, chatMessages]); // isConnected, room veya chatMessages değiştiğinde contextValue yeniden hesaplanır
 
     return (
         <SocketContext.Provider value={contextValue}>

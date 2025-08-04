@@ -38,13 +38,20 @@ export function AuthProvider({ children }) {
     const signIn = async (email, password) => {
         setLoading(true);
         try {
+            console.log('API_URL:', API_URL);
+            console.log('Request URL:', `${API_URL}/api/login`);
             const response = await fetch(`${API_URL}/api/login`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ email, password }),
             });
 
-            const data = await response.json();
+            console.log('Response status:', response.status);
+            console.log('Response headers:', response.headers);
+            const responseText = await response.text();
+            console.log('Response text:', responseText);
+            
+            const data = JSON.parse(responseText);
 
             if (!response.ok) {
                 throw new Error(data.message || 'Login failed');
@@ -57,7 +64,7 @@ export function AuthProvider({ children }) {
             await AsyncStorage.setItem('token', token);
             await AsyncStorage.setItem('user', JSON.stringify(userData));
             
-            router.replace('/(auth)/home');
+            // Navigation will be handled by the layout's useEffect
             return {};
         } catch (error) {
             console.error('Sign in error:', error);
@@ -98,7 +105,10 @@ export function AuthProvider({ children }) {
             await AsyncStorage.removeItem('user');
             setUser(null);
             setSession(null);
-            router.replace('/login');
+            // Root Layout'un mount edilmesini beklemek için setTimeout kullan
+            setTimeout(() => {
+                router.replace('/login');
+            }, 100);
         } catch (error) {
             console.error('Sign out error:', error);
         } finally {
