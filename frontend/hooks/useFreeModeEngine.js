@@ -199,10 +199,13 @@ const gameReducer = (state, action) => {
       
       const currentPlayerIndex = state.players.indexOf(state.currentPlayer);
       const nextPlayer = state.players[(currentPlayerIndex + 1) % state.players.length];
+      
+      // Check if all players have rolled
+      const allPlayersRolled = newTurnOrderRolls.length === state.players.length;
 
       return {
         ...state,
-        diceValue,
+        diceValue: allPlayersRolled ? diceValue : null, // Keep dice value only if all players rolled
         turnOrderRolls: newTurnOrderRolls,
         currentPlayer: nextPlayer,
         gameMessage: `${state.playersInfo[state.currentPlayer]?.nickname || state.currentPlayer} ${diceValue} attı.`,

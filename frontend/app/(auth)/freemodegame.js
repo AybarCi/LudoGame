@@ -189,6 +189,30 @@ const FreeModeGame = () => {
           </LinearGradient>
         </Animated.View>
         
+        {/* Turn Order Display - Only show during pre-game */}
+        {state.gamePhase === 'pre-game' && state.turnOrderRolls.length > 0 && (
+          <View style={styles.turnOrderContainer}>
+            <Text style={styles.turnOrderTitle}>Sıralama Sonuçları</Text>
+            <View style={styles.turnOrderList}>
+              {state.turnOrderRolls.map((roll, index) => {
+                const playerColor = roll.color;
+                const playerName = state.playersInfo[playerColor]?.nickname || playerColor;
+                return (
+                  <View key={index} style={styles.turnOrderItem}>
+                    <LinearGradient
+                      colors={playerColorMap[playerColor]}
+                      style={styles.turnOrderGradient}
+                    >
+                      <Text style={styles.turnOrderPlayerName}>{playerName}</Text>
+                      <Text style={styles.turnOrderDiceValue}>{roll.roll}</Text>
+                    </LinearGradient>
+                  </View>
+                );
+              })}
+            </View>
+          </View>
+        )}
+        
         {/* Game Board */}
         <View style={styles.boardContainer}>
           <FreeModeBoard
@@ -415,6 +439,46 @@ const styles = StyleSheet.create({
   messageText: {
     fontSize: isTablet ? 18 : 16,
     fontWeight: '600',
+    color: '#FFF',
+    textAlign: 'center'
+  },
+  turnOrderContainer: {
+    marginHorizontal: 20,
+    marginBottom: 10
+  },
+  turnOrderTitle: {
+    fontSize: isTablet ? 16 : 14,
+    fontWeight: 'bold',
+    color: '#FFF',
+    textAlign: 'center',
+    marginBottom: 10,
+    opacity: 0.9
+  },
+  turnOrderList: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    flexWrap: 'wrap',
+    gap: 8
+  },
+  turnOrderItem: {
+    minWidth: isTablet ? 100 : 80
+  },
+  turnOrderGradient: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    elevation: 3,
+    alignItems: 'center'
+  },
+  turnOrderPlayerName: {
+    fontSize: isTablet ? 12 : 10,
+    fontWeight: 'bold',
+    color: '#FFF',
+    textAlign: 'center'
+  },
+  turnOrderDiceValue: {
+    fontSize: isTablet ? 18 : 16,
+    fontWeight: 'bold',
     color: '#FFF',
     textAlign: 'center'
   },
