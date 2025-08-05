@@ -153,6 +153,13 @@ const getInitialState = (mode, playersInfo) => {
 // --- GAME REDUCER ---
 const gameReducer = (state, action) => {
   switch (action.type) {
+    case 'START_ROLLING': {
+      return {
+        ...state,
+        isRolling: true
+      };
+    }
+
     case 'RESET_GAME': {
       // Pass the existing playersInfo to preserve nicknames on reset
       return getInitialState(state.aiPlayers.length > 0 ? 'ai' : 'local', state.playersInfo);
@@ -187,6 +194,7 @@ const gameReducer = (state, action) => {
         players: newPlayerOrder,
         currentPlayer: firstPlayer,
         turnOrderDetermined: true,
+        diceValue: null, // Ensure dice is ready for first roll
         gameMessage: `Oyun başlıyor. İlk sıra: ${state.playersInfo[firstPlayer]?.nickname || firstPlayer}.`,
       };
     }
@@ -214,7 +222,7 @@ const gameReducer = (state, action) => {
     }
 
     case 'ROLL_DICE': {
-      if (state.gamePhase !== 'playing' || state.isRolling) return state;
+      if (state.gamePhase !== 'playing') return state;
 
       const diceValue = Math.floor(Math.random() * 6) + 1;
       const possibleMoves = getPossibleMoves(state.pawns, state.currentPlayer, diceValue);
@@ -288,10 +296,35 @@ const gameReducer = (state, action) => {
         p.id === pawnId ? { ...p, position: newPosition } : p
       );
 
-      // Check for captures
+      // Check for captures along the path and at destination
       const capturedPawns = updatedPawns.map(p => {
-        if (p.id !== pawnId && p.position === newPosition && p.color !== pawn.color && newPosition < 56) {
-          return { ...p, position: -1 }; // Send captured pawn home
+        if (p.id !== pawnId && p.color !== pawn.color && p.position >= 0 && p.position < 56) {
+          // Check if this pawn is in the path of movement
+          const startPos = pawn.position;
+          const endPos = newPosition;
+          
+          // If moving from home (position -1), only check destination
+          if (startPos === -1) {
+            if (p.position === endPos) {
+              return { ...p, position: -1 }; // Send captured pawn home
+            }
+          } else {
+            // Check all positions in the movement path
+            for (let step = 1; step <= state.diceValue; step++) {
+              let checkPos;
+              if (startPos + step === endPos) {
+                checkPos = endPos;
+              } else if (startPos + step < 56) {
+                checkPos = startPos + step;
+              } else {
+                break; // Entered home stretch
+              }
+              
+              if (p.position === checkPos) {
+                return { ...p, position: -1 }; // Send captured pawn home
+              }
+            }
+          }
         }
         return p;
       });

@@ -94,7 +94,7 @@ const FreeModeGame = () => {
       }
     }, 500);
   };
-  
+
   // Handle pawn selection
   const handlePawnPress = (pawnId) => {
     if (!state.diceValue || state.winner) return;
@@ -179,15 +179,7 @@ const FreeModeGame = () => {
           </TouchableOpacity>
         </View>
         
-        {/* Game Message */}
-        <Animated.View style={[styles.messageContainer, messageAnimatedStyle]}>
-          <LinearGradient
-            colors={playerColorMap[currentPlayerColor]}
-            style={styles.messageGradient}
-          >
-            <Text style={styles.messageText}>{state.gameMessage}</Text>
-          </LinearGradient>
-        </Animated.View>
+
         
         {/* Turn Order Display - Only show during pre-game */}
         {state.gamePhase === 'pre-game' && state.turnOrderRolls.length > 0 && (
@@ -262,7 +254,9 @@ const FreeModeGame = () => {
             </Animated.View>
             
             <Text style={styles.diceLabel}>
-              {!state.diceValue && !state.winner && !state.isRolling ? 'Zar At!' : 'Bekle...'}
+              {!state.diceValue && !state.winner && !state.isRolling ? 'Zar At!' : 
+               state.diceValue && possibleMoves.length > 0 ? `${possibleMoves.length} hamle mümkün - Piyon seçin!` : 
+               state.diceValue && possibleMoves.length === 0 ? 'Hamle yok - Bekle...' : 'Bekle...'}
             </Text>
           </View>
         </View>
@@ -426,22 +420,6 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     backgroundColor: 'rgba(255,255,255,0.1)'
   },
-  messageContainer: {
-    marginHorizontal: 20,
-    marginVertical: 10
-  },
-  messageGradient: {
-    paddingVertical: 15,
-    paddingHorizontal: 20,
-    borderRadius: 15,
-    elevation: 5
-  },
-  messageText: {
-    fontSize: isTablet ? 18 : 16,
-    fontWeight: '600',
-    color: '#FFF',
-    textAlign: 'center'
-  },
   turnOrderContainer: {
     marginHorizontal: 20,
     marginBottom: 10
@@ -541,7 +519,11 @@ const styles = StyleSheet.create({
   diceLabel: {
     fontSize: isTablet ? 16 : 14,
     color: '#FFF',
-    fontWeight: '600'
+    fontWeight: '600',
+    textAlign: 'center',
+    minHeight: isTablet ? 48 : 40,
+    lineHeight: isTablet ? 24 : 20,
+    paddingVertical: 4
   },
   statsContainer: {
     flexDirection: isTablet ? 'row' : 'column',
