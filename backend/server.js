@@ -849,6 +849,166 @@ app.post('/api/user/score', authenticateToken, async (req, res) => {
     }
 });
 
+// Piyon mağazası endpoint'leri
+app.get('/api/shop/pawns', authenticateToken, async (req, res) => {
+    try {
+        const userId = req.user.userId;
+        
+        // Kullanıcının sahip olduğu piyonları getir
+        const ownedPawns = await executeQuery(
+            'SELECT pawn_id FROM UserPawns WHERE user_id = @userId',
+            [{ name: 'userId', type: sql.NVarChar(36), value: userId }]
+        );
+        
+        const ownedPawnIds = ownedPawns.map(p => p.pawn_id);
+        
+        res.json({ 
+            success: true, 
+            ownedPawns: ownedPawnIds 
+        });
+    } catch (error) {
+        console.error('Error fetching owned pawns:', error);
+        res.status(500).json({ error: 'Failed to fetch owned pawns' });
+    }
+});
+
+app.post('/api/shop/purchase', authenticateToken, async (req, res) => {
+    try {
+        const { pawnId, price, currency } = req.body;
+        const userId = req.user.userId;
+        
+        // Kullanıcının mevcut puanını kontrol et
+        const userResult = await executeQuery(
+            'SELECT score FROM users WHERE id = @userId',
+            [{ name: 'userId', type: sql.NVarChar(36), value: userId }]
+        );
+        
+        if (userResult.length === 0) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+        
+        const currentScore = userResult[0].score || 0;
+        
+        // Zaten sahip olup olmadığını kontrol et
+        const existingPawn = await executeQuery(
+            'SELECT * FROM UserPawns WHERE user_id = @userId AND pawn_id = @pawnId',
+            [
+                { name: 'userId', type: sql.NVarChar(36), value: userId },
+                { name: 'pawnId', type: sql.NVarChar(50), value: pawnId }
+            ]
+        );
+        
+        if (existingPawn.length > 0) {
+            return res.status(400).json({ error: 'Pawn already owned' });
+        }
+        
+        if (currency === 'points') {
+            // Puan ile satın alma
+            if (currentScore < price) {
+                return res.status(400).json({ error: 'Insufficient points' });
+            }
+            
+            // Puanı düş ve piyonu ekle
+            await executeQuery(
+                'UPDATE users SET score = score - @price WHERE id = @userId',
+                [
+                    { name: 'price', type: sql.Int, value: price },
+                    { name: 'userId', type: sql.NVarChar(36), value: userId }
+                ]
+            );
+            
+            await executeQuery(
+                'INSERT INTO UserPawns (user_id, pawn_id, purchased_at) VALUES (@userId, @pawnId, GETDATE())',
+                [
+                    { name: 'userId', type: sql.NVarChar(36), value: userId },
+                    { name: 'pawnId', type: sql.NVarChar(50), value: pawnId }
+                ]
+            );
+            
+            res.json({ 
+                success: true, 
+                message: 'Pawn purchased successfully',
+                newScore: currentScore - price
+            });
+        } else {
+            // Para ile satın alma - şimdilik sadece başarılı mesajı
+            await executeQuery(
+                'INSERT INTO UserPawns (user_id, pawn_id, purchased_at) VALUES (@userId, @pawnId, GETDATE())',
+                [
+                    { name: 'userId', type: sql.NVarChar(36), value: userId },
+                    { name: 'pawnId', type: sql.NVarChar(50), value: pawnId }
+                ]
+            );
+            
+            res.json({ 
+                success: true, 
+                message: 'Pawn purchased successfully with money'
+            });
+        }
+    } catch (error) {
+        console.error('Error purchasing pawn:', error);
+        res.status(500).json({ error: 'Failed to purchase pawn' });
+    }
+});
+
+app.get('/api/user/selected-pawn', authenticateToken, async (req, res) => {
+    try {
+        const userId = req.user.userId;
+        
+        const result = await executeQuery(
+            'SELECT selected_pawn FROM users WHERE id = @userId',
+            [{ name: 'userId', type: sql.NVarChar(36), value: userId }]
+        );
+        
+        res.json({ 
+            success: true, 
+            selectedPawn: result[0]?.selected_pawn || 'default'
+        });
+    } catch (error) {
+        console.error('Error fetching selected pawn:', error);
+        res.status(500).json({ error: 'Failed to fetch selected pawn' });
+    }
+});
+
+app.post('/api/user/select-pawn', authenticateToken, async (req, res) => {
+    try {
+        const { pawnId } = req.body;
+        const userId = req.user.userId;
+        
+        // Kullanıcının bu piyona sahip olup olmadığını kontrol et
+        if (pawnId !== 'default') {
+            const ownedPawn = await executeQuery(
+                'SELECT * FROM UserPawns WHERE user_id = @userId AND pawn_id = @pawnId',
+                [
+                    { name: 'userId', type: sql.NVarChar(36), value: userId },
+                    { name: 'pawnId', type: sql.NVarChar(50), value: pawnId }
+                ]
+            );
+            
+            if (ownedPawn.length === 0) {
+                return res.status(400).json({ error: 'Pawn not owned' });
+            }
+        }
+        
+        // Seçili piyonu güncelle
+        await executeQuery(
+            'UPDATE users SET selected_pawn = @pawnId WHERE id = @userId',
+            [
+                { name: 'pawnId', type: sql.NVarChar(50), value: pawnId },
+                { name: 'userId', type: sql.NVarChar(36), value: userId }
+            ]
+        );
+        
+        res.json({ 
+            success: true, 
+            message: 'Pawn selected successfully'
+        });
+    } catch (error) {
+        console.error('Error selecting pawn:', error);
+        res.status(500).json({ error: 'Failed to select pawn' });
+    }
+});
+
 
 // --- Socket.IO Handlers ---
 io.on('connection', (socket) => {

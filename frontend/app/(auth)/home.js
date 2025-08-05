@@ -6,6 +6,7 @@ import { useRouter } from 'expo-router';
 import { useAuth } from '../../store/AuthProvider';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
+import HomeButtons from '../../components/modules/HomeButtons';
 
 const { width, height } = Dimensions.get('window');
 
@@ -78,6 +79,14 @@ const HomeScreen = () => {
     router.push('/lobby');
   };
 
+  const handleShop = () => {
+    router.push('/shop');
+  };
+
+  const handleFreeMode = () => {
+    router.push('/freemode');
+  };
+
   if (!user) {
     return (
       <View style={styles.container}>
@@ -133,6 +142,43 @@ const HomeScreen = () => {
           </View>
         </Animated.View>
 
+        {/* Logout Icon - Top Left */}
+        <TouchableOpacity 
+          style={styles.logoutIcon}
+          onPress={signOut}
+          disabled={loading}
+          activeOpacity={0.8}
+        >
+          <LinearGradient
+            colors={['#FF5722', '#FF7043']}
+            style={styles.logoutIconGradient}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+          >
+            {loading ? (
+               <ActivityIndicator size={24} color="white" />
+             ) : (
+               <Ionicons name="log-out" size={24} color="white" />
+             )}
+          </LinearGradient>
+        </TouchableOpacity>
+
+        {/* Market Icon - Top Right */}
+        <TouchableOpacity 
+          style={styles.marketIcon}
+          onPress={handleShop}
+          activeOpacity={0.8}
+        >
+          <LinearGradient
+            colors={['#9C27B0', '#BA68C8']}
+            style={styles.marketIconGradient}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+          >
+            <Ionicons name="storefront" size={24} color="white" />
+          </LinearGradient>
+        </TouchableOpacity>
+
         <View style={styles.bottomContainer}>
           <Animated.View 
             style={[
@@ -142,103 +188,17 @@ const HomeScreen = () => {
           >
             <Text style={styles.modeTitle}>Oyun Modu Seç</Text>
             
-            <Animated.View 
-              style={[
-                styles.gameButtonContainer,
-                {
-                  opacity: buttonAnims[0],
-                  transform: [{
-                    translateY: buttonAnims[0].interpolate({
-                      inputRange: [0, 1],
-                      outputRange: [20, 0]
-                    })
-                  }]
-                }
-              ]}
-            >
-              <TouchableOpacity style={styles.gameButton} onPress={handlePlayWithAI}>
-                <LinearGradient
-                  colors={['#FF6B35', '#FF8E53']}
-                  style={styles.buttonGradient}
-                >
-                  <View style={styles.buttonContent}>
-                    <Ionicons name="hardware-chip" size={28} color="white" />
-                    <View style={styles.buttonTextContainer}>
-                      <Text style={styles.buttonTitle}>Yapay Zeka</Text>
-                      <Text style={styles.buttonSubtitle}>Bilgisayara karşı oyna</Text>
-                    </View>
-                    <Ionicons name="chevron-forward" size={20} color="rgba(255,255,255,0.7)" />
-                  </View>
-                </LinearGradient>
-              </TouchableOpacity>
-            </Animated.View>
-
-            <Animated.View 
-              style={[
-                styles.gameButtonContainer,
-                {
-                  opacity: buttonAnims[1],
-                  transform: [{
-                    translateY: buttonAnims[1].interpolate({
-                      inputRange: [0, 1],
-                      outputRange: [20, 0]
-                    })
-                  }]
-                }
-              ]}
-            >
-              <TouchableOpacity style={styles.gameButton} onPress={handlePlayOnline}>
-                <LinearGradient
-                  colors={['#4CAF50', '#66BB6A']}
-                  style={styles.buttonGradient}
-                >
-                  <View style={styles.buttonContent}>
-                    <Ionicons name="globe" size={28} color="white" />
-                    <View style={styles.buttonTextContainer}>
-                      <Text style={styles.buttonTitle}>Online Oyun</Text>
-                      <Text style={styles.buttonSubtitle}>Gerçek oyunculara karşı</Text>
-                    </View>
-                    <Ionicons name="chevron-forward" size={20} color="rgba(255,255,255,0.7)" />
-                  </View>
-                </LinearGradient>
-              </TouchableOpacity>
-            </Animated.View>
-
-            <Animated.View 
-              style={[
-                styles.gameButtonContainer,
-                {
-                  opacity: buttonAnims[2],
-                  transform: [{
-                    translateY: buttonAnims[2].interpolate({
-                      inputRange: [0, 1],
-                      outputRange: [20, 0]
-                    })
-                  }]
-                }
-              ]}
-            >
-              <TouchableOpacity 
-                style={[styles.gameButton, styles.logoutButton]} 
-                onPress={signOut}
-                disabled={loading}
-              >
-                <View style={styles.buttonContent}>
-                  {loading ? (
-                    <ActivityIndicator size={28} color="rgba(255,255,255,0.8)" />
-                  ) : (
-                    <Ionicons name="log-out" size={28} color="rgba(255,255,255,0.8)" />
-                  )}
-                  <View style={styles.buttonTextContainer}>
-                    <Text style={[styles.buttonTitle, styles.logoutButtonTitle]}>
-                      {loading ? 'Çıkış Yapılıyor...' : 'Çıkış Yap'}
-                    </Text>
-                    <Text style={[styles.buttonSubtitle, styles.logoutButtonSubtitle]}>Hesaptan çık</Text>
-                  </View>
-                  {!loading && <Ionicons name="chevron-forward" size={20} color="rgba(255,255,255,0.5)" />}
-                </View>
-              </TouchableOpacity>
-            </Animated.View>
+            <HomeButtons 
+              fadeAnim={fadeAnim}
+              buttonAnims={buttonAnims}
+              handlePlayWithAI={handlePlayWithAI}
+              handlePlayOnline={handlePlayOnline}
+              handleFreeMode={handleFreeMode}
+              handleShop={handleShop}
+              signOut={signOut}
+              loading={loading}
+              showShopButton={false}
+            />
           </Animated.View>
         </View>
       </LinearGradient>
@@ -252,13 +212,13 @@ const styles = StyleSheet.create({
   },
   gradient: {
     flex: 1,
-    paddingVertical: height * 0.05,
+    paddingVertical: height * 0.03,
     paddingHorizontal: 20,
   },
   topContainer: {
     alignItems: 'center',
-    paddingTop: 40,
-    paddingBottom: 30,
+    paddingTop: 60,
+    paddingBottom: 20,
   },
   headerContainer: {
     alignItems: 'center',
@@ -348,69 +308,68 @@ const styles = StyleSheet.create({
   bottomContainer: {
     flex: 1,
     justifyContent: 'center',
-    paddingBottom: 40,
+    paddingBottom: 60,
+    paddingTop: 100,
   },
   modeSelectionContainer: {
-    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingBottom: 30,
   },
   modeTitle: {
-    fontSize: 22,
-    color: '#FFFFFF',
-    fontFamily: 'Poppins_600SemiBold',
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: 'white',
     textAlign: 'center',
-    marginBottom: 30,
+    marginBottom: 15,
     textShadowColor: 'rgba(0, 0, 0, 0.8)',
     textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 8,
+    textShadowRadius: 10,
   },
-  gameButtonContainer: {
-    width: '100%',
-    marginBottom: 15,
-  },
-  gameButton: {
-    borderRadius: 20,
-    overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.3,
-    shadowRadius: 12,
+  logoutIcon: {
+    position: 'absolute',
+    top: 80,
+    left: 20,
+    zIndex: 10,
+    borderRadius: 25,
     elevation: 8,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 4.65,
   },
-  buttonGradient: {
-    paddingVertical: 20,
-    paddingHorizontal: 20,
-  },
-  buttonContent: {
-    flexDirection: 'row',
+  logoutIconGradient: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
     alignItems: 'center',
-    justifyContent: 'space-between',
+    justifyContent: 'center',
   },
-  buttonTextContainer: {
-    flex: 1,
-    marginLeft: 15,
+  marketIcon: {
+    position: 'absolute',
+    top: 80,
+    right: 20,
+    zIndex: 10,
+    borderRadius: 25,
+    elevation: 8,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 4.65,
   },
-  buttonTitle: {
-    fontSize: 18,
-    color: '#FFFFFF',
-    fontFamily: 'Poppins_700Bold',
-    marginBottom: 4,
+  marketIconGradient: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  buttonSubtitle: {
-    fontSize: 14,
-    color: 'rgba(255, 255, 255, 0.8)',
-    fontFamily: 'Poppins_400Regular',
-  },
-  logoutButton: {
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.3)',
-  },
-  logoutButtonTitle: {
-    color: 'rgba(255, 255, 255, 0.9)',
-  },
-  logoutButtonSubtitle: {
-    color: 'rgba(255, 255, 255, 0.6)',
-  },
+ 
 });
 
 export default HomeScreen;
