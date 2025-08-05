@@ -8,6 +8,8 @@ import {
   TouchableOpacity,
   ScrollView,
   Alert,
+  TextInput,
+  Modal,
 } from 'react-native';
 import { Text, Button } from '@rneui/themed';
 import { useRouter } from 'expo-router';
@@ -30,6 +32,9 @@ const FreeModeScreen = () => {
   const { user } = useAuth();
   const [selectedPlayers, setSelectedPlayers] = useState([]);
   const [playerCount, setPlayerCount] = useState(2);
+  const [playerNames, setPlayerNames] = useState({});
+  const [showNameModal, setShowNameModal] = useState(false);
+  const [tempPlayerNames, setTempPlayerNames] = useState({});
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(30)).current;
 
@@ -51,14 +56,67 @@ const FreeModeScreen = () => {
   const handlePlayerCountChange = (count) => {
     setPlayerCount(count);
     setSelectedPlayers([]);
+    setPlayerNames({});
   };
 
   const togglePlayerColor = (colorValue) => {
     if (selectedPlayers.includes(colorValue)) {
       setSelectedPlayers(selectedPlayers.filter(p => p !== colorValue));
+      // Remove player name when deselecting color
+      const newPlayerNames = { ...playerNames };
+      delete newPlayerNames[colorValue];
+      setPlayerNames(newPlayerNames);
     } else if (selectedPlayers.length < playerCount) {
-      setSelectedPlayers([...selectedPlayers, colorValue]);
+      const newSelectedPlayers = [...selectedPlayers, colorValue];
+      setSelectedPlayers(newSelectedPlayers);
+      
+      // If all players are selected, open name modal
+      if (newSelectedPlayers.length === playerCount) {
+        // Initialize temp names with defaults
+        const tempNames = {};
+        newSelectedPlayers.forEach((color, index) => {
+          tempNames[color] = `Oyuncu ${index + 1}`;
+        });
+        setTempPlayerNames(tempNames);
+        setShowNameModal(true);
+      }
     }
+  };
+
+  const updatePlayerName = (colorValue, name) => {
+    setPlayerNames(prev => ({
+      ...prev,
+      [colorValue]: name || `Oyuncu ${selectedPlayers.indexOf(colorValue) + 1}`
+    }));
+  };
+
+  const updateTempPlayerName = (colorValue, name) => {
+    setTempPlayerNames(prev => ({
+      ...prev,
+      [colorValue]: name
+    }));
+  };
+
+  const handleSaveNames = () => {
+    // Check if all names are filled
+    const hasEmptyNames = selectedPlayers.some(color => 
+      !tempPlayerNames[color] || tempPlayerNames[color].trim() === ''
+    );
+    
+    if (hasEmptyNames) {
+      Alert.alert('Hata', 'Lütfen tüm oyuncular için isim girin.');
+      return;
+    }
+
+    // Save names and close modal
+    setPlayerNames(tempPlayerNames);
+    setShowNameModal(false);
+  };
+
+  const handleCloseModal = () => {
+    setShowNameModal(false);
+    // Reset temp names
+    setTempPlayerNames({});
   };
 
   const handleStartGame = () => {
@@ -67,17 +125,17 @@ const FreeModeScreen = () => {
       return;
     }
 
-    // Create player names object
-    const playerNamesObj = {};
-    selectedPlayers.forEach((color, index) => {
-      playerNamesObj[color] = `Oyuncu ${index + 1}`;
-    });
+    // Check if names are set (should be set via modal)
+    if (Object.keys(playerNames).length === 0) {
+      Alert.alert('Hata', 'Lütfen oyuncu isimlerini girin.');
+      return;
+    }
 
     // Navigate to free mode game with selected parameters
     const gameParams = {
       playerCount: playerCount.toString(),
       playerColors: JSON.stringify(selectedPlayers),
-      playerNames: JSON.stringify(playerNamesObj)
+      playerNames: JSON.stringify(playerNames)
     };
     
     router.push({
@@ -245,6 +303,69 @@ const FreeModeScreen = () => {
             </TouchableOpacity>
           </Animated.View>
         </ScrollView>
+        
+        {/* Player Names Modal */}
+        <Modal
+          visible={showNameModal}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={handleCloseModal}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContainer}>
+              <LinearGradient
+                colors={['#4ECDC4', '#44A08D']}
+                style={styles.modalGradient}
+              >
+                <View style={styles.modalHeader}>
+                  <Ionicons name="people" size={40} color="#FFF" style={styles.modalIcon} />
+                  <Text style={styles.modalTitle}>Oyuncu İsimleri</Text>
+                  <Text style={styles.modalSubtitle}>Her oyuncu için isim girin</Text>
+                </View>
+                
+                <View style={styles.modalContent}>
+                  {selectedPlayers.map((color, index) => {
+                    const colorItem = colors.find(c => c.value === color);
+                    return (
+                      <View key={color} style={styles.modalPlayerRow}>
+                        <View style={[styles.modalColorIndicator, { backgroundColor: colorItem.color }]}>
+                          <Ionicons name={colorItem.icon} size={24} color="white" />
+                        </View>
+                        <TextInput
+                          style={styles.modalPlayerInput}
+                          placeholder={`${colorItem.name} oyuncusunun adı`}
+                          placeholderTextColor="rgba(255, 255, 255, 0.6)"
+                          value={tempPlayerNames[color] || ''}
+                          onChangeText={(text) => updateTempPlayerName(color, text)}
+                          maxLength={20}
+                          autoFocus={index === 0}
+                        />
+                      </View>
+                    );
+                  })}
+                </View>
+                
+                <View style={styles.modalButtons}>
+                  <TouchableOpacity
+                    onPress={handleCloseModal}
+                    style={[styles.modalButton, styles.modalButtonSecondary]}
+                  >
+                    <Text style={[styles.modalButtonText, styles.modalButtonTextSecondary]}>
+                      İptal
+                    </Text>
+                  </TouchableOpacity>
+                  
+                  <TouchableOpacity
+                    onPress={handleSaveNames}
+                    style={styles.modalButton}
+                  >
+                    <Text style={styles.modalButtonText}>Kaydet</Text>
+                  </TouchableOpacity>
+                </View>
+              </LinearGradient>
+            </View>
+          </View>
+        </Modal>
       </LinearGradient>
     </ImageBackground>
   );
@@ -434,6 +555,116 @@ const styles = StyleSheet.create({
     fontSize: isTablet ? 20 : 18,
     fontWeight: 'bold',
     marginLeft: 10,
+  },
+  // Modal Styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  modalContainer: {
+    width: '100%',
+    maxWidth: isTablet ? 500 : 350,
+    borderRadius: 20,
+    overflow: 'hidden',
+    elevation: 10,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 10,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+  },
+  modalGradient: {
+    padding: 25,
+  },
+  modalHeader: {
+    alignItems: 'center',
+    marginBottom: 25,
+  },
+  modalIcon: {
+    marginBottom: 10,
+  },
+  modalTitle: {
+    fontSize: isTablet ? 24 : 20,
+    fontWeight: 'bold',
+    color: 'white',
+    textAlign: 'center',
+    marginBottom: 5,
+  },
+  modalSubtitle: {
+    fontSize: isTablet ? 16 : 14,
+    color: 'rgba(255, 255, 255, 0.8)',
+    textAlign: 'center',
+  },
+  modalContent: {
+    marginBottom: 25,
+  },
+  modalPlayerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    borderRadius: 15,
+    padding: 15,
+    marginBottom: 15,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  modalColorIndicator: {
+    width: 45,
+    height: 45,
+    borderRadius: 22.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 15,
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+  },
+  modalPlayerInput: {
+    flex: 1,
+    color: 'white',
+    fontSize: isTablet ? 18 : 16,
+    fontWeight: '500',
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 12,
+    paddingHorizontal: 15,
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 15,
+  },
+  modalButton: {
+    flex: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    borderRadius: 12,
+    paddingVertical: 15,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+  },
+  modalButtonSecondary: {
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  modalButtonText: {
+    color: 'white',
+    fontSize: isTablet ? 16 : 14,
+    fontWeight: 'bold',
+  },
+  modalButtonTextSecondary: {
+    color: 'rgba(255, 255, 255, 0.8)',
   },
 });
 

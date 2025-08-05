@@ -35,8 +35,16 @@ const FreeModeGame = () => {
   const playerColors = JSON.parse(params.playerColors || '["red", "blue"]');
   const playerNames = JSON.parse(params.playerNames || '{}');
   
+  // Create playersInfo object for the hook
+  const playersInfo = {};
+  playerColors.forEach((color, index) => {
+    playersInfo[color] = {
+      nickname: playerNames[color] || `Oyuncu ${index + 1}`
+    };
+  });
+  
   // Initialize game engine
-  const { state, dispatch } = useFreeModeEngine(playerCount, playerColors, playerNames);
+  const { state, dispatch, getPossibleMoves } = useFreeModeEngine('local', playersInfo);
   
   // Animation values
   const diceRotation = useSharedValue(0);
@@ -46,31 +54,26 @@ const FreeModeGame = () => {
   // Modal states
   const [showResetModal, setShowResetModal] = useState(false);
   const [showBackModal, setShowBackModal] = useState(false);
-  
+
   // Get possible moves for current player
-  const getPossibleMoves = () => {
-    if (!state.diceValue) return [];
-    
-    const playerPawns = state.pawns.filter(p => p.color === state.currentPlayer);
-    const moves = [];
-    
-    for (const pawn of playerPawns) {
-      if (pawn.position < 0 && state.diceValue === 6) {
-        moves.push({ ...pawn, newPosition: 0 });
-      } else if (pawn.position >= 0) {
-        const newPos = (pawn.position + state.diceValue) % 40;
-        moves.push({ ...pawn, newPosition: newPos });
-      }
-    }
-    
-    return moves;
-  };
+  const possibleMoves = state && state.diceValue ? 
+    getPossibleMoves(state.pawns, state.currentPlayer, state.diceValue) : [];
   
-  const possibleMoves = getPossibleMoves();
+  // Early return if state is not initialized
+  if (!state || !state.isInitialized) {
+    return (
+      <View style={styles.container}>
+        <Text style={{ color: '#FFF', textAlign: 'center', marginTop: 100 }}>Oyun yükleniyor...</Text>
+      </View>
+    );
+  }
   
   // Handle dice roll
   const handleDiceRoll = () => {
-    if (!state.canRoll || state.diceValue !== null || state.winner) return;
+    if (state.diceValue !== null || state.winner || state.isRolling) return;
+    
+    // Start rolling animation
+    dispatch({ type: 'START_ROLLING' });
     
     // Animate dice
     diceRotation.value = withSequence(
@@ -82,8 +85,14 @@ const FreeModeGame = () => {
       withSpring(1)
     );
     
-    // Roll dice
-    dispatch({ type: 'ROLL_DICE' });
+    // Roll dice based on game phase
+    setTimeout(() => {
+      if (state.gamePhase === 'pre-game') {
+        dispatch({ type: 'ROLL_DICE_FOR_TURN_ORDER' });
+      } else {
+        dispatch({ type: 'ROLL_DICE' });
+      }
+    }, 500);
   };
   
   // Handle pawn selection
@@ -138,7 +147,7 @@ const FreeModeGame = () => {
   });
   
   // Get current player info
-  const currentPlayerName = state.playerNames[state.currentPlayer] || state.currentPlayer;
+  const currentPlayerName = state.playersInfo[state.currentPlayer]?.nickname || state.currentPlayer;
   const currentPlayerColor = state.currentPlayer;
   
   // Player colors for UI
@@ -187,6 +196,7 @@ const FreeModeGame = () => {
             onPawnPress={handlePawnPress}
             currentPlayer={state.currentPlayer}
             possibleMoves={possibleMoves}
+            playersInfo={state.playersInfo}
           />
         </View>
         
@@ -208,11 +218,11 @@ const FreeModeGame = () => {
             <Animated.View style={[styles.diceContainer, diceAnimatedStyle]}>
               <TouchableOpacity
                 onPress={handleDiceRoll}
-                disabled={!state.canRoll || state.diceValue !== null || state.winner}
+                disabled={state.diceValue !== null || state.winner || state.isRolling}
                 style={[
                   styles.diceButton,
                   {
-                    opacity: (state.canRoll && !state.diceValue && !state.winner) ? 1 : 0.6
+                    opacity: (!state.diceValue && !state.winner && !state.isRolling) ? 1 : 0.6
                   }
                 ]}
               >
@@ -228,36 +238,8 @@ const FreeModeGame = () => {
             </Animated.View>
             
             <Text style={styles.diceLabel}>
-              {state.canRoll && !state.diceValue && !state.winner ? 'Zar At!' : 'Bekle...'}
+              {!state.diceValue && !state.winner && !state.isRolling ? 'Zar At!' : 'Bekle...'}
             </Text>
-          </View>
-          
-          {/* Player Stats */}
-          <View style={styles.statsContainer}>
-            {state.players.map(color => {
-              const playerPawns = state.pawns.filter(p => p.color === color);
-              const completedLaps = playerPawns.reduce((sum, pawn) => sum + pawn.completedLaps, 0);
-              const activePawns = playerPawns.filter(p => p.position >= 0).length;
-              
-              return (
-                <View key={color} style={styles.statItem}>
-                  <LinearGradient
-                    colors={playerColorMap[color]}
-                    style={[
-                      styles.statGradient,
-                      { opacity: color === state.currentPlayer ? 1 : 0.7 }
-                    ]}
-                  >
-                    <Text style={styles.statName}>
-                      {state.playerNames[color] || color}
-                    </Text>
-                    <Text style={styles.statValue}>
-                      Tur: {completedLaps} | Aktif: {activePawns}
-                    </Text>
-                  </LinearGradient>
-                </View>
-              );
-            })}
           </View>
         </View>
         
@@ -440,11 +422,12 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 10
+    paddingHorizontal: 10,
+    paddingBottom: 30
   },
   controlsContainer: {
     paddingHorizontal: 20,
-    paddingBottom: 20
+    paddingBottom: 10
   },
   playerInfo: {
     marginBottom: 15
