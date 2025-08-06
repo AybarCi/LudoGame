@@ -22,6 +22,7 @@ import { useSocket } from '../../store/SocketProvider';
 import { COLORS } from '../../constants/game';
 import LottieView from 'lottie-react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { DiamondService } from '../../services/DiamondService';
 
 const { width, height } = Dimensions.get('window');
 
@@ -105,6 +106,19 @@ const OnlineGameScreen = () => {
       }
     }
   }, [room, players, user?.id, socket?.id, gamePhase]);
+
+  // Award diamond for winning online game
+  useEffect(() => {
+    if (gamePhase === 'finished' && winner && playersInfo && playersInfo[winner]) {
+      const winnerInfo = playersInfo[winner];
+      // Check if the current user is the winner
+      if (winnerInfo.id === user?.id || winnerInfo.id === socket?.id) {
+        console.log(`Awarding 1 diamond to ${winnerInfo.nickname} for winning online game`);
+        // Award 1 diamond for winning online game
+        DiamondService.awardGameWin();
+      }
+    }
+  }, [gamePhase, winner, playersInfo, user?.id, socket?.id]);
 
   const gamePhase = room?.phase || room?.gameState?.phase || gameState?.phase || 'loading';
   const message = gameState?.message || '';

@@ -1,8 +1,10 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { View, StyleSheet, Image, ImageBackground, Animated, Dimensions } from 'react-native';
 import { Button, Text } from '@rneui/themed';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
+import DiamondDisplay from '../components/shared/DiamondDisplay';
+import DiamondRewardModal from '../components/shared/DiamondRewardModal';
 
 const { width, height } = Dimensions.get('window');
 
@@ -11,6 +13,7 @@ export default function Welcome() {
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(50)).current;
   const scaleAnim = useRef(new Animated.Value(0.8)).current;
+  const [showDiamondModal, setShowDiamondModal] = useState(false);
 
   useEffect(() => {
     Animated.parallel([
@@ -40,6 +43,9 @@ export default function Welcome() {
         style={styles.gradient}
       >
         <View style={styles.container}>
+          {/* Elmas Gösterimi */}
+          <DiamondDisplay onDiamondPress={() => setShowDiamondModal(true)} />
+          
           <Animated.View 
             style={[
               styles.logoContainer,
@@ -89,6 +95,12 @@ export default function Welcome() {
             <View style={[styles.floatingCircle, styles.circle3]} />
           </Animated.View>
         </View>
+        
+        {/* Elmas Ödül Modalı */}
+        <DiamondRewardModal 
+          visible={showDiamondModal}
+          onClose={() => setShowDiamondModal(false)}
+        />
       </LinearGradient>
     </ImageBackground>
   );

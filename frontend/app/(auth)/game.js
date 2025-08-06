@@ -18,6 +18,7 @@ import Dice from '../../components/shared/Dice';
 import { useGameEngine } from '../../hooks/useGameEngine';
 import { COLORS } from '../../constants/game';
 import LottieView from 'lottie-react-native';
+import { DiamondService } from '../../services/DiamondService';
 
 const GameScreen = () => {
   const { session, user, updateScore } = useAuth();
@@ -51,14 +52,16 @@ const GameScreen = () => {
 
   const [showTurnPopup, setShowTurnPopup] = useState(false);
   const [popupAnim] = useState(new Animated.Value(0));
-  // --- Award points to the winner ---
+  // --- Award points and diamonds to the winner ---
   useEffect(() => {
     if (gamePhase === 'game-over' && winner && playersInfo[winner]) {
       const winnerInfo = playersInfo[winner];
       // Ensure the winner is a real player with a user_id, not an AI
       if (winnerInfo.user_id && winnerInfo.user_id === user.id) {
-        console.log(`Awarding 10 points to ${winnerInfo.nickname} (ID: ${winnerInfo.user_id})`);
+        console.log(`Awarding 10 points and 1 diamond to ${winnerInfo.nickname} (ID: ${winnerInfo.user_id})`);
         updateScore(10);
+        // Award 1 diamond for winning against AI
+        DiamondService.awardGameWin();
       }
     }
   }, [gamePhase, winner, playersInfo, user, updateScore]);
