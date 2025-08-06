@@ -15,13 +15,19 @@ import { DiamondService } from '../../services/DiamondService';
 const { width } = Dimensions.get('window');
 const isTablet = width > 768;
 
-const DiamondDisplay = ({ onPress, showAnimation = false }) => {
+const DiamondDisplay = ({ onPress, onDiamondPress, showAnimation = false, refreshTrigger }) => {
   const [diamonds, setDiamonds] = useState(0);
   const [animatedValue] = useState(new Animated.Value(1));
 
   useEffect(() => {
     loadDiamonds();
   }, []);
+
+  useEffect(() => {
+    if (refreshTrigger) {
+      loadDiamonds();
+    }
+  }, [refreshTrigger]);
 
   useEffect(() => {
     if (showAnimation) {
@@ -58,7 +64,7 @@ const DiamondDisplay = ({ onPress, showAnimation = false }) => {
   return (
     <TouchableOpacity 
       style={styles.container} 
-      onPress={onPress}
+      onPress={onPress || onDiamondPress}
       activeOpacity={0.8}
     >
       <LinearGradient
@@ -74,7 +80,7 @@ const DiamondDisplay = ({ onPress, showAnimation = false }) => {
           <Ionicons 
             name="diamond" 
             size={isTablet ? 24 : 20} 
-            color="#FFD700" 
+            color="#9C27B0" 
           />
           <Text style={styles.diamondText}>
             {formatDiamondCount(diamonds)}

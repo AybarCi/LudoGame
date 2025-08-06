@@ -99,7 +99,7 @@ const convertPositionsToPawns = (positions) => {
     return pawns;
 };
 
-const updateRoom = (roomId) => {
+const updateRoom = async (roomId) => {
     const room = rooms[roomId];
     if (room) {
         // Convert turnRolls to turnOrderRolls format for frontend compatibility
@@ -109,10 +109,34 @@ const updateRoom = (roomId) => {
                 roll: rollData.diceValue
             })) : [];
 
+        // Get selected pawns for all human players
+        const playersWithSelectedPawns = await Promise.all(
+            room.players.map(async (player) => {
+                if (player.isBot || !player.userId) {
+                    return { ...player, selectedPawn: 'default' };
+                }
+                
+                try {
+                    const result = await executeQuery(
+                        'SELECT selected_pawn FROM users WHERE id = @userId',
+                        [{ name: 'userId', type: sql.NVarChar(36), value: player.userId }]
+                    );
+                    
+                    return {
+                        ...player,
+                        selectedPawn: result[0]?.selected_pawn || 'default'
+                    };
+                } catch (error) {
+                    console.error('Error fetching selected pawn for player:', player.userId, error);
+                    return { ...player, selectedPawn: 'default' };
+                }
+            })
+        );
+
         const roomStateForClient = {
             id: room.id,
             roomCode: room.roomCode,
-            players: room.players,
+            players: playersWithSelectedPawns,
             hostId: room.hostId,
             gameState: {
                 ...room.gameState,
@@ -244,7 +268,7 @@ const joinRoomAsync = async (roomId, userId, nickname, socketId) => {
             console.log(`[Join Room] Cleared timeout for full room ${roomId}`);
         }
         room.gameState.message = 'Oda dolu! Oyun başlıyor...';
-        updateRoom(roomId);
+        await updateRoom(roomId);
         setTimeout(() => {
             startPreGame(roomId);
         }, 1000); // Small delay to show the message
@@ -269,7 +293,7 @@ const leaveRoomAsync = async (socketId) => {
                     room.hostId = room.players.find(p => !p.isBot)?.id || room.players[0].id;
                     console.log(`[Leave Room] New host for room ${roomId} is ${room.hostId}`);
                 }
-                updateRoom(roomId);
+                await updateRoom(roomId);
             }
             return;
         }
@@ -511,7 +535,7 @@ const updateTurn = async (room) => {
     room.gameState.diceValue = null;
     room.gameState.validMoves = [];
     room.gameState.message = `Sıra ${nextPlayer.nickname} oyuncusunda.`;
-    updateRoom(room.id);
+    await updateRoom(room.id);
     playBotTurnIfNeeded(room.id);
 };
 
@@ -561,7 +585,7 @@ const playBotTurnIfNeeded = async (roomId) => {
     const diceValue = Math.floor(Math.random() * 6) + 1;
     room.gameState.diceValue = diceValue;
     room.gameState.message = `${currentPlayer.nickname} ${diceValue} attı.`;
-    updateRoom(roomId);
+    await updateRoom(roomId);
 
     await new Promise(resolve => setTimeout(resolve, 1000));
     const validMoves = getValidMoves(currentPlayer, diceValue, room);
@@ -571,7 +595,7 @@ const playBotTurnIfNeeded = async (roomId) => {
         const chosenMove = chooseBestMove(validMoves, room, currentPlayer);
         const capturedPawn = handlePawnMove(room, currentPlayer, chosenMove);
         const pawnFinished = chosenMove.to === 59;
-        updateRoom(roomId);
+        await updateRoom(roomId);
 
         if (diceValue === 6 || capturedPawn || pawnFinished) {
             playBotTurnIfNeeded(roomId); // Play again
@@ -583,7 +607,7 @@ const playBotTurnIfNeeded = async (roomId) => {
     }
 };
 
-const determineTurnOrder = (roomId) => {
+const determineTurnOrder = async (roomId) => {
     const room = rooms[roomId];
     if (!room) return;
 
@@ -603,7 +627,7 @@ const determineTurnOrder = (roomId) => {
         room.gameState.message = `${startingPlayer.nickname} oyuna başlıyor!`;
         console.log(`[Game Started] Turn order: ${turnOrder.join(' -> ')}, Starting player: ${startingPlayer.nickname}`);
         io.to(roomId).emit('game_started', room.gameState);
-        updateRoom(roomId);
+        await updateRoom(roomId);
         playBotTurnIfNeeded(roomId);
     }
 };
@@ -1006,6 +1030,111 @@ app.post('/api/user/select-pawn', authenticateToken, async (req, res) => {
     } catch (error) {
         console.error('Error selecting pawn:', error);
         res.status(500).json({ error: 'Failed to select pawn' });
+    }
+});
+
+// Elmas API endpoint'leri
+app.get('/api/user/diamonds', authenticateToken, async (req, res) => {
+    const userId = req.user.userId;
+
+    try {
+        const result = await executeQuery(
+            'SELECT diamonds FROM users WHERE id = @userId',
+            [{ name: 'userId', type: sql.NVarChar(36), value: userId }]
+        );
+
+        if (result.length === 0) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+
+        res.json({ diamonds: result[0].diamonds || 0 });
+    } catch (error) {
+        console.error('Get diamonds error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+app.post('/api/user/diamonds/add', authenticateToken, async (req, res) => {
+    const { amount } = req.body;
+    const userId = req.user.userId;
+
+    if (!amount || amount <= 0) {
+        return res.status(400).json({ error: 'Valid amount is required' });
+    }
+
+    try {
+        await executeQuery(
+            'UPDATE users SET diamonds = ISNULL(diamonds, 0) + @amount WHERE id = @userId',
+            [
+                { name: 'amount', type: sql.Int, value: amount },
+                { name: 'userId', type: sql.NVarChar(36), value: userId }
+            ]
+        );
+
+        // Get updated diamonds count
+        const result = await executeQuery(
+            'SELECT diamonds FROM users WHERE id = @userId',
+            [{ name: 'userId', type: sql.NVarChar(36), value: userId }]
+        );
+
+        res.json({ 
+            message: 'Diamonds added successfully', 
+            diamonds: result[0].diamonds,
+            added: amount 
+        });
+    } catch (error) {
+        console.error('Add diamonds error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+app.post('/api/user/diamonds/spend', authenticateToken, async (req, res) => {
+    const { amount } = req.body;
+    const userId = req.user.userId;
+
+    if (!amount || amount <= 0) {
+        return res.status(400).json({ error: 'Valid amount is required' });
+    }
+
+    try {
+        // Check current diamonds
+        const currentResult = await executeQuery(
+            'SELECT diamonds FROM users WHERE id = @userId',
+            [{ name: 'userId', type: sql.NVarChar(36), value: userId }]
+        );
+
+        if (currentResult.length === 0) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+
+        const currentDiamonds = currentResult[0].diamonds || 0;
+        if (currentDiamonds < amount) {
+            return res.status(400).json({ error: 'Insufficient diamonds' });
+        }
+
+        // Spend diamonds
+        await executeQuery(
+            'UPDATE users SET diamonds = diamonds - @amount WHERE id = @userId',
+            [
+                { name: 'amount', type: sql.Int, value: amount },
+                { name: 'userId', type: sql.NVarChar(36), value: userId }
+            ]
+        );
+
+        // Get updated diamonds count
+        const result = await executeQuery(
+            'SELECT diamonds FROM users WHERE id = @userId',
+            [{ name: 'userId', type: sql.NVarChar(36), value: userId }]
+        );
+
+        res.json({ 
+            message: 'Diamonds spent successfully', 
+            diamonds: result[0].diamonds,
+            spent: amount 
+        });
+    } catch (error) {
+        console.error('Spend diamonds error:', error);
+        res.status(500).json({ error: 'Internal server error' });
     }
 });
 

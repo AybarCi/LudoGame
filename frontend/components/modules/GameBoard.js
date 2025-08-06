@@ -5,6 +5,7 @@ import {
   PATH_MAP,
   SAFE_SPOTS
 } from '../../constants/game';
+import { PawnService } from '../../services/PawnService';
 
 // Fallback sabitler (constants/game.js'de yoksa buradan alınır)
 const MAIN_PATH_COORDS = global.MAIN_PATH_COORDS || [
@@ -157,15 +158,25 @@ const generateBoardLayout = (pawns, currentPlayer, diceValue) => {
 };
 
 const GameBoard = ({ pawns, onPawnPress, currentPlayer, diceValue, playersInfo, style }) => {
+  // Extract players info from playersInfo prop
+  const players = playersInfo || {};
   // Hareket animasyonlarını yönetmek için state'ler
   const [movingPawns, setMovingPawns] = useState(new Set());
   const [lastPawns, setLastPawns] = useState([]);
+  const [selectedPawnId, setSelectedPawnId] = useState('default');
 
   // Prop guard: undefined veya yanlış tip gelirse default değer kullan
   const safePawns = Array.isArray(pawns) ? pawns : [];
   const safeCurrentPlayer = typeof currentPlayer === 'string' ? currentPlayer : null;
   const safeDiceValue = typeof diceValue === 'number' ? diceValue : null;
-  const safePlayersInfo = typeof playersInfo === 'object' && playersInfo !== null ? playersInfo : {};
+  // Seçili piyonu yükle
+  useEffect(() => {
+    const loadSelectedPawn = async () => {
+      const pawnId = await PawnService.getSelectedPawn();
+      setSelectedPawnId(pawnId);
+    };
+    loadSelectedPawn();
+  }, []);
 
   // Piyon hareketlerini tespit et ve animasyon başlat
   useEffect(() => {
@@ -283,10 +294,19 @@ const GameBoard = ({ pawns, onPawnPress, currentPlayer, diceValue, playersInfo, 
               const isMoving = movingPawns.has(pawn.id);
               const moveSteps = getMoveSteps(pawn.id);
               
+              // Her oyuncunun kendi seçili piyonunu kullan
+              const playerInfo = players[pawn.color];
+              const playerSelectedPawn = playerInfo?.selectedPawn;
+              
+              // Eğer bu oyuncunun seçili piyonu varsa onu kullan, yoksa varsayılan emoji
+              const pawnEmoji = playerSelectedPawn ? 
+                PawnService.getPawnEmoji(playerSelectedPawn) : '●';
+              
               return (
                 <AnimatedPawn 
                   key={pawn.id} 
                   color={pawn.color} 
+                  emoji={pawnEmoji}
                   onPress={() => onPawnPress(pawn.id)}
                   isMoving={isMoving}
                   moveSteps={moveSteps}

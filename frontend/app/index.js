@@ -1,10 +1,12 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, StyleSheet, Image, ImageBackground, Animated, Dimensions } from 'react-native';
+import { View, StyleSheet, Image, ImageBackground, Animated, Dimensions, TouchableOpacity } from 'react-native';
 import { Button, Text } from '@rneui/themed';
+import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import DiamondDisplay from '../components/shared/DiamondDisplay';
 import DiamondRewardModal from '../components/shared/DiamondRewardModal';
+import ShopModal from '../components/shared/ShopModal';
 
 const { width, height } = Dimensions.get('window');
 
@@ -14,6 +16,8 @@ export default function Welcome() {
   const slideAnim = useRef(new Animated.Value(50)).current;
   const scaleAnim = useRef(new Animated.Value(0.8)).current;
   const [showDiamondModal, setShowDiamondModal] = useState(false);
+  const [showShopModal, setShowShopModal] = useState(false);
+  const [diamondRefresh, setDiamondRefresh] = useState(0);
 
   useEffect(() => {
     Animated.parallel([
@@ -44,7 +48,12 @@ export default function Welcome() {
       >
         <View style={styles.container}>
           {/* Elmas Gösterimi */}
-          <DiamondDisplay onDiamondPress={() => setShowDiamondModal(true)} />
+          <View style={styles.diamondContainer}>
+            <DiamondDisplay 
+              onDiamondPress={() => setShowShopModal(true)}
+              refreshTrigger={diamondRefresh}
+            />
+          </View>
           
           <Animated.View 
             style={[
@@ -82,6 +91,15 @@ export default function Welcome() {
               onPress={() => router.replace('/login')}
             />
             <View style={styles.buttonGlow} />
+            
+            {/* Mağaza Butonu */}
+            <TouchableOpacity
+              style={styles.shopButton}
+              onPress={() => setShowShopModal(true)}
+            >
+              <Ionicons name="storefront" size={20} color="#FFF" />
+              <Text style={styles.shopButtonText}>Mağaza</Text>
+            </TouchableOpacity>
           </Animated.View>
 
           <Animated.View 
@@ -101,6 +119,15 @@ export default function Welcome() {
           visible={showDiamondModal}
           onClose={() => setShowDiamondModal(false)}
         />
+        
+        {/* Mağaza Modalı */}
+         <ShopModal 
+           visible={showShopModal}
+           onClose={() => {
+             setShowShopModal(false);
+             setDiamondRefresh(prev => prev + 1); // Elmas sayısını güncelle
+           }}
+         />
       </LinearGradient>
     </ImageBackground>
   );
@@ -121,6 +148,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: height * 0.1,
     paddingHorizontal: 20,
+  },
+  diamondContainer: {
+    position: 'absolute',
+    top: 60,
+    right: 20,
+    zIndex: 10,
   },
   logoContainer: {
     alignItems: 'center',
@@ -175,6 +208,23 @@ const styles = StyleSheet.create({
     position: 'relative',
     alignItems: 'center',
     marginBottom: 50,
+  },
+  shopButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 25,
+    marginTop: 15,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+    gap: 8,
+  },
+  shopButtonText: {
+    color: '#FFF',
+    fontSize: 16,
+    fontWeight: '600',
   },
   button: {
     backgroundColor: '#FF6B35',

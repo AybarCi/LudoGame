@@ -38,6 +38,7 @@ const TRANSPARENT_COLORS = global.TRANSPARENT_COLORS || {
 // Tüm sabitler constants/game.js'de yoksa fallback olarak burada tanımlı.
 
 import AnimatedPawn from '../shared/AnimatedPawn';
+import { PawnService } from '../../services/PawnService';
 
 // --- CONSTANTS FOR VISUAL CUES ---
 
@@ -58,7 +59,7 @@ const Arrow = ({ color }) => (
 
 const GRID_SIZE = 15;
 // MAIN_PATH_COORDS ve HOME_STRETCH_COORDS artık sadece constants/game.js'den geliyor.
-const generateBoardLayout = (pawns, currentPlayer, diceValue) => {
+const generateBoardLayout = (pawns, currentPlayer, diceValue, selectedPawnId) => {
   const layout = Array.from({ length: GRID_SIZE * GRID_SIZE }, () => ({ type: 'empty', pawns: [] }));
 
   const setCell = (row, col, cellData) => {
@@ -161,6 +162,20 @@ const OnlineGameBoard = ({ players = [], gameState = {}, onPawnPress, currentPla
   // Hareket animasyonlarını yönetmek için state'ler
   const [movingPawns, setMovingPawns] = useState(new Set());
   const [lastGameState, setLastGameState] = useState(null);
+  const [selectedPawnId, setSelectedPawnId] = useState(null);
+
+  // Seçili piyonu yükle
+  useEffect(() => {
+    const loadSelectedPawn = async () => {
+      try {
+        const pawnId = await PawnService.getSelectedPawn();
+        setSelectedPawnId(pawnId);
+      } catch (error) {
+        console.log('Seçili piyon yüklenirken hata:', error);
+      }
+    };
+    loadSelectedPawn();
+  }, []);
 
   // Tek doğru kaynak olan gameState.positions'tan piyonları oluştur
   const pawns = players.flatMap(player => {
@@ -224,7 +239,7 @@ const OnlineGameBoard = ({ players = [], gameState = {}, onPawnPress, currentPla
   const safeDiceValue = typeof diceValue === 'number' ? diceValue : null;
   const safePlayersInfo = typeof playersInfo === 'object' && playersInfo !== null ? playersInfo : {};
 
-  const boardLayout = generateBoardLayout(safePawns, safeCurrentPlayer, safeDiceValue);
+  const boardLayout = generateBoardLayout(safePawns, safeCurrentPlayer, safeDiceValue, selectedPawnId);
 
   // Hareket eden piyon için step sayısını hesapla
   const getMoveSteps = (pawnId) => {
@@ -312,10 +327,19 @@ const OnlineGameBoard = ({ players = [], gameState = {}, onPawnPress, currentPla
               const isMoving = movingPawns.has(pawn.id);
               const moveSteps = getMoveSteps(pawn.id);
               
+              // Her oyuncunun kendi seçili piyonunu kullan
+              const player = players.find(p => p.color === pawn.color);
+              const playerSelectedPawn = player?.selectedPawn;
+              
+              // Eğer bu oyuncunun seçili piyonu varsa onu kullan, yoksa varsayılan emoji
+              const pawnEmoji = playerSelectedPawn ? 
+                PawnService.getPawnEmoji(playerSelectedPawn) : '●';
+              
               return (
                 <AnimatedPawn 
                   key={pawn.id} 
                   color={pawn.color} 
+                  emoji={pawnEmoji}
                   onPress={() => onPawnPress(pawn.pawnIndex, pawn.position)}
                   isMoving={isMoving}
                   moveSteps={moveSteps}

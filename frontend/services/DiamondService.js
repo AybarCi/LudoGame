@@ -1,110 +1,215 @@
-// DiamondService.js - Elmas yönetimi için servis
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-class DiamondService {
-  static DIAMOND_KEY = 'user_diamonds';
-  static DAILY_REWARD_KEY = 'daily_reward_claimed';
-  
-  // Kullanıcının elmas sayısını getir
-  static async getDiamonds() {
+const DIAMONDS_KEY = 'user_diamonds';
+const DAILY_REWARD_KEY = 'daily_reward_last_claim';
+const API_BASE_URL = `${process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3001'}/api`;
+
+export const DiamondService = {
+  // API'den token al
+  async getToken() {
     try {
-      const diamonds = await AsyncStorage.getItem(this.DIAMOND_KEY);
+      return await AsyncStorage.getItem('token');
+    } catch (error) {
+      console.error('Error getting token:', error);
+      return null;
+    }
+  },
+
+  // Sunucudan elmas sayısını getir ve AsyncStorage'ı güncelle
+  async syncDiamondsFromServer() {
+    try {
+      const token = await this.getToken();
+      if (!token) {
+        // Token yoksa AsyncStorage'dan oku
+        return await this.getDiamondsFromStorage();
+      }
+
+      const response = await fetch(`${API_BASE_URL}/user/diamonds`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        // Sunucudan gelen veriyi AsyncStorage'a kaydet
+        await AsyncStorage.setItem(DIAMONDS_KEY, data.diamonds.toString());
+        return data.diamonds;
+      } else {
+        // API hatası durumunda AsyncStorage'dan oku
+        return await this.getDiamondsFromStorage();
+      }
+    } catch (error) {
+      console.error('Error syncing diamonds from server:', error);
+      // Hata durumunda AsyncStorage'dan oku
+      return await this.getDiamondsFromStorage();
+    }
+  },
+
+  // AsyncStorage'dan elmas sayısını getir
+  async getDiamondsFromStorage() {
+    try {
+      const diamonds = await AsyncStorage.getItem(DIAMONDS_KEY);
       return diamonds ? parseInt(diamonds) : 0;
     } catch (error) {
-      console.error('Error getting diamonds:', error);
+      console.error('Error getting diamonds from storage:', error);
       return 0;
     }
-  }
+  },
 
-  // Elmas ekle
-  static async addDiamonds(amount) {
+  // Elmas sayısını getir (önce sunucudan sync et)
+  async getDiamonds() {
+    return await this.syncDiamondsFromServer();
+  },
+
+  // Elmas ekle (hem sunucuya hem AsyncStorage'a)
+  async addDiamonds(amount) {
     try {
-      const currentDiamonds = await this.getDiamonds();
-      const newAmount = currentDiamonds + amount;
-      await AsyncStorage.setItem(this.DIAMOND_KEY, newAmount.toString());
-      return newAmount;
+      const token = await this.getToken();
+      
+      if (token) {
+        // Sunucuya gönder
+        const response = await fetch(`${API_BASE_URL}/user/diamonds/add`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ amount })
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          // Sunucudan gelen güncel veriyi AsyncStorage'a kaydet
+          await AsyncStorage.setItem(DIAMONDS_KEY, data.diamonds.toString());
+          return data.diamonds;
+        }
+      }
+      
+      // Sunucu başarısız olursa sadece AsyncStorage'ı güncelle
+      const currentDiamonds = await this.getDiamondsFromStorage();
+      const newDiamonds = currentDiamonds + amount;
+      await AsyncStorage.setItem(DIAMONDS_KEY, newDiamonds.toString());
+      return newDiamonds;
     } catch (error) {
       console.error('Error adding diamonds:', error);
-      return await this.getDiamonds();
+      // Hata durumunda sadece AsyncStorage'ı güncelle
+      const currentDiamonds = await this.getDiamondsFromStorage();
+      const newDiamonds = currentDiamonds + amount;
+      await AsyncStorage.setItem(DIAMONDS_KEY, newDiamonds.toString());
+      return newDiamonds;
     }
-  }
+  },
 
-  // Elmas harca
-  static async spendDiamonds(amount) {
+  // Elmas harca (hem sunucudan hem AsyncStorage'dan)
+  async spendDiamonds(amount) {
     try {
-      const currentDiamonds = await this.getDiamonds();
-      if (currentDiamonds >= amount) {
-        const newAmount = currentDiamonds - amount;
-        await AsyncStorage.setItem(this.DIAMOND_KEY, newAmount.toString());
-        return { success: true, newAmount };
+      const token = await this.getToken();
+      
+      if (token) {
+        // Sunucuya gönder
+        const response = await fetch(`${API_BASE_URL}/user/diamonds/spend`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ amount })
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          // Sunucudan gelen güncel veriyi AsyncStorage'a kaydet
+          await AsyncStorage.setItem(DIAMONDS_KEY, data.diamonds.toString());
+          return true;
+        } else {
+          // Hata durumunda JSON parse etmeye çalışmadan önce content-type kontrol et
+          const contentType = response.headers.get('content-type');
+          if (contentType && contentType.includes('application/json')) {
+            const errorData = await response.json();
+            if (errorData.error === 'Insufficient diamonds') {
+              return false;
+            }
+          } else {
+            console.error('Server returned non-JSON response:', response.status, response.statusText);
+            return false;
+          }
+        }
       }
-      return { success: false, message: 'Yetersiz elmas!' };
+      
+      // Sunucu başarısız olursa sadece AsyncStorage'ı kontrol et
+      const currentDiamonds = await this.getDiamondsFromStorage();
+      if (currentDiamonds >= amount) {
+        const newDiamonds = currentDiamonds - amount;
+        await AsyncStorage.setItem(DIAMONDS_KEY, newDiamonds.toString());
+        return true;
+      }
+      return false;
     } catch (error) {
       console.error('Error spending diamonds:', error);
-      return { success: false, message: 'Hata oluştu!' };
+      // Hata durumunda sadece AsyncStorage'ı kontrol et
+      const currentDiamonds = await this.getDiamondsFromStorage();
+      if (currentDiamonds >= amount) {
+        const newDiamonds = currentDiamonds - amount;
+        await AsyncStorage.setItem(DIAMONDS_KEY, newDiamonds.toString());
+        return true;
+      }
+      return false;
     }
-  }
+  },
 
   // Oyun kazanma ödülü
-  static async rewardForWin(gameMode) {
-    const rewardAmount = gameMode === 'ai' || gameMode === 'online' ? 1 : 0;
-    if (rewardAmount > 0) {
-      return await this.addDiamonds(rewardAmount);
-    }
-    return await this.getDiamonds();
-  }
+  async rewardForWin() {
+    return await this.addDiamonds(2);
+  },
 
   // Reklam izleme ödülü
-  static async rewardForAd() {
-    const rewardAmount = 2; // Reklam başına 2 elmas
-    return await this.addDiamonds(rewardAmount);
-  }
+  async rewardForAd() {
+    return await this.addDiamonds(1);
+  },
 
   // Günlük ödül kontrolü
-  static async canClaimDailyReward() {
+  async canClaimDailyReward() {
     try {
-      const lastClaimed = await AsyncStorage.getItem(this.DAILY_REWARD_KEY);
-      if (!lastClaimed) return true;
+      const lastClaim = await AsyncStorage.getItem(DAILY_REWARD_KEY);
+      if (!lastClaim) return true;
       
-      const lastClaimedDate = new Date(lastClaimed);
+      const lastClaimDate = new Date(lastClaim);
       const today = new Date();
       
-      // Farklı günse ödül alabilir
-      return lastClaimedDate.toDateString() !== today.toDateString();
+      // Aynı gün içinde mi kontrol et
+      return lastClaimDate.toDateString() !== today.toDateString();
     } catch (error) {
       console.error('Error checking daily reward:', error);
       return false;
     }
-  }
+  },
 
   // Günlük ödül al
-  static async claimDailyReward() {
+  async claimDailyReward() {
     try {
       const canClaim = await this.canClaimDailyReward();
       if (canClaim) {
-        const rewardAmount = 5; // Günlük 5 elmas
-        const newAmount = await this.addDiamonds(rewardAmount);
-        await AsyncStorage.setItem(this.DAILY_REWARD_KEY, new Date().toISOString());
-        return { success: true, amount: rewardAmount, newTotal: newAmount };
+        const today = new Date().toISOString();
+        await AsyncStorage.setItem(DAILY_REWARD_KEY, today);
+        return await this.addDiamonds(5);
       }
-      return { success: false, message: 'Günlük ödül zaten alındı!' };
+      return false;
     } catch (error) {
       console.error('Error claiming daily reward:', error);
-      return { success: false, message: 'Hata oluştu!' };
+      return false;
     }
-  }
+  },
 
-  // Elmas geçmişini temizle (test için)
-  static async resetDiamonds() {
+  // Elmasları sıfırla (test amaçlı)
+  async resetDiamonds() {
     try {
-      await AsyncStorage.removeItem(this.DIAMOND_KEY);
-      await AsyncStorage.removeItem(this.DAILY_REWARD_KEY);
+      await AsyncStorage.removeItem(DIAMONDS_KEY);
       return true;
     } catch (error) {
       console.error('Error resetting diamonds:', error);
       return false;
     }
   }
-}
-
-export { DiamondService };
+};

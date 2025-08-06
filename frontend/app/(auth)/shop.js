@@ -7,7 +7,6 @@ import {
   ImageBackground,
   Animated,
   Dimensions,
-  Alert,
   Modal
 } from 'react-native';
 import { Text } from '@rneui/themed';
@@ -16,6 +15,10 @@ import { useAuth } from '../../store/AuthProvider';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { DiamondService } from '../../services/DiamondService';
+import CustomModal from '../../components/shared/CustomModal';
+
+const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3001';
 
 const { width, height } = Dimensions.get('window');
 
@@ -24,11 +27,11 @@ const PAWN_CATEGORIES = {
     title: 'Emoji Piyonlar',
     icon: '😊',
     items: [
-      { id: 'emoji_1', emoji: '😀', name: 'Mutlu Yüz', price: 100, currency: 'points' },
-      { id: 'emoji_2', emoji: '😎', name: 'Havalı', price: 150, currency: 'points' },
-      { id: 'emoji_3', emoji: '🤩', name: 'Yıldız Gözlü', price: 200, currency: 'points' },
-      { id: 'emoji_4', emoji: '🥳', name: 'Parti', price: 250, currency: 'points' },
-      { id: 'emoji_5', emoji: '👑', name: 'Kral Tacı', price: 500, currency: 'points' },
+      { id: 'emoji_1', emoji: '😀', name: 'Mutlu Yüz', price: 5, currency: 'diamonds' },
+      { id: 'emoji_2', emoji: '😎', name: 'Havalı', price: 8, currency: 'diamonds' },
+      { id: 'emoji_3', emoji: '🤩', name: 'Yıldız Gözlü', price: 12, currency: 'diamonds' },
+      { id: 'emoji_4', emoji: '🥳', name: 'Parti', price: 15, currency: 'diamonds' },
+      { id: 'emoji_5', emoji: '👑', name: 'Kral Tacı', price: 25, currency: 'diamonds' },
       { id: 'emoji_6', emoji: '💎', name: 'Elmas', price: 2.99, currency: 'money' }
     ]
   },
@@ -36,10 +39,10 @@ const PAWN_CATEGORIES = {
     title: 'Hayvan Figürleri',
     icon: '🐾',
     items: [
-      { id: 'animal_1', emoji: '🐱', name: 'Kedi', price: 120, currency: 'points' },
-      { id: 'animal_2', emoji: '🐶', name: 'Köpek', price: 120, currency: 'points' },
-      { id: 'animal_3', emoji: '🦁', name: 'Aslan', price: 300, currency: 'points' },
-      { id: 'animal_4', emoji: '🐯', name: 'Kaplan', price: 350, currency: 'points' },
+      { id: 'animal_1', emoji: '🐱', name: 'Kedi', price: 6, currency: 'diamonds' },
+      { id: 'animal_2', emoji: '🐶', name: 'Köpek', price: 6, currency: 'diamonds' },
+      { id: 'animal_3', emoji: '🦁', name: 'Aslan', price: 18, currency: 'diamonds' },
+      { id: 'animal_4', emoji: '🐯', name: 'Kaplan', price: 20, currency: 'diamonds' },
       { id: 'animal_5', emoji: '🦄', name: 'Unicorn', price: 4.99, currency: 'money' },
       { id: 'animal_6', emoji: '🐉', name: 'Ejder', price: 6.99, currency: 'money' }
     ]
@@ -48,10 +51,10 @@ const PAWN_CATEGORIES = {
     title: 'Doğa Figürleri',
     icon: '🌿',
     items: [
-      { id: 'nature_1', emoji: '🌸', name: 'Kiraz Çiçeği', price: 80, currency: 'points' },
-      { id: 'nature_2', emoji: '🌺', name: 'Hibiskus', price: 100, currency: 'points' },
-      { id: 'nature_3', emoji: '🌟', name: 'Yıldız', price: 180, currency: 'points' },
-      { id: 'nature_4', emoji: '⚡', name: 'Şimşek', price: 220, currency: 'points' },
+      { id: 'nature_1', emoji: '🌸', name: 'Kiraz Çiçeği', price: 4, currency: 'diamonds' },
+      { id: 'nature_2', emoji: '🌺', name: 'Hibiskus', price: 5, currency: 'diamonds' },
+      { id: 'nature_3', emoji: '🌟', name: 'Yıldız', price: 10, currency: 'diamonds' },
+      { id: 'nature_4', emoji: '⚡', name: 'Şimşek', price: 12, currency: 'diamonds' },
       { id: 'nature_5', emoji: '🔥', name: 'Ateş', price: 3.99, currency: 'money' },
       { id: 'nature_6', emoji: '❄️', name: 'Kar Tanesi', price: 3.99, currency: 'money' }
     ]
@@ -64,13 +67,18 @@ const ShopScreen = () => {
   const [selectedCategory, setSelectedCategory] = useState('emoji');
   const [purchaseModal, setPurchaseModal] = useState({ visible: false, item: null });
   const [ownedPawns, setOwnedPawns] = useState(['default']); // Varsayılan piyon her zaman sahip olunan
+  const [selectedPawn, setSelectedPawn] = useState('default');
   const [loading, setLoading] = useState(true);
+  const [diamonds, setDiamonds] = useState(0);
+  const [customModal, setCustomModal] = useState({ visible: false, title: '', message: '', type: 'info', buttons: [] });
   
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(30)).current;
 
   useEffect(() => {
     loadOwnedPawns();
+    loadSelectedPawn();
+    loadDiamonds();
     Animated.parallel([
       Animated.timing(fadeAnim, {
         toValue: 1,
@@ -85,21 +93,35 @@ const ShopScreen = () => {
     ]).start();
   }, []);
 
+  const loadDiamonds = async () => {
+    const currentDiamonds = await DiamondService.getDiamonds();
+    setDiamonds(currentDiamonds);
+  };
+
   const loadOwnedPawns = async () => {
     try {
       const token = await AsyncStorage.getItem('token');
-      if (!token) return;
+      if (!token) {
+        console.log('[DEBUG] No token found');
+        return;
+      }
 
-      const response = await fetch('http://localhost:3001/api/shop/pawns', {
+      console.log('[DEBUG] Making request to /api/shop/pawns');
+      const response = await fetch(`${API_URL}/api/shop/pawns`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         }
       });
 
+      console.log('[DEBUG] Response status:', response.status);
       if (response.ok) {
         const data = await response.json();
+        console.log('[DEBUG] Received owned pawns data:', data);
         setOwnedPawns(['default', ...data.ownedPawns]);
+        console.log('[DEBUG] Set owned pawns:', ['default', ...data.ownedPawns]);
+      } else {
+        console.log('[DEBUG] Response not ok:', await response.text());
       }
     } catch (error) {
       console.error('Error loading owned pawns:', error);
@@ -108,8 +130,65 @@ const ShopScreen = () => {
     }
   };
 
+  const loadSelectedPawn = async () => {
+    try {
+      const token = await AsyncStorage.getItem('token');
+      if (!token) return;
+
+      const response = await fetch(`${API_URL}/api/user/selected-pawn`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setSelectedPawn(data.selectedPawn || 'default');
+      }
+    } catch (error) {
+      console.error('Error loading selected pawn:', error);
+    }
+  };
+
   const handlePurchase = (item) => {
     setPurchaseModal({ visible: true, item });
+  };
+
+  const handleSelectPawn = async (pawnId) => {
+    try {
+      const token = await AsyncStorage.getItem('token');
+      if (!token) return;
+
+      const response = await fetch(`${API_URL}/api/user/select-pawn`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ pawnId })
+      });
+
+      if (response.ok) {
+        setSelectedPawn(pawnId);
+        setCustomModal({
+          visible: true,
+          title: 'Başarılı!',
+          message: 'Piyon seçildi!',
+          type: 'success',
+          buttons: []
+        });
+      }
+    } catch (error) {
+      console.error('Error selecting pawn:', error);
+      setCustomModal({
+        visible: true,
+        title: 'Hata',
+        message: 'Piyon seçimi sırasında bir hata oluştu.',
+        type: 'error',
+        buttons: []
+      });
+    }
   };
 
   const confirmPurchase = async () => {
@@ -118,11 +197,59 @@ const ShopScreen = () => {
     try {
       const token = await AsyncStorage.getItem('token');
       if (!token) {
-        Alert.alert('Hata', 'Oturum açmanız gerekiyor.');
+        setCustomModal({
+          visible: true,
+          title: 'Hata',
+          message: 'Oturum açmanız gerekiyor.',
+          type: 'error',
+          buttons: []
+        });
         return;
       }
 
-      const response = await fetch('http://localhost:3001/api/shop/purchase', {
+      // Elmas ile satın alma kontrolü
+      if (item.currency === 'diamonds') {
+        if (diamonds < item.price) {
+          setCustomModal({
+            visible: true,
+            title: 'Yetersiz Elmas',
+            message: 'Bu ürünü satın almak için yeterli elmasınız yok.',
+            type: 'warning',
+            buttons: []
+          });
+          setPurchaseModal({ visible: false, item: null });
+          return;
+        }
+        
+        // Elmasları düş
+        const success = await DiamondService.spendDiamonds(item.price);
+        if (success) {
+          setDiamonds(prev => prev - item.price);
+          
+          // Ürünü sahip olunan listesine ekle
+          setOwnedPawns([...ownedPawns, item.id]);
+          setCustomModal({
+            visible: true,
+            title: 'Başarılı!',
+            message: `${item.name} satın alındı!`,
+            type: 'success',
+            buttons: []
+          });
+        } else {
+          setCustomModal({
+            visible: true,
+            title: 'Hata',
+            message: 'Satın alma işlemi başarısız oldu.',
+            type: 'error',
+            buttons: []
+          });
+        }
+        setPurchaseModal({ visible: false, item: null });
+        return;
+      }
+
+      // Para ile satın alma (mevcut sistem)
+      const response = await fetch(`${API_URL}/api/shop/purchase`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -139,7 +266,13 @@ const ShopScreen = () => {
 
       if (response.ok) {
         setOwnedPawns([...ownedPawns, item.id]);
-        Alert.alert('Başarılı!', `${item.name} satın alındı!`);
+        setCustomModal({
+          visible: true,
+          title: 'Başarılı!',
+          message: `${item.name} satın alındı!`,
+          type: 'success',
+          buttons: []
+        });
         
         // Kullanıcının puanını güncelle (eğer puan ile satın aldıysa)
         if (item.currency === 'points' && data.newScore !== undefined) {
@@ -147,16 +280,40 @@ const ShopScreen = () => {
         }
       } else {
         if (data.error === 'Insufficient points') {
-          Alert.alert('Yetersiz Puan', 'Bu ürünü satın almak için yeterli puanınız yok.');
+          setCustomModal({
+            visible: true,
+            title: 'Yetersiz Puan',
+            message: 'Bu ürünü satın almak için yeterli puanınız yok.',
+            type: 'warning',
+            buttons: []
+          });
         } else if (data.error === 'Pawn already owned') {
-          Alert.alert('Zaten Sahipsiniz', 'Bu piyona zaten sahipsiniz.');
+          setCustomModal({
+            visible: true,
+            title: 'Zaten Sahipsiniz',
+            message: 'Bu piyona zaten sahipsiniz.',
+            type: 'info',
+            buttons: []
+          });
         } else {
-          Alert.alert('Hata', data.error || 'Satın alma işlemi başarısız.');
+          setCustomModal({
+            visible: true,
+            title: 'Hata',
+            message: data.error || 'Satın alma işlemi başarısız.',
+            type: 'error',
+            buttons: []
+          });
         }
       }
     } catch (error) {
       console.error('Purchase error:', error);
-      Alert.alert('Hata', 'Satın alma işlemi sırasında bir hata oluştu.');
+      setCustomModal({
+        visible: true,
+        title: 'Hata',
+        message: 'Satın alma işlemi sırasında bir hata oluştu.',
+        type: 'error',
+        buttons: []
+      });
     }
     
     setPurchaseModal({ visible: false, item: null });
@@ -189,7 +346,9 @@ const ShopScreen = () => {
 
   const renderPawnItem = (item) => {
     const isOwned = ownedPawns.includes(item.id);
-    const canAfford = item.currency === 'points' ? (user?.score || 0) >= item.price : true;
+    const isSelected = selectedPawn === item.id;
+    const canAfford = item.currency === 'diamonds' ? diamonds >= item.price : 
+                     item.currency === 'points' ? (user?.score || 0) >= item.price : true;
     
     return (
       <TouchableOpacity
@@ -197,10 +356,17 @@ const ShopScreen = () => {
         style={[
           styles.pawnItem,
           isOwned && styles.ownedPawnItem,
+          isSelected && styles.selectedPawnItem,
           !canAfford && !isOwned && styles.unaffordablePawnItem
         ]}
-        onPress={() => !isOwned && handlePurchase(item)}
-        disabled={isOwned}
+        onPress={() => {
+          if (isOwned && !isSelected) {
+            handleSelectPawn(item.id);
+          } else if (!isOwned) {
+            handlePurchase(item);
+          }
+        }}
+        disabled={false}
       >
         <View style={styles.pawnEmojiContainer}>
           <Text style={styles.pawnEmoji}>{item.emoji}</Text>
@@ -209,12 +375,27 @@ const ShopScreen = () => {
               <Ionicons name="checkmark" size={16} color="white" />
             </View>
           )}
+          {isSelected && (
+            <View style={styles.selectedBadge}>
+              <Ionicons name="star" size={16} color="#FFD700" />
+            </View>
+          )}
         </View>
         
         <Text style={styles.pawnName}>{item.name}</Text>
         
         <View style={styles.priceContainer}>
-          {item.currency === 'points' ? (
+          {item.currency === 'diamonds' ? (
+            <>
+              <Ionicons name="diamond" size={16} color="#9C27B0" />
+              <Text style={[
+                styles.priceText,
+                !canAfford && !isOwned && styles.unaffordablePrice
+              ]}>
+                {item.price}
+              </Text>
+            </>
+          ) : item.currency === 'points' ? (
             <>
               <Ionicons name="trophy" size={16} color="#FFD700" />
               <Text style={[
@@ -233,9 +414,21 @@ const ShopScreen = () => {
         </View>
         
         {isOwned ? (
-          <View style={styles.ownedButton}>
-            <Text style={styles.ownedButtonText}>Sahip</Text>
-          </View>
+          <TouchableOpacity
+            style={[
+              styles.selectButton,
+              isSelected && styles.selectedButton
+            ]}
+            onPress={() => !isSelected && handleSelectPawn(item.id)}
+            disabled={isSelected}
+          >
+            <Text style={[
+              styles.selectButtonText,
+              isSelected && styles.selectedButtonText
+            ]}>
+              {isSelected ? 'Seçili' : 'Seç'}
+            </Text>
+          </TouchableOpacity>
         ) : (
           <TouchableOpacity
             style={[
@@ -273,6 +466,12 @@ const ShopScreen = () => {
         >
           <Ionicons name="arrow-back" size={24} color="white" />
         </TouchableOpacity>
+        
+        {/* Elmas Gösterimi */}
+        <View style={styles.diamondDisplay}>
+          <Ionicons name="diamond" size={20} color="#9C27B0" />
+          <Text style={styles.diamondText}>{diamonds}</Text>
+        </View>
 
         {renderCategoryTabs()}
 
@@ -307,7 +506,12 @@ const ShopScreen = () => {
                   <Text style={styles.modalTitle}>{purchaseModal.item.name}</Text>
                   
                   <View style={styles.modalPriceContainer}>
-                    {purchaseModal.item.currency === 'points' ? (
+                    {purchaseModal.item.currency === 'diamonds' ? (
+                      <>
+                        <Ionicons name="diamond" size={24} color="#9C27B0" />
+                        <Text style={styles.modalPrice}>{purchaseModal.item.price} Elmas</Text>
+                      </>
+                    ) : purchaseModal.item.currency === 'points' ? (
                       <>
                         <Ionicons name="trophy" size={24} color="#FFD700" />
                         <Text style={styles.modalPrice}>{purchaseModal.item.price} Puan</Text>
@@ -344,6 +548,16 @@ const ShopScreen = () => {
             </View>
           </View>
         </Modal>
+
+        {/* Custom Modal */}
+        <CustomModal
+          visible={customModal.visible}
+          title={customModal.title}
+          message={customModal.message}
+          type={customModal.type}
+          buttons={customModal.buttons}
+          onClose={() => setCustomModal({ visible: false, title: '', message: '', type: 'info', buttons: [] })}
+        />
       </LinearGradient>
     </ImageBackground>
   );
@@ -367,6 +581,24 @@ const styles = StyleSheet.create({
     top: 50,
     left: 20,
     zIndex: 1,
+  },
+  diamondDisplay: {
+    position: 'absolute',
+    top: 50,
+    right: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    zIndex: 1,
+  },
+  diamondText: {
+    color: 'white',
+    fontSize: 16,
+    fontFamily: 'Poppins_600SemiBold',
+    marginLeft: 5,
   },
   categoryTabs: {
     flexDirection: 'row',
@@ -424,6 +656,11 @@ const styles = StyleSheet.create({
     borderColor: '#4CAF50',
     backgroundColor: 'rgba(76, 175, 80, 0.2)',
   },
+  selectedPawnItem: {
+    borderColor: '#FFD700',
+    backgroundColor: 'rgba(255, 215, 0, 0.2)',
+    borderWidth: 3,
+  },
   unaffordablePawnItem: {
     opacity: 0.5,
   },
@@ -442,6 +679,17 @@ const styles = StyleSheet.create({
     height: 20,
     borderRadius: 10,
     backgroundColor: '#4CAF50',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  selectedBadge: {
+    position: 'absolute',
+    top: -5,
+    left: -5,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#FFD700',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -493,6 +741,23 @@ const styles = StyleSheet.create({
     color: '#4CAF50',
     fontSize: 12,
     fontFamily: 'Poppins_600SemiBold',
+  },
+  selectButton: {
+    backgroundColor: '#2196F3',
+    paddingHorizontal: 20,
+    paddingVertical: 8,
+    borderRadius: 20,
+  },
+  selectButtonText: {
+    color: 'white',
+    fontSize: 12,
+    fontFamily: 'Poppins_600SemiBold',
+  },
+  selectedButton: {
+    backgroundColor: '#FFD700',
+  },
+  selectedButtonText: {
+    color: '#333',
   },
   // Modal Styles
   modalOverlay: {

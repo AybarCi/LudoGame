@@ -1,5 +1,6 @@
 import { useReducer, useEffect } from 'react';
 import { PATH_MAP, PLAYER_COLORS } from '../constants/game';
+import { PawnService } from '../services/PawnService';
 
 // --- HELPER FUNCTIONS ---
 
@@ -171,12 +172,24 @@ const getInitialState = (gameMode, playersInfo) => {
   );
 
   // If no playersInfo is provided, create a default one.
-  const initialPlayersInfo = playersInfo || {
-    red: { nickname: 'Player 1' },
-    green: { nickname: 'Verstappen' },
-    yellow: { nickname: 'Leclerc' },
-    blue: { nickname: 'Norris' },
-  };
+  let initialPlayersInfo;
+  if (playersInfo) {
+    // Add selectedPawn to existing playersInfo if not present
+    initialPlayersInfo = {};
+    Object.keys(playersInfo).forEach(color => {
+      initialPlayersInfo[color] = {
+        ...playersInfo[color],
+        selectedPawn: playersInfo[color].selectedPawn || 'default'
+      };
+    });
+  } else {
+    initialPlayersInfo = {
+      red: { nickname: 'Player 1', selectedPawn: 'default' },
+      green: { nickname: 'Verstappen', selectedPawn: 'default' },
+      yellow: { nickname: 'Leclerc', selectedPawn: 'default' },
+      blue: { nickname: 'Norris', selectedPawn: 'default' },
+    };
+  }
 
   return {
     gamePhase: 'pre-game',
@@ -481,6 +494,20 @@ const gameReducer = (state, action) => {
       };
     }
 
+    case 'UPDATE_PLAYER_SELECTED_PAWN': {
+      const { color, selectedPawn } = action.payload;
+      return {
+        ...state,
+        playersInfo: {
+          ...state.playersInfo,
+          [color]: {
+            ...state.playersInfo[color],
+            selectedPawn
+          }
+        }
+      };
+    }
+
     default:
       return state;
   }
@@ -490,6 +517,24 @@ export const useGameEngine = (socket, gameId, userId, mode, playersInfo) => {
   const [state, dispatch] = useReducer(gameReducer, undefined, () =>
     getInitialState(mode, playersInfo)
   );
+
+  // Load selected pawn for the real user (red player)
+  useEffect(() => {
+    const loadSelectedPawn = async () => {
+      try {
+        const selectedPawn = await PawnService.getSelectedPawn();
+        if (selectedPawn && selectedPawn !== 'default') {
+          dispatch({
+            type: 'UPDATE_PLAYER_SELECTED_PAWN',
+            payload: { color: 'red', selectedPawn }
+          });
+        }
+      } catch (error) {
+        console.log('Error loading selected pawn:', error);
+      }
+    };
+    loadSelectedPawn();
+  }, []);
 
   // This consolidated effect handles the AI's entire turn, with logging.
   useEffect(() => {

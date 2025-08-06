@@ -1,6 +1,7 @@
 import React, { useState, useEffect, createContext, useContext } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
+import { DiamondService } from '../services/DiamondService';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3001';
 
@@ -63,6 +64,13 @@ export function AuthProvider({ children }) {
 
             await AsyncStorage.setItem('token', token);
             await AsyncStorage.setItem('user', JSON.stringify(userData));
+            
+            // Kullanıcı giriş yaptığında elmaslarını sunucudan senkronize et
+            try {
+                await DiamondService.syncDiamondsFromServer();
+            } catch (error) {
+                console.error('Error syncing diamonds after login:', error);
+            }
             
             // Navigation will be handled by the layout's useEffect
             return {};

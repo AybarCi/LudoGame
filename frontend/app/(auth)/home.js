@@ -7,6 +7,8 @@ import { useAuth } from '../../store/AuthProvider';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import HomeButtons from '../../components/modules/HomeButtons';
+import { DiamondService } from '../../services/DiamondService';
+
 
 const { width, height } = Dimensions.get('window');
 
@@ -15,6 +17,7 @@ const HomeScreen = () => {
   const router = useRouter();
   const { user, signOut } = useAuth();
   const [loading, setLoading] = useState(false);
+  const [diamonds, setDiamonds] = useState(0);
   
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(30)).current;
@@ -26,6 +29,8 @@ const HomeScreen = () => {
   ]).current;
 
   useEffect(() => {
+    loadDiamonds();
+    
     Animated.parallel([
       Animated.timing(fadeAnim, {
         toValue: 1,
@@ -55,6 +60,13 @@ const HomeScreen = () => {
       }).start();
     });
   }, []);
+
+
+
+  const loadDiamonds = async () => {
+    const currentDiamonds = await DiamondService.getDiamonds();
+    setDiamonds(currentDiamonds);
+  };
 
   const handlePlayWithAI = () => {
     const playerNickname = user?.nickname || 'Oyuncu 1';
@@ -138,6 +150,11 @@ const HomeScreen = () => {
               <Ionicons name="trending-up" size={24} color="#4CAF50" />
               <Text style={styles.statValue}>{Math.floor((user?.score || 0) / 100) + 1}</Text>
               <Text style={styles.statLabel}>Seviye</Text>
+            </View>
+            <View style={styles.statCard}>
+              <Ionicons name="diamond" size={24} color="#9C27B0" />
+              <Text style={styles.statValue}>{diamonds}</Text>
+              <Text style={styles.statLabel}>Elmas</Text>
             </View>
           </View>
         </Animated.View>
@@ -272,16 +289,17 @@ const styles = StyleSheet.create({
   },
   statsContainer: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
+    justifyContent: 'space-between',
     width: '100%',
-    paddingHorizontal: 20,
+    paddingHorizontal: 15,
+    gap: 10,
   },
   statCard: {
     backgroundColor: 'rgba(255, 255, 255, 0.1)',
     borderRadius: 15,
-    padding: 20,
+    padding: 15,
     alignItems: 'center',
-    minWidth: 100,
+    flex: 1,
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.2)',
     shadowColor: '#000',
