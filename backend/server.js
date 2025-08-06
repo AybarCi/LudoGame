@@ -635,15 +635,18 @@ const determineTurnOrder = async (roomId) => {
         const sortedRolls = Object.entries(room.gameState.turnRolls).sort(([, a], [, b]) => b.diceValue - a.diceValue);
         const turnOrder = sortedRolls.map(([color]) => color);
 
-        room.gameState.turnOrder = turnOrder;
-        room.gameState.currentPlayer = turnOrder[0];
-        room.gameState.phase = 'playing';
-        const startingPlayer = room.players.find(p => p.color === turnOrder[0]);
-        room.gameState.message = `${startingPlayer.nickname} oyuna başlıyor!`;
-        console.log(`[Game Started] Turn order: ${turnOrder.join(' -> ')}, Starting player: ${startingPlayer.nickname}`);
-        io.to(roomId).emit('game_started', room.gameState);
-        await updateRoom(roomId);
-        playBotTurnIfNeeded(roomId);
+        // 3 saniye bekle ki oyuncular zar sonuçlarını görebilsin
+        setTimeout(async () => {
+            room.gameState.turnOrder = turnOrder;
+            room.gameState.currentPlayer = turnOrder[0];
+            room.gameState.phase = 'playing';
+            const startingPlayer = room.players.find(p => p.color === turnOrder[0]);
+            room.gameState.message = `${startingPlayer.nickname} oyuna başlıyor!`;
+            console.log(`[Game Started] Turn order: ${turnOrder.join(' -> ')}, Starting player: ${startingPlayer.nickname}`);
+            io.to(roomId).emit('game_started', room.gameState);
+            await updateRoom(roomId);
+            playBotTurnIfNeeded(roomId);
+        }, 3000);
     }
 };
 
@@ -816,27 +819,59 @@ app.post('/api/register', async (req, res) => {
 
 app.post('/api/login', async (req, res) => {
     const { email, password } = req.body;
+    console.log('[LOGIN DEBUG] Login attempt for email:', email);
+    
     if (!email || !password) {
+        console.log('[LOGIN DEBUG] Missing email or password');
         return res.status(400).json({ message: 'Email and password are required.' });
     }
 
     try {
+        console.log('[LOGIN DEBUG] Searching for user in database...');
         const userResult = await executeQuery('SELECT * FROM users WHERE email = @email', [{ name: 'email', type: sql.NVarChar(255), value: email }]);
+        console.log('[LOGIN DEBUG] User query result length:', userResult.length);
+        
         if (userResult.length === 0) {
+            console.log('[LOGIN DEBUG] User not found in database');
             return res.status(401).json({ message: 'Invalid credentials.' });
         }
 
         const user = userResult[0];
+        console.log('[LOGIN DEBUG] User found, checking password...');
+        console.log('[LOGIN DEBUG] User ID:', user.id, 'Nickname:', user.nickname);
+        
         const isPasswordValid = await bcrypt.compare(password, user.password_hash);
+        console.log('[LOGIN DEBUG] Password valid:', isPasswordValid);
 
         if (!isPasswordValid) {
+            console.log('[LOGIN DEBUG] Password validation failed');
             return res.status(401).json({ message: 'Invalid credentials.' });
         }
 
-        const token = jwt.sign({ userId: user.id, nickname: user.nickname }, JWT_SECRET, { expiresIn: '1h' });
+        // Access token - kısa süreli (1 saat)
+        const accessToken = jwt.sign({ userId: user.id, nickname: user.nickname }, JWT_SECRET, { expiresIn: '1h' });
+        
+        // Refresh token - uzun süreli (3 ay)
+        const refreshToken = jwt.sign({ userId: user.id, type: 'refresh' }, JWT_SECRET, { expiresIn: '90d' });
+        
+        // Refresh token'ı veritabanına kaydet
+        const refreshTokenId = uuidv4();
+        const expiresAt = new Date();
+        expiresAt.setDate(expiresAt.getDate() + 90); // 90 gün sonra
+        
+        await executeQuery(
+            'INSERT INTO refresh_tokens (id, user_id, token, expires_at) VALUES (@id, @userId, @token, @expiresAt)',
+            [
+                { name: 'id', type: sql.NVarChar(36), value: refreshTokenId },
+                { name: 'userId', type: sql.NVarChar(36), value: user.id },
+                { name: 'token', type: sql.NVarChar(255), value: refreshToken },
+                { name: 'expiresAt', type: sql.DateTime2, value: expiresAt }
+            ]
+        );
 
         res.json({ 
-            token, 
+            accessToken,
+            refreshToken,
             user: { 
                 id: user.id, 
                 email: user.email, 
@@ -850,15 +885,112 @@ app.post('/api/login', async (req, res) => {
     }
 });
 
+// Refresh token endpoint
+app.post('/api/refresh-token', async (req, res) => {
+    const { refreshToken } = req.body;
+    
+    if (!refreshToken) {
+        return res.status(401).json({ message: 'Refresh token is required.' });
+    }
+
+    try {
+        // Refresh token'ı doğrula
+        const decoded = jwt.verify(refreshToken, JWT_SECRET);
+        
+        if (decoded.type !== 'refresh') {
+            return res.status(403).json({ message: 'Invalid token type.' });
+        }
+
+        // Veritabanından refresh token'ı kontrol et
+        const tokenResult = await executeQuery(
+            'SELECT * FROM refresh_tokens WHERE token = @token AND user_id = @userId AND is_revoked = 0 AND expires_at > GETDATE()',
+            [
+                { name: 'token', type: sql.NVarChar(255), value: refreshToken },
+                { name: 'userId', type: sql.NVarChar(36), value: decoded.userId }
+            ]
+        );
+
+        if (tokenResult.length === 0) {
+            return res.status(403).json({ message: 'Invalid or expired refresh token.' });
+        }
+
+        // Kullanıcı bilgilerini getir
+        const userResult = await executeQuery(
+            'SELECT * FROM users WHERE id = @userId',
+            [{ name: 'userId', type: sql.NVarChar(36), value: decoded.userId }]
+        );
+
+        if (userResult.length === 0) {
+            return res.status(404).json({ message: 'User not found.' });
+        }
+
+        const user = userResult[0];
+
+        // Yeni access token oluştur
+        const newAccessToken = jwt.sign(
+            { userId: user.id, nickname: user.nickname },
+            JWT_SECRET,
+            { expiresIn: '1h' }
+        );
+
+        res.json({
+            accessToken: newAccessToken,
+            user: {
+                id: user.id,
+                email: user.email,
+                nickname: user.nickname,
+                score: user.score
+            }
+        });
+    } catch (error) {
+        console.error('Refresh token error:', error);
+        if (error.name === 'JsonWebTokenError' || error.name === 'TokenExpiredError') {
+            return res.status(403).json({ message: 'Invalid or expired refresh token.' });
+        }
+        res.status(500).json({ message: 'Internal server error' });
+    }
+});
+
+// Logout endpoint - refresh token'ı iptal et
+app.post('/api/logout', async (req, res) => {
+    const { refreshToken } = req.body;
+    
+    if (refreshToken) {
+        try {
+            // Refresh token'ı iptal et
+            await executeQuery(
+                'UPDATE refresh_tokens SET is_revoked = 1 WHERE token = @token',
+                [{ name: 'token', type: sql.NVarChar(255), value: refreshToken }]
+            );
+        } catch (error) {
+            console.error('Logout error:', error);
+        }
+    }
+    
+    res.json({ message: 'Logged out successfully' });
+});
+
 // Middleware to verify JWT
 const authenticateToken = (req, res, next) => {
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
 
-    if (token == null) return res.sendStatus(401); // if there isn't any token
+    console.log('[AUTH DEBUG] Auth header:', authHeader);
+    console.log('[AUTH DEBUG] Token exists:', !!token);
+    console.log('[AUTH DEBUG] Token length:', token ? token.length : 0);
+    
+    if (token == null) {
+        console.log('[AUTH DEBUG] No token provided, returning 401');
+        return res.sendStatus(401); // if there isn't any token
+    }
 
     jwt.verify(token, JWT_SECRET, (err, user) => {
-        if (err) return res.sendStatus(403);
+        if (err) {
+            console.log('[AUTH DEBUG] JWT verification failed:', err.message);
+            console.log('[AUTH DEBUG] JWT error name:', err.name);
+            return res.sendStatus(403);
+        }
+        console.log('[AUTH DEBUG] JWT verification successful for user:', user.userId);
         req.user = user;
         next();
     });
@@ -969,6 +1101,22 @@ app.post('/api/shop/purchase', authenticateToken, async (req, res) => {
                 message: 'Pawn purchased successfully',
                 newScore: currentScore - price
             });
+        } else if (currency === 'diamonds') {
+            // Elmas ile satın alma - sadece piyonu ekle (elmas düşme işlemi frontend'de yapılıyor)
+            console.log('[SHOP DEBUG] Processing diamond purchase for pawn:', pawnId);
+            await executeQuery(
+                'INSERT INTO UserPawns (user_id, pawn_id, purchased_at) VALUES (@userId, @pawnId, GETDATE())',
+                [
+                    { name: 'userId', type: sql.NVarChar(36), value: userId },
+                    { name: 'pawnId', type: sql.NVarChar(50), value: pawnId }
+                ]
+            );
+            
+            console.log('[SHOP DEBUG] Diamond purchase recorded successfully for pawn:', pawnId);
+            res.json({ 
+                success: true, 
+                message: 'Pawn purchased successfully with diamonds'
+            });
         } else {
             // Para ile satın alma - şimdilik sadece başarılı mesajı
             await executeQuery(
@@ -1010,12 +1158,17 @@ app.get('/api/user/selected-pawn', authenticateToken, async (req, res) => {
 });
 
 app.post('/api/user/select-pawn', authenticateToken, async (req, res) => {
+    console.log('[PAWN SELECT DEBUG] Received pawn selection request');
     try {
         const { pawnId } = req.body;
         const userId = req.user.userId;
         
+        console.log('[PAWN SELECT DEBUG] User ID:', userId);
+        console.log('[PAWN SELECT DEBUG] Pawn ID:', pawnId);
+        
         // Kullanıcının bu piyona sahip olup olmadığını kontrol et
         if (pawnId !== 'default') {
+            console.log('[PAWN SELECT DEBUG] Checking if user owns pawn:', pawnId);
             const ownedPawn = await executeQuery(
                 'SELECT * FROM UserPawns WHERE user_id = @userId AND pawn_id = @pawnId',
                 [
@@ -1024,11 +1177,15 @@ app.post('/api/user/select-pawn', authenticateToken, async (req, res) => {
                 ]
             );
             
+            console.log('[PAWN SELECT DEBUG] Owned pawn query result:', ownedPawn);
+            
             if (ownedPawn.length === 0) {
+                console.log('[PAWN SELECT DEBUG] User does not own this pawn');
                 return res.status(400).json({ error: 'Pawn not owned' });
             }
         }
         
+        console.log('[PAWN SELECT DEBUG] Updating selected pawn in database');
         // Seçili piyonu güncelle
         await executeQuery(
             'UPDATE users SET selected_pawn = @pawnId WHERE id = @userId',
@@ -1038,12 +1195,13 @@ app.post('/api/user/select-pawn', authenticateToken, async (req, res) => {
             ]
         );
         
+        console.log('[PAWN SELECT DEBUG] Pawn selection successful');
         res.json({ 
             success: true, 
             message: 'Pawn selected successfully'
         });
     } catch (error) {
-        console.error('Error selecting pawn:', error);
+        console.error('[PAWN SELECT DEBUG] Error selecting pawn:', error);
         res.status(500).json({ error: 'Failed to select pawn' });
     }
 });

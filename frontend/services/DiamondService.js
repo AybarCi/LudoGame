@@ -5,31 +5,91 @@ const DAILY_REWARD_KEY = 'daily_reward_last_claim';
 const API_BASE_URL = `${process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3001'}/api`;
 
 export const DiamondService = {
-  // API'den token al
-  async getToken() {
+  // API'den access token al
+  async getAccessToken() {
     try {
-      return await AsyncStorage.getItem('token');
+      return await AsyncStorage.getItem('accessToken');
     } catch (error) {
-      console.error('Error getting token:', error);
+      console.error('Error getting access token:', error);
       return null;
     }
+  },
+
+  // Token yenileme fonksiyonu
+  async refreshToken() {
+    try {
+      const refreshToken = await AsyncStorage.getItem('refreshToken');
+      if (!refreshToken) {
+        throw new Error('No refresh token available');
+      }
+
+      const response = await fetch(`${API_BASE_URL.replace('/api', '')}/api/refresh-token`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refreshToken }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || 'Token refresh failed');
+      }
+
+      const { accessToken, user } = data;
+      await AsyncStorage.setItem('accessToken', accessToken);
+      await AsyncStorage.setItem('user', JSON.stringify(user));
+
+      return accessToken;
+    } catch (error) {
+      console.error('Token refresh error:', error);
+      throw error;
+    }
+  },
+
+  // API isteği yapma fonksiyonu (otomatik token yenileme ile)
+  async makeAuthenticatedRequest(url, options = {}) {
+    let token = await this.getAccessToken();
+    
+    if (!token) {
+      throw new Error('No access token available');
+    }
+
+    const requestOptions = {
+      ...options,
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        ...options.headers
+      }
+    };
+
+    let response = await fetch(url, requestOptions);
+
+    // 401 veya 403 hatası alırsak token yenilemeyi dene
+    if (response.status === 401 || response.status === 403) {
+      try {
+        token = await this.refreshToken();
+        requestOptions.headers['Authorization'] = `Bearer ${token}`;
+        response = await fetch(url, requestOptions);
+      } catch (refreshError) {
+        console.error('Token refresh failed:', refreshError);
+        throw new Error('Authentication failed');
+      }
+    }
+
+    return response;
   },
 
   // Sunucudan elmas sayısını getir ve AsyncStorage'ı güncelle
   async syncDiamondsFromServer() {
     try {
-      const token = await this.getToken();
+      const token = await this.getAccessToken();
       if (!token) {
         // Token yoksa AsyncStorage'dan oku
         return await this.getDiamondsFromStorage();
       }
 
-      const response = await fetch(`${API_BASE_URL}/user/diamonds`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
+      const response = await this.makeAuthenticatedRequest(`${API_BASE_URL}/user/diamonds`);
 
       if (response.ok) {
         const data = await response.json();
@@ -63,19 +123,14 @@ export const DiamondService = {
     return await this.syncDiamondsFromServer();
   },
 
-  // Elmas ekle (hem sunucuya hem AsyncStorage'a)
+  // Elmas ekleme (sunucuya da gönder)
   async addDiamonds(amount) {
     try {
-      const token = await this.getToken();
-      
+      const token = await this.getAccessToken();
       if (token) {
         // Sunucuya gönder
-        const response = await fetch(`${API_BASE_URL}/user/diamonds/add`, {
+        const response = await this.makeAuthenticatedRequest(`${API_BASE_URL}/user/diamonds/add`, {
           method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          },
           body: JSON.stringify({ amount })
         });
 
@@ -102,19 +157,14 @@ export const DiamondService = {
     }
   },
 
-  // Elmas harca (hem sunucudan hem AsyncStorage'dan)
+  // Elmas harcama (sunucuya da gönder)
   async spendDiamonds(amount) {
     try {
-      const token = await this.getToken();
-      
+      const token = await this.getAccessToken();
       if (token) {
         // Sunucuya gönder
-        const response = await fetch(`${API_BASE_URL}/user/diamonds/spend`, {
+        const response = await this.makeAuthenticatedRequest(`${API_BASE_URL}/user/diamonds/spend`, {
           method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          },
           body: JSON.stringify({ amount })
         });
 

@@ -3,17 +3,77 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3001';
 
 class PawnService {
+  // Token yenileme fonksiyonu
+  static async refreshToken() {
+    try {
+      const refreshToken = await AsyncStorage.getItem('refreshToken');
+      if (!refreshToken) {
+        throw new Error('No refresh token available');
+      }
+
+      const response = await fetch(`${API_URL}/api/refresh-token`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refreshToken }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || 'Token refresh failed');
+      }
+
+      const { accessToken, user } = data;
+      await AsyncStorage.setItem('accessToken', accessToken);
+      await AsyncStorage.setItem('user', JSON.stringify(user));
+
+      return accessToken;
+    } catch (error) {
+      console.error('Token refresh error:', error);
+      throw error;
+    }
+  }
+
+  // API isteği yapma fonksiyonu (otomatik token yenileme ile)
+  static async makeAuthenticatedRequest(url, options = {}) {
+    let token = await AsyncStorage.getItem('accessToken');
+    
+    if (!token) {
+      throw new Error('No access token available');
+    }
+
+    const requestOptions = {
+      ...options,
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        ...options.headers
+      }
+    };
+
+    let response = await fetch(url, requestOptions);
+
+    // 401 veya 403 hatası alırsak token yenilemeyi dene
+    if (response.status === 401 || response.status === 403) {
+      try {
+        token = await this.refreshToken();
+        requestOptions.headers['Authorization'] = `Bearer ${token}`;
+        response = await fetch(url, requestOptions);
+      } catch (refreshError) {
+        console.error('Token refresh failed:', refreshError);
+        throw new Error('Authentication failed');
+      }
+    }
+
+    return response;
+  }
+
   static async getSelectedPawn() {
     try {
-      const token = await AsyncStorage.getItem('token');
+      const token = await AsyncStorage.getItem('accessToken');
       if (!token) return 'default';
 
-      const response = await fetch(`${API_URL}/api/user/selected-pawn`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
+      const response = await this.makeAuthenticatedRequest(`${API_URL}/api/user/selected-pawn`);
 
       if (response.ok) {
         const data = await response.json();
@@ -27,15 +87,11 @@ class PawnService {
 
   static async setSelectedPawn(pawnId) {
     try {
-      const token = await AsyncStorage.getItem('token');
+      const token = await AsyncStorage.getItem('accessToken');
       if (!token) return false;
 
-      const response = await fetch(`${API_URL}/api/user/select-pawn`, {
+      const response = await this.makeAuthenticatedRequest(`${API_URL}/api/user/select-pawn`, {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
         body: JSON.stringify({ pawnId })
       });
 

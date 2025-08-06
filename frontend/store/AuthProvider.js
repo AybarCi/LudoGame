@@ -16,14 +16,51 @@ export function AuthProvider({ children }) {
     const [session, setSession] = useState(null);
     const [loading, setLoading] = useState(true);
 
+    // Token yenileme fonksiyonu
+    const refreshAccessToken = async () => {
+        try {
+            const refreshToken = await AsyncStorage.getItem('refreshToken');
+            if (!refreshToken) {
+                throw new Error('No refresh token available');
+            }
+
+            const response = await fetch(`${API_URL}/api/refresh-token`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ refreshToken }),
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(data.message || 'Token refresh failed');
+            }
+
+            const { accessToken, user: userData } = data;
+            setSession(accessToken);
+            setUser(userData);
+
+            await AsyncStorage.setItem('accessToken', accessToken);
+            await AsyncStorage.setItem('user', JSON.stringify(userData));
+
+            return accessToken;
+        } catch (error) {
+            console.error('Token refresh error:', error);
+            // Refresh token da geçersizse çıkış yap
+            await signOut();
+            throw error;
+        }
+    };
+
     useEffect(() => {
         const loadAuthData = async () => {
             try {
-                const token = await AsyncStorage.getItem('token');
+                const accessToken = await AsyncStorage.getItem('accessToken');
+                const refreshToken = await AsyncStorage.getItem('refreshToken');
                 const storedUser = await AsyncStorage.getItem('user');
 
-                if (token && storedUser) {
-                    setSession(token);
+                if (accessToken && refreshToken && storedUser) {
+                    setSession(accessToken);
                     setUser(JSON.parse(storedUser));
                 }
             } catch (e) {
@@ -58,11 +95,12 @@ export function AuthProvider({ children }) {
                 throw new Error(data.message || 'Login failed');
             }
 
-            const { token, user: userData } = data;
-            setSession(token);
+            const { accessToken, refreshToken, user: userData } = data;
+            setSession(accessToken);
             setUser(userData);
 
-            await AsyncStorage.setItem('token', token);
+            await AsyncStorage.setItem('accessToken', accessToken);
+            await AsyncStorage.setItem('refreshToken', refreshToken);
             await AsyncStorage.setItem('user', JSON.stringify(userData));
             
             // Kullanıcı giriş yaptığında elmaslarını sunucudan senkronize et
@@ -109,7 +147,23 @@ export function AuthProvider({ children }) {
     const signOut = async () => {
         setLoading(true);
         try {
-            await AsyncStorage.removeItem('token');
+            const refreshToken = await AsyncStorage.getItem('refreshToken');
+            
+            // Backend'e logout isteği gönder
+            if (refreshToken) {
+                try {
+                    await fetch(`${API_URL}/api/logout`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ refreshToken }),
+                    });
+                } catch (error) {
+                    console.error('Logout API error:', error);
+                }
+            }
+            
+            await AsyncStorage.removeItem('accessToken');
+            await AsyncStorage.removeItem('refreshToken');
             await AsyncStorage.removeItem('user');
             setUser(null);
             setSession(null);
@@ -136,6 +190,7 @@ export function AuthProvider({ children }) {
         signUp,
         signOut,
         updateScore,
+        refreshAccessToken,
     };
 
     return (

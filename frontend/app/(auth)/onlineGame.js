@@ -39,6 +39,7 @@ const OnlineGameScreen = () => {
   const [chatWarning, setChatWarning] = useState('');
   const [chatBlocked, setChatBlocked] = useState(false);
   const [chatBlockDuration, setChatBlockDuration] = useState(0);
+  const [showLeaveModal, setShowLeaveModal] = useState(false);
 
   const handleProfanityWarning = (data) => {
     setChatWarning(data.message);
@@ -439,11 +440,16 @@ useEffect(() => {
   };
 
   const handleLeaveGame = () => {
+    setShowLeaveModal(true);
+  };
+
+  const confirmLeaveGame = () => {
     if (socket && room?.id) {
       console.log(`[Game] Leaving room: ${room.id}`);
       socket.emit('leave_room', { roomId: room.id });
-      router.replace('/(auth)/home');
+      router.replace('/');
     }
+    setShowLeaveModal(false);
   };
 
   const rollDiceForTurnOrder = () => {
@@ -599,6 +605,47 @@ useEffect(() => {
         )}
 
         {renderWinnerModal()}
+        
+        {/* Leave Game Confirmation Modal */}
+        <Modal
+          visible={showLeaveModal}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={() => setShowLeaveModal(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContainer}>
+              <LinearGradient
+                colors={['#FF6B6B', '#FF8E53']}
+                style={styles.modalGradient}
+              >
+                <Ionicons name="exit-outline" size={60} color="#FFF" style={styles.modalIcon} />
+                <Text style={styles.modalTitle}>Oyundan Ayrıl</Text>
+                <Text style={styles.modalMessage}>
+                  Oyunu bırakıp ana menüye dönmek istediğinizden emin misiniz?
+                </Text>
+                
+                <View style={styles.modalButtons}>
+                  <TouchableOpacity
+                    onPress={() => setShowLeaveModal(false)}
+                    style={[styles.modalButton, styles.modalButtonSecondary]}
+                  >
+                    <Text style={[styles.modalButtonText, styles.modalButtonTextSecondary]}>
+                      İptal
+                    </Text>
+                  </TouchableOpacity>
+                  
+                  <TouchableOpacity
+                    onPress={confirmLeaveGame}
+                    style={styles.modalButton}
+                  >
+                    <Text style={styles.modalButtonText}>Ayrıl</Text>
+                  </TouchableOpacity>
+                </View>
+              </LinearGradient>
+            </View>
+          </View>
+        </Modal>
       </SafeAreaView>
     </ImageBackground>
   );
@@ -948,6 +995,72 @@ const styles = StyleSheet.create({
     color: '#4CAF50',
     marginTop: 5,
     marginBottom: 10,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContainer: {
+    width: '85%',
+    maxWidth: 350,
+    borderRadius: 20,
+    overflow: 'hidden',
+    elevation: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+  },
+  modalGradient: {
+    padding: 30,
+    alignItems: 'center',
+  },
+  modalIcon: {
+    marginBottom: 20,
+  },
+  modalTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#FFF',
+    marginBottom: 15,
+    textAlign: 'center',
+  },
+  modalMessage: {
+    fontSize: 16,
+    color: '#FFF',
+    textAlign: 'center',
+    marginBottom: 30,
+    lineHeight: 22,
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    width: '100%',
+    gap: 15,
+  },
+  modalButton: {
+    flex: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 25,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+  },
+  modalButtonSecondary: {
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  modalButtonText: {
+    color: '#FFF',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  modalButtonTextSecondary: {
+    color: '#FFF',
+    opacity: 0.8,
   },
 });
 
