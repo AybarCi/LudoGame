@@ -78,7 +78,90 @@ const getPossibleMoves = (pawns, playerColor, diceValue) => {
       continue; // This move is illegal.
     }
 
-    movablePawns.push(pawn);
+    // Rule 3: Check if there are opponent pawns on the path or destination
+    let canMove = true;
+    
+    // Convert positions to absolute board positions for comparison
+    const pawnStartAbs = pawn.position === -1 ? PATH_MAP[playerColor].start : (PATH_MAP[playerColor].start + pawn.position) % 56;
+    const finalLandingAbs = finalLandingPos < 56 ? (PATH_MAP[playerColor].start + finalLandingPos) % 56 : finalLandingPos;
+    
+    // Check destination for opponent pawns on their starting position (safe)
+    if (finalLandingPos >= 0 && finalLandingPos < 56) {
+      const opponentOnDestination = pawns.find(p => {
+        if (p.color === playerColor) return false;
+        const opponentAbs = (PATH_MAP[p.color].start + p.position) % 56;
+        return opponentAbs === finalLandingAbs;
+      });
+      
+      if (opponentOnDestination) {
+        const opponentStartPos = PATH_MAP[opponentOnDestination.color]?.start;
+        const opponentAbs = (PATH_MAP[opponentOnDestination.color].start + opponentOnDestination.position) % 56;
+        const isOpponentOnStartingPosition = opponentAbs === opponentStartPos;
+        
+        // Opponent on starting position can be landed on (but not captured)
+        // This is allowed in Ludo rules - safe pawns can be passed over
+        // The capture logic will handle whether to capture or not
+      }
+    }
+    
+    // Check path for blocking pawns (both teammates and opponents)
+    if (canMove && pawn.position >= 0) {
+      // Check if pawn is on starting position (safe pawn can move freely)
+      const isOnStartingPosition = pawnStartAbs === PATH_MAP[playerColor].start;
+      
+      if (pawn.position < 56 && finalLandingPos >= 0 && finalLandingPos < 56 && !isOnStartingPosition) {
+        // Main path movement - check for blocking pawns (skip for starting position pawns)
+        for (let step = 1; step <= diceValue; step++) {
+          const checkPosAbs = (pawnStartAbs + step) % 56;
+          
+          // Check for teammate blocking the path
+          const teammateOnPath = pawns.find(p => {
+            if (p.color !== playerColor || p.id === pawn.id) return false;
+            const teammateAbs = (PATH_MAP[p.color].start + p.position) % 56;
+            return teammateAbs === checkPosAbs;
+          });
+          
+          if (teammateOnPath && checkPosAbs !== finalLandingAbs) {
+            // Teammate blocks the path (cannot jump over teammates)
+            canMove = false;
+            break;
+          }
+          
+          // Note: Opponent pawns do not block the path in Ludo
+          // They can be captured both when passed through and when landed on
+          // (if not on safe starting position) but they don't prevent movement
+          
+          if (checkPosAbs === finalLandingAbs) {
+            break;
+          }
+        }
+      } else if (pawn.position >= 56 && finalLandingPos >= 56) {
+        // Home stretch movement - check for blocking teammates
+        for (let step = 1; step <= diceValue; step++) {
+          const checkPos = pawn.position + step;
+          
+          // Check for teammate blocking the path in home stretch
+          const teammateOnPath = pawns.find(p => {
+            if (p.color !== playerColor || p.id === pawn.id) return false;
+            return p.position === checkPos;
+          });
+          
+          if (teammateOnPath && checkPos !== finalLandingPos) {
+            // Teammate blocks the path in home stretch (cannot jump over teammates)
+            canMove = false;
+            break;
+          }
+          
+          if (checkPos === finalLandingPos) {
+            break;
+          }
+        }
+      }
+    }
+    
+    if (canMove) {
+      movablePawns.push(pawn);
+    }
   }
 
   return movablePawns;
@@ -291,6 +374,45 @@ const gameReducer = (state, action) => {
         return state; // Invalid move
       }
 
+      // Check if landing on teammate (same rule as in getPossibleMoves)
+      const isLandingOnTeammate = state.pawns.some(
+        p => p.color === pawn.color && p.id !== pawn.id && p.position === newPosition
+      );
+      if (isLandingOnTeammate) {
+        return state; // Invalid move - cannot land on teammate
+      }
+
+      // Check if there are teammate pawns blocking the path (same rule as in getPossibleMoves)
+      if (pawn.position >= 0) {
+        // Check if pawn is on starting position (safe pawn can move freely)
+        const pawnStartAbs = (PATH_MAP[pawn.color].start + pawn.position) % 56;
+        const isOnStartingPosition = pawnStartAbs === PATH_MAP[pawn.color].start;
+        
+        if (pawn.position < 56 && newPosition < 56 && !isOnStartingPosition) {
+          // Main path movement - check for blocking teammates (skip for starting position pawns)
+          for (let step = 1; step <= state.diceValue; step++) {
+            const checkPos = pawn.position + step;
+            const teammateOnPath = state.pawns.some(
+              p => p.color === pawn.color && p.id !== pawn.id && p.position === checkPos
+            );
+            if (teammateOnPath) {
+              return state; // Invalid move - teammate blocking the path
+            }
+          }
+        } else if (pawn.position >= 56 && newPosition >= 56) {
+          // Home stretch movement - check for blocking teammates
+          for (let step = 1; step <= state.diceValue; step++) {
+            const checkPos = pawn.position + step;
+            const teammateOnPath = state.pawns.some(
+              p => p.color === pawn.color && p.id !== pawn.id && p.position === checkPos
+            );
+            if (teammateOnPath) {
+              return state; // Invalid move - teammate blocking the path in home stretch
+            }
+          }
+        }
+      }
+
       // Update pawns
       const updatedPawns = state.pawns.map(p => 
         p.id === pawnId ? { ...p, position: newPosition } : p
@@ -299,29 +421,40 @@ const gameReducer = (state, action) => {
       // Check for captures along the path and at destination
       const capturedPawns = updatedPawns.map(p => {
         if (p.id !== pawnId && p.color !== pawn.color && p.position >= 0 && p.position < 56) {
-          // Check if this pawn is in the path of movement
           const startPos = pawn.position;
           const endPos = newPosition;
           
+          // Convert positions to absolute board positions for comparison
+          const movingPawnStartAbs = startPos === -1 ? PATH_MAP[pawn.color].start : (PATH_MAP[pawn.color].start + startPos) % 56;
+          const movingPawnEndAbs = endPos < 56 ? (PATH_MAP[pawn.color].start + endPos) % 56 : endPos;
+          const opponentPawnAbs = (PATH_MAP[p.color].start + p.position) % 56;
+          
+          // Check if opponent pawn is on its starting position (safe from capture)
+          const opponentStartPos = PATH_MAP[p.color]?.start;
+          const isOnStartingPosition = opponentPawnAbs === opponentStartPos;
+          
+          // If opponent is on starting position, it cannot be captured
+          if (isOnStartingPosition) {
+            return p; // Safe, cannot be captured
+          }
+          
           // If moving from home (position -1), only check destination
           if (startPos === -1) {
-            if (p.position === endPos) {
+            if (opponentPawnAbs === movingPawnEndAbs && endPos < 56) {
               return { ...p, position: -1 }; // Send captured pawn home
             }
           } else {
-            // Check all positions in the movement path
+            // Check all positions in the movement path (including destination)
             for (let step = 1; step <= state.diceValue; step++) {
-              let checkPos;
-              if (startPos + step === endPos) {
-                checkPos = endPos;
-              } else if (startPos + step < 56) {
-                checkPos = startPos + step;
-              } else {
-                break; // Entered home stretch
+              const checkPosAbs = (movingPawnStartAbs + step) % 56;
+              
+              if (opponentPawnAbs === checkPosAbs && endPos < 56) {
+                return { ...p, position: -1 }; // Send captured pawn home
               }
               
-              if (p.position === checkPos) {
-                return { ...p, position: -1 }; // Send captured pawn home
+              // If we reached the end position, stop checking
+              if (checkPosAbs === movingPawnEndAbs) {
+                break;
               }
             }
           }
