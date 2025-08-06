@@ -1,0 +1,5 @@
+<svg width="40" height="40" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect x="2" y="2" width="36" height="36" rx="4" fill="#2d2d2d" stroke="#gold" stroke-width="2"/>
+  <path d="M10 10 L30 10 L25 20 L30 30 L10 30 L15 20 Z" fill="#gold"/>
+  <text x="20" y="35" text-anchor="middle" font-family="Arial, sans-serif" font-size="7" fill="#2d2d2d" font-weight="bold">NEXUS</text>
+</svg>

@@ -7,7 +7,8 @@ import {
   ImageBackground,
   Animated,
   Dimensions,
-  Modal
+  Modal,
+  Image
 } from 'react-native';
 import { Text } from '@rneui/themed';
 import { useRouter } from 'expo-router';
@@ -17,54 +18,276 @@ import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { DiamondService } from '../../services/DiamondService';
 import CustomModal from '../../components/shared/CustomModal';
+import Svg, { Circle, Path, Text as SvgText, Line } from 'react-native-svg';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3001';
 
 const { width, height } = Dimensions.get('window');
 
+// Piyon kategorilerini oluşturan yardımcı fonksiyon
+const generatePawnItems = (baseItems, categoryPrefix, count = 100) => {
+  const items = [...baseItems];
+  const emojis = {
+    emoji: ['😀', '😃', '😄', '😁', '😆', '😅', '🤣', '😂', '🙂', '🙃', '😉', '😊', '😇', '🥰', '😍', '🤩', '😘', '😗', '☺️', '😚', '😙', '🥲', '😋', '😛', '😜', '🤪', '😝', '🤑', '🤗', '🤭', '🤫', '🤔', '🤐', '🤨', '😐', '😑', '😶', '😏', '😒', '🙄', '😬', '🤥', '😌', '😔', '😪', '🤤', '😴', '😷', '🤒', '🤕', '🤢', '🤮', '🤧', '🥵', '🥶', '🥴', '😵', '🤯', '🤠', '🥳', '🥸', '😎', '🤓', '🧐', '😕', '😟', '🙁', '☹️', '😮', '😯', '😲', '😳', '🥺', '😦', '😧', '😨', '😰', '😥', '😢', '😭', '😱', '😖', '😣', '😞', '😓', '😩', '😫', '🥱', '😤', '😡', '😠', '🤬', '😈', '👿', '💀', '☠️', '💩', '🤡', '👹', '👺', '👻', '👽', '👾', '🤖', '🎃', '😺', '😸', '😹', '😻', '😼', '😽', '🙀', '😿', '😾'],
+    animals: ['🐱', '🐶', '🐭', '🐹', '🐰', '🦊', '🐻', '🐼', '🐨', '🐯', '🦁', '🐮', '🐷', '🐽', '🐸', '🐵', '🙈', '🙉', '🙊', '🐒', '🐔', '🐧', '🐦', '🐤', '🐣', '🐥', '🦆', '🦅', '🦉', '🦇', '🐺', '🐗', '🐴', '🦄', '🐝', '🐛', '🦋', '🐌', '🐞', '🐜', '🦟', '🦗', '🕷️', '🕸️', '🦂', '🐢', '🐍', '🦎', '🦖', '🦕', '🐙', '🦑', '🦐', '🦞', '🦀', '🐡', '🐠', '🐟', '🐬', '🐳', '🐋', '🦈', '🐊', '🐅', '🐆', '🦓', '🦍', '🦧', '🐘', '🦛', '🦏', '🐪', '🐫', '🦒', '🦘', '🐃', '🐂', '🐄', '🐎', '🐖', '🐏', '🐑', '🦙', '🐐', '🦌', '🐕', '🐩', '🦮', '🐕‍🦺', '🐈', '🐈‍⬛', '🐓', '🦃', '🦚', '🦜', '🦢', '🦩', '🕊️', '🐇', '🦝', '🦨', '🦡', '🦦', '🦥', '🐁', '🐀', '🐿️', '🦔'],
+    nature: ['🌸', '🌺', '🌻', '🌷', '🌹', '🥀', '🌾', '🌿', '🍀', '🍃', '🍂', '🍁', '🌱', '🌲', '🌳', '🌴', '🌵', '🌶️', '🍄', '🌰', '🌟', '⭐', '🌠', '☀️', '🌞', '🌝', '🌛', '🌜', '🌚', '🌕', '🌖', '🌗', '🌘', '🌑', '🌒', '🌓', '🌔', '🌙', '⚡', '⛈️', '🌩️', '🔥', '💥', '❄️', '🌨️', '☃️', '⛄', '🌬️', '💨', '🌪️', '🌊', '💧', '💦', '☔', '🌈', '🌤️', '⛅', '🌥️', '☁️', '🌦️', '🌧️', '⛈️', '🌩️', '🌨️', '❄️', '☃️', '⛄', '🌬️', '💨', '🌪️', '🌫️', '🌊', '💧', '💦', '☔', '🌈', '🌍', '🌎', '🌏', '🌐', '🗺️', '🗾', '🧭', '🏔️', '⛰️', '🌋', '🗻', '🏕️', '🏖️', '🏜️', '🏝️', '🏞️', '🏟️', '🏛️', '🏗️', '🧱', '🪨', '🪵', '🛖', '🏘️', '🏚️', '🏠', '🏡', '🏢', '🏣', '🏤', '🏥', '🏦', '🏨', '🏩', '🏪', '🏫', '🏬', '🏭', '🏯', '🏰', '🗼', '🗽', '⛪', '🕌', '🛕', '🕍', '⛩️', '🕋', '⛲', '⛺', '🌁', '🌃', '🏙️', '🌄', '🌅', '🌆', '🌇', '🌉', '♨️', '🎠', '🎡', '🎢', '💈', '🎪', '🚂', '🚃', '🚄', '🚅', '🚆', '🚇', '🚈', '🚉', '🚊', '🚝', '🚞', '🚋', '🚌', '🚍', '🚎', '🚐', '🚑', '🚒', '🚓', '🚔', '🚕', '🚖', '🚗', '🚘', '🚙', '🛻', '🚚', '🚛', '🚜', '🏎️', '🏍️', '🛵', '🦽', '🦼', '🛴', '🚲', '🛺', '🚁', '🚟', '🚠', '🚡', '🛰️', '🚀', '🛸', '🛶', '⛵', '🚤', '🛥️', '🛳️', '⛴️', '🚢', '⚓', '⛽', '🚧', '🚨', '🚥', '🚦', '🛑', '🚏', '🗺️', '🗿', '🗽', '🗼', '🏛️', '🎡', '🎢', '🎠', '⛲', '⛱️', '🏖️', '🏝️', '🏜️', '🌋', '⛰️', '🏔️', '🗻', '🏕️', '⛺', '🏠', '🏡', '🏘️', '🏚️', '🏗️', '🏭', '🏢', '🏬', '🏣', '🏤', '🏥', '🏦', '🏨', '🏪', '🏫', '🏩', '💒', '🏛️', '⛪', '🕌', '🕍', '🛕', '🕋', '⛩️', '🛤️', '🛣️', '🗾', '🎑', '🏞️', '🌅', '🌄', '🌠', '🎇', '🎆', '🌇', '🌆', '🏙️', '🌃', '🌌', '🌉', '🌁'],
+    vehicles: ['🚗', '🚕', '🚙', '🚌', '🚎', '🏎️', '🚓', '🚑', '🚒', '🚐', '🛻', '🚚', '🚛', '🚜', '🏍️', '🛵', '🚲', '🛴', '🛺', '🚁', '🛸', '🚀', '✈️', '🛩️', '🛫', '🛬', '🪂', '💺', '🚂', '🚃', '🚄', '🚅', '🚆', '🚇', '🚈', '🚉', '🚊', '🚝', '🚞', '🚋', '🚟', '🚠', '🚡', '⛵', '🛶', '🚤', '🛥️', '🛳️', '⛴️', '🚢', '⚓', '⛽', '🚧', '🚨', '🚥', '🚦', '🛑', '🚏', '🛤️', '🛣️', '🗺️', '🧭', '🚘', '🚖', '🚔', '🚍', '🚒', '🚑', '🚓', '🚕', '🚗', '🚙', '🛻', '🚚', '🚛', '🚜', '🏎️', '🏍️', '🛵', '🚲', '🛴', '🛺', '🚁', '🛸', '🚀', '✈️', '🛩️', '🛫', '🛬', '🪂', '💺', '🚂', '🚃', '🚄', '🚅', '🚆', '🚇', '🚈', '🚉', '🚊', '🚝', '🚞', '🚋', '🚟', '🚠', '🚡', '⛵', '🛶', '🚤', '🛥️', '🛳️', '⛴️', '🚢']
+  };
+  
+  const categoryEmojis = emojis[categoryPrefix] || emojis.emoji;
+  
+  for (let i = items.length + 1; i <= count; i++) {
+    const emojiIndex = (i - 1) % categoryEmojis.length;
+    const priceVariation = Math.floor(Math.random() * 16) + 5; // 5-20 arası rastgele fiyat
+    const isMoneyItem = i % 10 === 0; // Her 10. item para ile satın alınabilir
+    
+    // Özel fiyatlandırma için kontrol
+    let itemPrice = isMoneyItem ? (Math.random() * 5 + 1).toFixed(2) : priceVariation;
+    let itemCurrency = isMoneyItem ? 'money' : 'diamonds';
+    
+    // Hayvan 11 ve Hayvan 28 için özel fiyat
+    if (categoryPrefix === 'animals' && (i === 11 || i === 28)) {
+      itemPrice = '5.00';
+      itemCurrency = 'money';
+    }
+    
+    items.push({
+      id: `${categoryPrefix}_${i}`,
+      emoji: categoryEmojis[emojiIndex],
+      name: `${categoryPrefix === 'emoji' ? 'Emoji' : categoryPrefix === 'animals' ? 'Hayvan' : categoryPrefix === 'vehicles' ? 'Araç' : 'Doğa'} ${i}`,
+      price: itemPrice,
+      currency: itemCurrency
+    });
+  }
+  
+  return items;
+};
+
 const PAWN_CATEGORIES = {
+  teams: {
+    title: 'Takımlar',
+    icon: '⚽',
+    items: [
+      { id: 'team_1', name: 'Takım 1', price: 45, currency: 'diamonds', isTeam: true, colors: ['#000000', '#FFFFFF'] },
+      { id: 'team_2', name: 'Takım 2', price: 45, currency: 'diamonds', isTeam: true, colors: ['#FFD700', '#FF0000'] },
+      { id: 'team_3', name: 'Takım 3', price: 45, currency: 'diamonds', isTeam: true, colors: ['#FFFF00', '#000080'] },
+      { id: 'team_4', name: 'Takım 4', price: 40, currency: 'diamonds', isTeam: true, colors: ['#800080', '#87CEEB'] },
+      { id: 'team_5', name: 'Takım 5', price: 35, currency: 'diamonds', isTeam: true, colors: ['#FF4500', '#000080'] },
+      { id: 'team_6', name: 'Takım 6', price: 30, currency: 'diamonds', isTeam: true, colors: ['#FF4500', '#008000'] },
+      { id: 'team_7', name: 'Takım 7', price: 30, currency: 'diamonds', isTeam: true, colors: ['#FF0000', '#FFFFFF'] },
+      { id: 'team_8', name: 'Takım 8', price: 25, currency: 'diamonds', isTeam: true, colors: ['#008000', '#FFFFFF'] },
+      { id: 'team_9', name: 'Takım 9', price: 25, currency: 'diamonds', isTeam: true, colors: ['#FF0000', '#FFFFFF'] },
+      { id: 'team_10', name: 'Takım 10', price: 25, currency: 'diamonds', isTeam: true, colors: ['#FF0000', '#FFD700'] },
+      { id: 'team_11', name: 'Takım 11', price: 20, currency: 'diamonds', isTeam: true, colors: ['#0000FF', '#008000'] },
+      { id: 'team_12', name: 'Takım 12', price: 20, currency: 'diamonds', isTeam: true, colors: ['#FF0000', '#000000'] }
+    ]
+  },
   emoji: {
     title: 'Emoji Piyonlar',
     icon: '😊',
-    items: [
-      { id: 'emoji_1', emoji: '😀', name: 'Mutlu Yüz', price: 5, currency: 'diamonds' },
-      { id: 'emoji_2', emoji: '😎', name: 'Havalı', price: 8, currency: 'diamonds' },
-      { id: 'emoji_3', emoji: '🤩', name: 'Yıldız Gözlü', price: 12, currency: 'diamonds' },
-      { id: 'emoji_4', emoji: '🥳', name: 'Parti', price: 15, currency: 'diamonds' },
-      { id: 'emoji_5', emoji: '👑', name: 'Kral Tacı', price: 25, currency: 'diamonds' },
-      { id: 'emoji_6', emoji: '💎', name: 'Elmas', price: 2.99, currency: 'money' }
-    ]
+    items: generatePawnItems([
+       { id: 'emoji_1', emoji: '😀', name: 'Mutlu Yüz', price: 5, currency: 'diamonds' },
+       { id: 'emoji_2', emoji: '😎', name: 'Havalı', price: 8, currency: 'diamonds' },
+       { id: 'emoji_3', emoji: '🤩', name: 'Yıldız Gözlü', price: 12, currency: 'diamonds' },
+       { id: 'emoji_4', emoji: '🥳', name: 'Parti', price: 15, currency: 'diamonds' },
+       { id: 'emoji_5', emoji: '👑', name: 'Kral Tacı', price: 25, currency: 'diamonds' },
+       { id: 'emoji_6', emoji: '💎', name: 'Elmas', price: 2.99, currency: 'money' },
+       { id: 'emoji_7', emoji: '🚀', name: 'Roket', price: 30, currency: 'diamonds' }
+     ], 'emoji', 100)
   },
   animals: {
     title: 'Hayvan Figürleri',
     icon: '🐾',
-    items: [
-      { id: 'animal_1', emoji: '🐱', name: 'Kedi', price: 6, currency: 'diamonds' },
-      { id: 'animal_2', emoji: '🐶', name: 'Köpek', price: 6, currency: 'diamonds' },
-      { id: 'animal_3', emoji: '🦁', name: 'Aslan', price: 18, currency: 'diamonds' },
-      { id: 'animal_4', emoji: '🐯', name: 'Kaplan', price: 20, currency: 'diamonds' },
-      { id: 'animal_5', emoji: '🦄', name: 'Unicorn', price: 4.99, currency: 'money' },
-      { id: 'animal_6', emoji: '🐉', name: 'Ejder', price: 6.99, currency: 'money' }
-    ]
+    items: generatePawnItems([
+       { id: 'animal_1', emoji: '🐱', name: 'Kedi', price: 6, currency: 'diamonds' },
+       { id: 'animal_2', emoji: '🐶', name: 'Köpek', price: 6, currency: 'diamonds' },
+       { id: 'animal_3', emoji: '🦁', name: 'Aslan', price: 18, currency: 'diamonds' },
+       { id: 'animal_4', emoji: '🐯', name: 'Kaplan', price: 20, currency: 'diamonds' },
+       { id: 'animal_5', emoji: '🦄', name: 'Unicorn', price: 4.99, currency: 'money' },
+       { id: 'animal_6', emoji: '🐉', name: 'Ejder', price: 6.99, currency: 'money' }
+     ], 'animals', 100)
   },
   nature: {
     title: 'Doğa Figürleri',
     icon: '🌿',
-    items: [
-      { id: 'nature_1', emoji: '🌸', name: 'Kiraz Çiçeği', price: 4, currency: 'diamonds' },
-      { id: 'nature_2', emoji: '🌺', name: 'Hibiskus', price: 5, currency: 'diamonds' },
-      { id: 'nature_3', emoji: '🌟', name: 'Yıldız', price: 10, currency: 'diamonds' },
-      { id: 'nature_4', emoji: '⚡', name: 'Şimşek', price: 12, currency: 'diamonds' },
-      { id: 'nature_5', emoji: '🔥', name: 'Ateş', price: 3.99, currency: 'money' },
-      { id: 'nature_6', emoji: '❄️', name: 'Kar Tanesi', price: 3.99, currency: 'money' }
-    ]
+    items: generatePawnItems([
+       { id: 'nature_1', emoji: '🌸', name: 'Kiraz Çiçeği', price: 5, currency: 'diamonds' },
+       { id: 'nature_2', emoji: '🌺', name: 'Hibiskus', price: 5, currency: 'diamonds' },
+       { id: 'nature_3', emoji: '🌟', name: 'Yıldız', price: 10, currency: 'diamonds' },
+       { id: 'nature_4', emoji: '⚡', name: 'Şimşek', price: 12, currency: 'diamonds' },
+       { id: 'nature_5', emoji: '🔥', name: 'Ateş', price: 3.99, currency: 'money' },
+       { id: 'nature_6', emoji: '❄️', name: 'Kar Tanesi', price: 3.99, currency: 'money' }
+     ], 'nature', 100)
+  },
+  vehicles: {
+    title: 'Araç Figürleri',
+    icon: '🚗',
+    items: generatePawnItems([
+      { id: 'brand_1', emoji: '🏷️', name: 'Aura Motors', price: 35, currency: 'diamonds', isBrand: true, logoType: 'aura' },
+      { id: 'brand_2', emoji: '🏷️', name: 'Vortex Auto', price: 40, currency: 'diamonds', isBrand: true, logoType: 'vortex' },
+      { id: 'brand_3', emoji: '🏷️', name: 'Stellar Cars', price: 45, currency: 'diamonds', isBrand: true, logoType: 'stellar' },
+      { id: 'brand_4', emoji: '🏷️', name: 'Nexus Motors', price: 50, currency: 'diamonds', isBrand: true, logoType: 'nexus' },
+      { id: 'brand_5', emoji: '🏷️', name: 'Phoenix Auto', price: 12.99, currency: 'money', isBrand: true, logoType: 'phoenix' },
+      { id: 'brand_6', emoji: '🏷️', name: 'Titan Motors', price: 15.99, currency: 'money', isBrand: true, logoType: 'titan' },
+      { id: 'brand_7', emoji: '🏷️', name: 'Merseles', price: 60, currency: 'diamonds', isBrand: true, logoType: 'merseles' },
+      { id: 'brand_8', emoji: '🏷️', name: 'Avudi', price: 55, currency: 'diamonds', isBrand: true, logoType: 'avudi' },
+      { id: 'brand_9', emoji: '🏷️', name: 'Bememe', price: 65, currency: 'diamonds', isBrand: true, logoType: 'bememe' },
+      { id: 'vehicle_1', emoji: '🚗', name: 'Araba', price: 8, currency: 'diamonds' },
+      { id: 'vehicle_2', emoji: '🚕', name: 'Taksi', price: 10, currency: 'diamonds' },
+      { id: 'vehicle_3', emoji: '🚌', name: 'Otobüs', price: 15, currency: 'diamonds' },
+      { id: 'vehicle_4', emoji: '🏎️', name: 'Yarış Arabası', price: 25, currency: 'diamonds' },
+      { id: 'vehicle_5', emoji: '🚁', name: 'Helikopter', price: 7.99, currency: 'money' },
+      { id: 'vehicle_6', emoji: '✈️', name: 'Uçak', price: 9.99, currency: 'money' }
+    ], 'vehicles', 100)
+  }
+};
+
+// Takım renkleri render fonksiyonu
+const renderTeamColors = (colors) => {
+    return (
+      <Svg width="40" height="40" viewBox="0 0 40 40">
+        {/* Forma ana gövdesi */}
+        <Path
+          d="M8 12 L8 36 L32 36 L32 12 L28 8 L24 6 L20 4 L16 6 L12 8 Z"
+          fill={colors[0]}
+          stroke="#000"
+          strokeWidth="1"
+        />
+        
+        {/* Kollar */}
+        <Path
+          d="M8 12 L4 16 L4 22 L8 18 Z"
+          fill={colors[0]}
+          stroke="#000"
+          strokeWidth="1"
+        />
+        <Path
+          d="M32 12 L36 16 L36 22 L32 18 Z"
+          fill={colors[0]}
+          stroke="#000"
+          strokeWidth="1"
+        />
+        
+        {/* Yaka */}
+        <Path
+          d="M16 6 L20 4 L24 6 L22 8 L18 8 Z"
+          fill="none"
+          stroke="#000"
+          strokeWidth="1"
+        />
+        
+        {/* Dikey çizgiler - ikinci renk */}
+        <Line x1="12" y1="12" x2="12" y2="36" stroke={colors[1]} strokeWidth="2" />
+        <Line x1="16" y1="12" x2="16" y2="36" stroke={colors[1]} strokeWidth="2" />
+        <Line x1="20" y1="12" x2="20" y2="36" stroke={colors[1]} strokeWidth="2" />
+        <Line x1="24" y1="12" x2="24" y2="36" stroke={colors[1]} strokeWidth="2" />
+        <Line x1="28" y1="12" x2="28" y2="36" stroke={colors[1]} strokeWidth="2" />
+      </Svg>
+    );
+  };
+
+// Logo render fonksiyonu
+const renderBrandLogo = (logoType) => {
+  const logoProps = {
+    width: 40,
+    height: 40,
+    viewBox: "0 0 40 40"
+  };
+
+  switch (logoType) {
+    case 'aura':
+      return (
+        <Svg {...logoProps}>
+          <Circle cx="20" cy="20" r="18" fill="#1a1a1a" stroke="#C0C0C0" strokeWidth="2"/>
+          <Circle cx="20" cy="20" r="12" fill="none" stroke="#C0C0C0" strokeWidth="2"/>
+          <Path d="M14 20 L20 14 L26 20 L20 26 Z" fill="#C0C0C0"/>
+          <SvgText x="20" y="35" textAnchor="middle" fontFamily="Arial" fontSize="8" fill="#1a1a1a" fontWeight="bold">AURA</SvgText>
+        </Svg>
+      );
+    case 'vortex':
+      return (
+        <Svg {...logoProps}>
+          <Circle cx="20" cy="20" r="18" fill="#2E3440" stroke="#88C0D0" strokeWidth="2"/>
+          <Path d="M20 8 Q28 12 24 20 Q28 28 20 32 Q12 28 16 20 Q12 12 20 8 Z" fill="#88C0D0"/>
+          <SvgText x="20" y="35" textAnchor="middle" fontFamily="Arial" fontSize="7" fill="#2E3440" fontWeight="bold">VORTEX</SvgText>
+        </Svg>
+      );
+    case 'stellar':
+      return (
+        <Svg {...logoProps}>
+          <Circle cx="20" cy="20" r="18" fill="#0F1419" stroke="#FFD700" strokeWidth="2"/>
+          <Path d="M20 6 L22 16 L32 16 L24 22 L26 32 L20 26 L14 32 L16 22 L8 16 L18 16 Z" fill="#FFD700"/>
+          <SvgText x="20" y="35" textAnchor="middle" fontFamily="Arial" fontSize="6" fill="#0F1419" fontWeight="bold">STELLAR</SvgText>
+        </Svg>
+      );
+    case 'nexus':
+      return (
+        <Svg {...logoProps}>
+          <Circle cx="20" cy="20" r="18" fill="#1E1E1E" stroke="#00D4AA" strokeWidth="2"/>
+          <Path d="M12 12 L28 12 L28 16 L16 16 L16 24 L28 24 L28 28 L12 28 Z" fill="#00D4AA"/>
+          <Circle cx="24" cy="20" r="2" fill="#00D4AA"/>
+          <SvgText x="20" y="35" textAnchor="middle" fontFamily="Arial" fontSize="7" fill="#1E1E1E" fontWeight="bold">NEXUS</SvgText>
+        </Svg>
+      );
+    case 'phoenix':
+      return (
+        <Svg {...logoProps}>
+          <Circle cx="20" cy="20" r="18" fill="#2D1B69" stroke="#FF6B35" strokeWidth="2"/>
+          <Path d="M20 8 Q24 12 20 16 Q16 12 20 8 M16 16 Q20 20 24 16 Q20 24 16 16 M20 24 Q24 28 20 32 Q16 28 20 24" fill="#FF6B35"/>
+          <SvgText x="20" y="35" textAnchor="middle" fontFamily="Arial" fontSize="6" fill="#2D1B69" fontWeight="bold">PHOENIX</SvgText>
+        </Svg>
+      );
+    case 'titan':
+       return (
+         <Svg {...logoProps}>
+           <Circle cx="20" cy="20" r="18" fill="#1C1C1C" stroke="#E74C3C" strokeWidth="2"/>
+           <Path d="M8 14 L32 14 L32 18 L22 18 L22 26 L18 26 L18 18 L8 18 Z" fill="#E74C3C"/>
+           <SvgText x="20" y="35" textAnchor="middle" fontFamily="Arial" fontSize="7" fill="#1C1C1C" fontWeight="bold">TITAN</SvgText>
+         </Svg>
+       );
+     case 'merseles':
+       return (
+         <Svg {...logoProps}>
+           <Circle cx="20" cy="20" r="18" fill="#0F1419" stroke="#C0C0C0" strokeWidth="2"/>
+           <Circle cx="20" cy="20" r="14" fill="none" stroke="#C0C0C0" strokeWidth="1"/>
+           <Path d="M20 8 L26 20 L20 32 L14 20 Z" fill="#C0C0C0"/>
+           <Circle cx="20" cy="20" r="3" fill="#C0C0C0"/>
+           <SvgText x="20" y="35" textAnchor="middle" fontFamily="Arial" fontSize="6" fill="#0F1419" fontWeight="bold">MERSELES</SvgText>
+         </Svg>
+       );
+     case 'avudi':
+       return (
+         <Svg {...logoProps}>
+           <Circle cx="20" cy="20" r="18" fill="#8B0000" stroke="#C0C0C0" strokeWidth="2"/>
+           <Circle cx="14" cy="20" r="6" fill="none" stroke="#C0C0C0" strokeWidth="2"/>
+           <Circle cx="20" cy="20" r="6" fill="none" stroke="#C0C0C0" strokeWidth="2"/>
+           <Circle cx="26" cy="20" r="6" fill="none" stroke="#C0C0C0" strokeWidth="2"/>
+           <Circle cx="32" cy="20" r="6" fill="none" stroke="#C0C0C0" strokeWidth="2"/>
+           <SvgText x="20" y="35" textAnchor="middle" fontFamily="Arial" fontSize="7" fill="#8B0000" fontWeight="bold">AVUDI</SvgText>
+         </Svg>
+       );
+     case 'bememe':
+       return (
+         <Svg {...logoProps}>
+           <Circle cx="20" cy="20" r="18" fill="#1E3A8A" stroke="#FFFFFF" strokeWidth="2"/>
+           <Circle cx="20" cy="20" r="14" fill="none" stroke="#FFFFFF" strokeWidth="2"/>
+           <Path d="M20 8 L20 32 M8 20 L32 20" stroke="#FFFFFF" strokeWidth="2"/>
+           <Circle cx="15" cy="15" r="4" fill="#FFFFFF"/>
+           <Circle cx="25" cy="15" r="4" fill="#1E3A8A"/>
+           <Circle cx="15" cy="25" r="4" fill="#1E3A8A"/>
+           <Circle cx="25" cy="25" r="4" fill="#FFFFFF"/>
+           <SvgText x="20" y="35" textAnchor="middle" fontFamily="Arial" fontSize="6" fill="#1E3A8A" fontWeight="bold">BEMEME</SvgText>
+         </Svg>
+       );
+     default:
+       return null;
   }
 };
 
 const ShopScreen = () => {
   const router = useRouter();
   const { user } = useAuth();
-  const [selectedCategory, setSelectedCategory] = useState('emoji');
+  const [selectedCategory, setSelectedCategory] = useState('teams');
   const [purchaseModal, setPurchaseModal] = useState({ visible: false, item: null });
   const [ownedPawns, setOwnedPawns] = useState(['default']); // Varsayılan piyon her zaman sahip olunan
   const [selectedPawn, setSelectedPawn] = useState('default');
@@ -556,7 +779,17 @@ const ShopScreen = () => {
         disabled={false}
       >
         <View style={styles.pawnEmojiContainer}>
-          <Text style={styles.pawnEmoji}>{item.emoji}</Text>
+          {item.isTeam && item.colors ? (
+            <View style={styles.brandLogoContainer}>
+              {renderTeamColors(item.colors)}
+            </View>
+          ) : item.isBrand && item.logoType ? (
+            <View style={styles.brandLogoContainer}>
+              {renderBrandLogo(item.logoType)}
+            </View>
+          ) : (
+            <Text style={styles.pawnEmoji}>{item.emoji}</Text>
+          )}
           {isOwned && (
             <View style={styles.ownedBadge}>
               <Ionicons name="checkmark" size={16} color="white" />
@@ -857,6 +1090,19 @@ const styles = StyleSheet.create({
   },
   pawnEmoji: {
     fontSize: 40,
+  },
+  brandLogoContainer: {
+    width: 50,
+    height: 50,
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    borderRadius: 25,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 5,
+  },
+  brandLogo: {
+    width: 40,
+    height: 40,
   },
   ownedBadge: {
     position: 'absolute',
