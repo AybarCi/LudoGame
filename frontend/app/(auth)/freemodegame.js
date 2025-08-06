@@ -22,6 +22,7 @@ import Animated, {
 
 import FreeModeBoard from '../../components/modules/FreeModeBoard';
 import { useFreeModeEngine } from '../../hooks/useFreeModeEngine';
+import { AdService } from '../../services/AdService';
 
 const { width, height } = Dimensions.get('window');
 const isTablet = width > 768;
@@ -357,20 +358,36 @@ const FreeModeGame = () => {
                 >
                   <Text style={styles.winnerTitle}>🎉 Tebrikler! 🎉</Text>
                   <Text style={styles.winnerName}>
-                    {state.playerNames[state.winner] || state.winner}
+                    {state.playersInfo[state.winner]?.nickname || state.winner}
                   </Text>
                   <Text style={styles.winnerSubtitle}>Oyunu Kazandı!</Text>
                   
                   <View style={styles.winnerButtons}>
                     <TouchableOpacity
-                      onPress={() => dispatch({ type: 'RESET_GAME' })}
+                      onPress={async () => {
+                        try {
+                          await AdService.showInterstitialAd();
+                          dispatch({ type: 'RESET_GAME' });
+                        } catch (error) {
+                          console.error('Ad failed, proceeding anyway:', error);
+                          dispatch({ type: 'RESET_GAME' });
+                        }
+                      }}
                       style={styles.winnerButton}
                     >
                       <Text style={styles.winnerButtonText}>Tekrar Oyna</Text>
                     </TouchableOpacity>
                     
                     <TouchableOpacity
-                      onPress={() => router.replace('/home')}
+                      onPress={async () => {
+                        try {
+                          await AdService.showInterstitialAd();
+                          router.replace('/home');
+                        } catch (error) {
+                          console.error('Ad failed, proceeding anyway:', error);
+                          router.replace('/home');
+                        }
+                      }}
                       style={[styles.winnerButton, styles.winnerButtonSecondary]}
                     >
                       <Text style={[styles.winnerButtonText, styles.winnerButtonTextSecondary]}>
