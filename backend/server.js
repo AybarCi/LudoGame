@@ -122,6 +122,8 @@ const updateRoom = async (roomId) => {
                         [{ name: 'userId', type: sql.NVarChar(36), value: player.userId }]
                     );
                     
+
+                    
                     return {
                         ...player,
                         selectedPawn: result[0]?.selected_pawn || 'default'
@@ -254,7 +256,20 @@ const joinRoomAsync = async (roomId, userId, nickname, socketId) => {
         ]
     );
 
-    const player = { id: user.id, dbPlayerId, socketId, nickname, color, isBot: false };
+    // Get user's selected pawn
+    let selectedPawn = 'default';
+    try {
+        const pawnResult = await executeQuery(
+            'SELECT selected_pawn FROM users WHERE id = @userId',
+            [{ name: 'userId', type: sql.NVarChar(36), value: user.id }]
+        );
+        selectedPawn = pawnResult[0]?.selected_pawn || 'default';
+
+    } catch (error) {
+        console.error('Error fetching selected pawn for joining user:', user.id, error);
+    }
+
+    const player = { id: user.id, dbPlayerId, socketId, nickname, color, isBot: false, userId: user.id, selectedPawn };
     room.players.push(player);
     console.log(`[Join Room] ${nickname} (${user.id}) joined room ${roomId} as ${color}`);
     

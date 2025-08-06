@@ -88,10 +88,20 @@ const OnlineGameScreen = () => {
       const amICreator = firstPlayer && (firstPlayer.id === user?.id || firstPlayer.id === socket?.id);
       setIsCreator(amICreator);
       
+      console.log('[COUNTDOWN DEBUG]', {
+        amICreator,
+        gamePhase,
+        playersLength: players.length,
+        timeLeft,
+        shouldStartCountdown: amICreator && gamePhase === 'waiting' && players.length < 4
+      });
+      
       // Start countdown only for room creator and only in waiting phase
-      if (amICreator && gamePhase === 'waiting' && players.length < 4) {
+      if (amICreator && gamePhase === 'waiting') {
+        console.log('[COUNTDOWN] Starting countdown timer');
         const interval = setInterval(() => {
           setTimeLeft(prev => {
+            console.log('[COUNTDOWN] Timer tick:', prev - 1);
             if (prev <= 1) {
               clearInterval(interval);
               return 0;
@@ -100,8 +110,12 @@ const OnlineGameScreen = () => {
           });
         }, 1000);
         
-        return () => clearInterval(interval);
+        return () => {
+          console.log('[COUNTDOWN] Clearing countdown timer');
+          clearInterval(interval);
+        };
       } else if (gamePhase !== 'waiting') {
+        console.log('[COUNTDOWN] Resetting timer, game phase changed to:', gamePhase);
         setTimeLeft(20); // Reset timer when game starts
       }
     }

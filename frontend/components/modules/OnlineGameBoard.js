@@ -59,7 +59,7 @@ const Arrow = ({ color }) => (
 
 const GRID_SIZE = 15;
 // MAIN_PATH_COORDS ve HOME_STRETCH_COORDS artık sadece constants/game.js'den geliyor.
-const generateBoardLayout = (pawns, currentPlayer, diceValue, selectedPawnId) => {
+const generateBoardLayout = (pawns, currentPlayer, diceValue) => {
   const layout = Array.from({ length: GRID_SIZE * GRID_SIZE }, () => ({ type: 'empty', pawns: [] }));
 
   const setCell = (row, col, cellData) => {
@@ -162,20 +162,9 @@ const OnlineGameBoard = ({ players = [], gameState = {}, onPawnPress, currentPla
   // Hareket animasyonlarını yönetmek için state'ler
   const [movingPawns, setMovingPawns] = useState(new Set());
   const [lastGameState, setLastGameState] = useState(null);
-  const [selectedPawnId, setSelectedPawnId] = useState(null);
 
-  // Seçili piyonu yükle
-  useEffect(() => {
-    const loadSelectedPawn = async () => {
-      try {
-        const pawnId = await PawnService.getSelectedPawn();
-        setSelectedPawnId(pawnId);
-      } catch (error) {
-        console.log('Seçili piyon yüklenirken hata:', error);
-      }
-    };
-    loadSelectedPawn();
-  }, []);
+  // Çevrimiçi modda seçili piyon bilgisi players prop'undan gelir
+  // Yerel depolamadan yükleme yapmıyoruz
 
   // Tek doğru kaynak olan gameState.positions'tan piyonları oluştur
   const pawns = players.flatMap(player => {
@@ -239,7 +228,7 @@ const OnlineGameBoard = ({ players = [], gameState = {}, onPawnPress, currentPla
   const safeDiceValue = typeof diceValue === 'number' ? diceValue : null;
   const safePlayersInfo = typeof playersInfo === 'object' && playersInfo !== null ? playersInfo : {};
 
-  const boardLayout = generateBoardLayout(safePawns, safeCurrentPlayer, safeDiceValue, selectedPawnId);
+  const boardLayout = generateBoardLayout(safePawns, safeCurrentPlayer, safeDiceValue);
 
   // Hareket eden piyon için step sayısını hesapla
   const getMoveSteps = (pawnId) => {
