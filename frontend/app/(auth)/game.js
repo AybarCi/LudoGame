@@ -19,6 +19,7 @@ import { useGameEngine } from '../../hooks/useGameEngine';
 import { COLORS } from '../../constants/game';
 import LottieView from 'lottie-react-native';
 import { DiamondService } from '../../services/DiamondService';
+import { AdService } from '../../services/AdService';
 
 const GameScreen = () => {
   const { session, user, updateScore } = useAuth();
@@ -192,7 +193,10 @@ const GameScreen = () => {
             <Text style={styles.footerButtonText}>Yeni Oyun</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity onPress={() => router.back()} style={styles.footerButton}>
+          <TouchableOpacity onPress={() => {
+            AdService.showInterstitialAd();
+            router.back();
+          }} style={styles.footerButton}>
             <Text style={styles.footerButtonText}>Ana Menü</Text>
           </TouchableOpacity>
         </View>
@@ -220,7 +224,10 @@ const GameScreen = () => {
               <TouchableOpacity onPress={handleResetGame} style={styles.footerButton}>
                 <Text style={styles.footerButtonText}>Yeni Oyun</Text>
               </TouchableOpacity>
-              <TouchableOpacity onPress={() => router.back()} style={styles.footerButton}>
+              <TouchableOpacity onPress={() => {
+                AdService.showInterstitialAd();
+                router.back();
+              }} style={styles.footerButton}>
                 <Text style={styles.footerButtonText}>Ana Menü</Text>
               </TouchableOpacity>
             </View>

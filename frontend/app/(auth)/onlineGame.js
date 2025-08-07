@@ -23,6 +23,7 @@ import { COLORS } from '../../constants/game';
 import LottieView from 'lottie-react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { DiamondService } from '../../services/DiamondService';
+import { AdService } from '../../services/AdService';
 
 const { width, height } = Dimensions.get('window');
 
@@ -387,34 +388,69 @@ useEffect(() => {
     );
   };
 
-  // --- AI MODUNDAKİYLE BİREBİR OYUN BİTİŞ MODALİ ---
-  const renderWinnerModal = () => (
-    <Modal
-      animationType="slide"
-      transparent={true}
-      visible={gamePhase === 'finished' && !!winner}
-      onRequestClose={() => {}}
-    >
-      <View style={styles.centeredView}>
-        <View style={styles.modalView}>
-          <Text style={styles.winnerText}>Kazanan</Text>
-          <Text style={styles.winnerName}>{winner && playersInfo && playersInfo[winner] ? playersInfo[winner].nickname : ''}</Text>
-          <Text style={styles.pointsWonText}>+10 Puan!</Text>
-          <LottieView
-            source={require("../../assets/animations/firstwinner.json")}
-            style={styles.lottieWinner}
-            autoPlay
-            loop={false}
-          />
-          <View style={styles.modalFooterButtons}>
-            <TouchableOpacity onPress={() => router.replace('/(auth)/home')} style={styles.footerButton}>
-              <Text style={styles.footerButtonText}>Ana Menü</Text>
-            </TouchableOpacity>
+  // Kazanan modalını kapatma ve ana menüye gitme fonksiyonu
+  const handleWinnerModalClose = async () => {
+    try {
+      // Reklam göster
+      await AdService.showInterstitialAd();
+    } catch (error) {
+      console.error('Reklam gösterme hatası:', error);
+    } finally {
+      // Ana menüye git
+      router.replace('/(auth)/home');
+    }
+  };
+
+  // Kazanan oyuncunun gerçek kullanıcı olup olmadığını kontrol et
+  const isCurrentUserWinner = () => {
+    if (!winner || !playersInfo || !playersInfo[winner]) return false;
+    const winnerInfo = playersInfo[winner];
+    return winnerInfo.id === user?.id || winnerInfo.id === socket?.id;
+  };
+
+  // --- OYUN BİTİŞ MODALİ ---
+  const renderWinnerModal = () => {
+    const isWinner = isCurrentUserWinner();
+    
+    return (
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={gamePhase === 'finished' && !!winner}
+        onRequestClose={() => {}}
+      >
+        <View style={styles.centeredView}>
+          <View style={styles.modalView}>
+            <Text style={styles.winnerText}>
+              {isWinner ? 'Tebrikler!' : 'Oyun Bitti'}
+            </Text>
+            <Text style={styles.winnerName}>
+              {winner && playersInfo && playersInfo[winner] ? playersInfo[winner].nickname : ''}
+            </Text>
+            {isWinner ? (
+              <>
+                <Text style={styles.pointsWonText}>+10 Puan!</Text>
+                <Text style={styles.diamondWonText}>+1 💎</Text>
+              </>
+            ) : (
+              <Text style={styles.loseText}>Daha iyi şanslar!</Text>
+            )}
+            <LottieView
+              source={require("../../assets/animations/firstwinner.json")}
+              style={styles.lottieWinner}
+              autoPlay
+              loop={false}
+            />
+            <View style={styles.modalFooterButtons}>
+              <TouchableOpacity onPress={handleWinnerModalClose} style={styles.footerButton}>
+                <Text style={styles.footerButtonText}>Ana Menü</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
-      </View>
-    </Modal>
-  );
+      </Modal>
+    );
+  };
 
 
 
@@ -993,6 +1029,19 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontWeight: 'bold',
     color: '#4CAF50',
+    marginTop: 5,
+    marginBottom: 5,
+  },
+  diamondWonText: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#FFD700',
+    marginBottom: 10,
+  },
+  loseText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#FF6B6B',
     marginTop: 5,
     marginBottom: 10,
   },

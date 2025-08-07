@@ -1,66 +1,156 @@
 // AdService.js - Reklam yönetimi için servis
+import { Platform } from 'react-native';
+import Constants from 'expo-constants';
+
+// AdMob modüllerini sadece gerçek cihazlarda import et
+let AdMobInterstitial, AdMobRewarded, setTestDeviceIDAsync;
+
+// Web, simülatör ve emülatör kontrolü
+const isRealDevice = Platform.OS !== 'web' && Constants.isDevice === true;
+
+if (isRealDevice) {
+  try {
+    const admob = require('expo-ads-admob');
+    AdMobInterstitial = admob.AdMobInterstitial;
+    AdMobRewarded = admob.AdMobRewarded;
+    setTestDeviceIDAsync = admob.setTestDeviceIDAsync;
+  } catch (error) {
+    console.warn('AdMob module not available:', error.message);
+  }
+}
+
+// Test reklam ID'leri (Google tarafından sağlanan)
+const INTERSTITIAL_AD_ID = __DEV__ 
+  ? 'ca-app-pub-3940256099942544/1033173712' // Test ID
+  : 'ca-app-pub-XXXXXXXXXXXXXXXX/XXXXXXXXXX'; // Gerçek ID
+
+const REWARDED_AD_ID = __DEV__
+  ? 'ca-app-pub-3940256099942544/5224354917' // Test ID  
+  : 'ca-app-pub-XXXXXXXXXXXXXXXX/XXXXXXXXXX'; // Gerçek ID
 
 class AdService {
-  static async showInterstitialAd() {
-    return new Promise((resolve, reject) => {
-      // Geliştirme ortamında reklam simülasyonu
-      if (__DEV__) {
-        console.log('Development mode: Simulating ad display');
-        setTimeout(() => {
-          console.log('Ad simulation completed');
-          resolve();
-        }, 1000);
+  static async initialize() {
+    try {
+      // Web ortamında ve simülatörde AdMob çalışmaz
+      if (!isRealDevice) {
+        console.log('AdService: Non-real device detected, skipping AdMob initialization');
         return;
       }
+      
+      // Test cihazı ayarla (geliştirme için)
+      if (__DEV__) {
+        await setTestDeviceIDAsync('EMULATOR');
+      }
+      
+      // Reklamları önceden yükle
+      await this.loadAds();
+      console.log('AdService initialized successfully');
+    } catch (error) {
+      console.error('Failed to initialize AdService:', error);
+    }
+  }
 
-      // Prodüksiyon ortamında gerçek reklam entegrasyonu
-      // Bu kısım AdMob, Facebook Ads vb. ile entegre edilebilir
+  static async showInterstitialAd() {
+    return new Promise(async (resolve, reject) => {
       try {
-        // Örnek: AdMob interstitial ad gösterimi
-        // await AdMobInterstitial.showAdAsync();
-        console.log('Interstitial ad shown');
+        // Web ortamında ve simülatörde AdMob çalışmaz
+        if (!isRealDevice) {
+          console.log('AdService: Non-real device detected, skipping interstitial ad');
+          resolve();
+          return;
+        }
+        
+        // Reklamı yükle
+        await AdMobInterstitial.setAdUnitID(INTERSTITIAL_AD_ID);
+        await AdMobInterstitial.requestAdAsync({ servePersonalizedAds: true });
+        
+        // Reklam yüklendiğinde göster
+        await AdMobInterstitial.showAdAsync();
+        console.log('Interstitial ad shown successfully');
         resolve();
       } catch (error) {
         console.error('Failed to show interstitial ad:', error);
-        reject(error);
+        // Reklam gösterilemezse de devam et
+        resolve();
       }
     });
   }
 
   static async showRewardedAd() {
-    return new Promise((resolve, reject) => {
-      // Geliştirme ortamında reklam simülasyonu
-      if (__DEV__) {
-        console.log('Development mode: Simulating rewarded ad display');
-        setTimeout(() => {
-          console.log('Rewarded ad simulation completed');
-          resolve({ userDidWatchAd: true });
-        }, 1500);
-        return;
-      }
-
-      // Prodüksiyon ortamında gerçek reklam entegrasyonu
+    return new Promise(async (resolve, reject) => {
       try {
-        // Örnek: AdMob rewarded ad gösterimi
-        // const result = await AdMobRewarded.showAdAsync();
-        console.log('Rewarded ad shown');
+        // Web ortamında ve simülatörde AdMob çalışmaz
+        if (!isRealDevice) {
+          console.log('AdService: Non-real device detected, skipping rewarded ad');
+          resolve({ userDidWatchAd: false });
+          return;
+        }
+        
+        // Reklamı yükle
+        await AdMobRewarded.setAdUnitID(REWARDED_AD_ID);
+        await AdMobRewarded.requestAdAsync({ servePersonalizedAds: true });
+        
+        // Reklam yüklendiğinde göster
+        const result = await AdMobRewarded.showAdAsync();
+        console.log('Rewarded ad shown successfully');
         resolve({ userDidWatchAd: true });
       } catch (error) {
         console.error('Failed to show rewarded ad:', error);
-        reject(error);
+        // Reklam gösterilemezse false döndür
+        resolve({ userDidWatchAd: false });
       }
     });
   }
 
   static async loadAds() {
     try {
-      // Reklamları önceden yükle
+      // Web ortamında ve simülatörde AdMob çalışmaz
+      if (!isRealDevice) {
+        console.log('AdService: Non-real device detected, skipping ad loading');
+        return;
+      }
+      
       console.log('Loading ads...');
-      // await AdMobInterstitial.requestAdAsync();
-      // await AdMobRewarded.requestAdAsync();
+      
+      // Interstitial reklamı yükle
+      await AdMobInterstitial.setAdUnitID(INTERSTITIAL_AD_ID);
+      await AdMobInterstitial.requestAdAsync({ servePersonalizedAds: true });
+      
+      // Rewarded reklamı yükle
+      await AdMobRewarded.setAdUnitID(REWARDED_AD_ID);
+      await AdMobRewarded.requestAdAsync({ servePersonalizedAds: true });
+      
       console.log('Ads loaded successfully');
     } catch (error) {
       console.error('Failed to load ads:', error);
+    }
+  }
+
+  static async isInterstitialReady() {
+    try {
+      // Web ortamında ve simülatörde AdMob çalışmaz
+      if (!isRealDevice) {
+        return false;
+      }
+      
+      return await AdMobInterstitial.getIsReadyAsync();
+    } catch (error) {
+      console.error('Failed to check interstitial ad status:', error);
+      return false;
+    }
+  }
+
+  static async isRewardedReady() {
+    try {
+      // Web ortamında ve simülatörde AdMob çalışmaz
+      if (!isRealDevice) {
+        return false;
+      }
+      
+      return await AdMobRewarded.getIsReadyAsync();
+    } catch (error) {
+      console.error('Failed to check rewarded ad status:', error);
+      return false;
     }
   }
 }

@@ -23,11 +23,13 @@
     "@supabase/supabase-js": "^2.50.3",
     "ajv": "^8.17.1",
     "expo": "~51.0.0",
+    "expo-ads-admob": "^13.0.0",
     "expo-blur": "~13.0.3",
     "expo-constants": "~16.0.2",
     "expo-font": "~12.0.10",
     "expo-haptics": "~13.0.1",
     "expo-image": "~1.13.0",
+    "expo-linear-gradient": "~13.0.2",
     "expo-linking": "~6.3.1",
     "expo-router": "~3.5.24",
     "expo-splash-screen": "~0.27.7",
@@ -48,8 +50,7 @@
     "react-native-vector-icons": "^10.2.0",
     "react-native-web": "~0.19.10",
     "react-native-webview": "13.8.6",
-    "socket.io-client": "^4.8.1",
-    "expo-linear-gradient": "~13.0.2"
+    "socket.io-client": "^4.8.1"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",

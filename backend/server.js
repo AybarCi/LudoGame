@@ -83,8 +83,10 @@ let roomTimeouts = {}; // Track timeouts for each room
 // --- Helper Functions ---
 const isGameWon = (playerPositions) => {
     // A player wins when all 4 pawns are in their home stretch (positions 56-59)
-    // Position 59 is the final goal position for all colors
-    return playerPositions.every(pos => pos === 59);
+    // Check if all pawns are in home stretch positions (56, 57, 58, 59)
+    const homeStretchPositions = [56, 57, 58, 59];
+    const sortedPositions = [...playerPositions].sort((a, b) => a - b);
+    return JSON.stringify(sortedPositions) === JSON.stringify(homeStretchPositions);
 };
 
 const convertPositionsToPawns = (positions) => {

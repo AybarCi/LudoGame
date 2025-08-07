@@ -38,6 +38,7 @@ const TRANSPARENT_COLORS = global.TRANSPARENT_COLORS || {
 // Tüm sabitler constants/game.js'de yoksa fallback olarak burada tanımlı.
 
 import AnimatedPawn from '../shared/AnimatedPawn';
+import { PawnService } from '../../services/PawnService';
 
 // --- CONSTANTS FOR VISUAL CUES ---
 
@@ -160,6 +161,16 @@ const FreeameBoard = ({ pawns, onPawnPress, currentPlayer, diceValue, playersInf
   // Hareket animasyonlarını yönetmek için state'ler
   const [movingPawns, setMovingPawns] = useState(new Set());
   const [lastPawns, setLastPawns] = useState([]);
+  const [selectedPawnId, setSelectedPawnId] = useState('default');
+
+  // Seçili piyonu yükle
+  useEffect(() => {
+    const loadSelectedPawn = async () => {
+      const pawnId = await PawnService.getSelectedPawn();
+      setSelectedPawnId(pawnId);
+    };
+    loadSelectedPawn();
+  }, []);
 
   // Prop guard: undefined veya yanlış tip gelirse default değer kullan
   const safePawns = Array.isArray(pawns) ? pawns : [];
@@ -283,13 +294,28 @@ const FreeameBoard = ({ pawns, onPawnPress, currentPlayer, diceValue, playersInf
               const isMoving = movingPawns.has(pawn.id);
               const moveSteps = getMoveSteps(pawn.id);
               
+              // Her oyuncunun kendi seçili piyonunu kullan
+              const playerInfo = playersInfo?.[pawn.color];
+              const playerSelectedPawn = playerInfo?.selectedPawn || 'default';
+              
+              // Seçili piyonu kullan - sadece kırmızı oyuncu için selectedPawnId, diğerleri için varsayılan
+              const finalSelectedPawn = pawn.color === 'red' ? selectedPawnId : playerSelectedPawn;
+              const pawnEmoji = PawnService.getPawnEmoji(finalSelectedPawn);
+              
+              // Takım piyonu kontrolü
+              const isTeam = PawnService.isTeamPawn(finalSelectedPawn);
+              const teamColors = isTeam ? PawnService.getTeamColors(finalSelectedPawn) : [];
+              
               return (
                 <AnimatedPawn 
                   key={pawn.id} 
                   color={pawn.color} 
+                  emoji={pawnEmoji}
                   onPress={() => onPawnPress(pawn.id)}
                   isMoving={isMoving}
                   moveSteps={moveSteps}
+                  isTeam={isTeam}
+                  teamColors={teamColors}
                 />
               );
             })}

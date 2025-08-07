@@ -106,12 +106,25 @@ class PawnService {
   static getPawnEmoji(pawnId) {
     const PAWN_EMOJIS = {
       'default': '●',
+      'team_1': '⚽',
+      'team_2': '⚽',
+      'team_3': '⚽',
+      'team_4': '⚽',
+      'team_5': '⚽',
+      'team_6': '⚽',
+      'team_7': '⚽',
+      'team_8': '⚽',
+      'team_9': '⚽',
+      'team_10': '⚽',
+      'team_11': '⚽',
+      'team_12': '⚽',
       'emoji_1': '😀',
       'emoji_2': '😎',
       'emoji_3': '🤩',
       'emoji_4': '🥳',
       'emoji_5': '👑',
       'emoji_6': '💎',
+      'emoji_7': '🚀',
       'animal_1': '🐱',
       'animal_2': '🐶',
       'animal_3': '🦁',
@@ -127,6 +140,31 @@ class PawnService {
     };
 
     return PAWN_EMOJIS[pawnId] || '●';
+  }
+
+  // Takım piyonu renklerini al
+  static getTeamColors(pawnId) {
+    const TEAM_COLORS = {
+      'team_1': ['#000000', '#FFFFFF'],
+      'team_2': ['#FFD700', '#FF0000'],
+      'team_3': ['#FFFF00', '#000080'],
+      'team_4': ['#800080', '#87CEEB'],
+      'team_5': ['#FF4500', '#000080'],
+      'team_6': ['#FF4500', '#008000'],
+      'team_7': ['#FF0000', '#FFFFFF'],
+      'team_8': ['#008000', '#FFFFFF'],
+      'team_9': ['#FF0000', '#FFFFFF'],
+      'team_10': ['#FF0000', '#FFD700'],
+      'team_11': ['#0000FF', '#008000'],
+      'team_12': ['#FF0000', '#000000']
+    };
+
+    return TEAM_COLORS[pawnId] || [];
+  }
+
+  // Piyon takım piyonu mu kontrol et
+  static isTeamPawn(pawnId) {
+    return pawnId && pawnId.startsWith('team_');
   }
 }
 

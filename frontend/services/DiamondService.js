@@ -214,6 +214,36 @@ export const DiamondService = {
     return await this.addDiamonds(2);
   },
 
+  // Online oyun kazanma ödülü (1 elmas + 10 puan)
+  async awardGameWin() {
+    try {
+      // 1 elmas ekle
+      await this.addDiamonds(1);
+      
+      // 10 puan ekle (backend API'sine istek gönder)
+      const accessToken = await this.getAccessToken();
+      if (accessToken) {
+        const response = await this.makeAuthenticatedRequest(`${API_BASE_URL}/user/score`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ points: 10 }),
+        });
+        
+        if (response.success) {
+          console.log('Online oyun kazanma ödülü verildi: 1 elmas + 10 puan');
+          return { success: true, diamonds: 1, points: 10 };
+        }
+      }
+      
+      return { success: true, diamonds: 1, points: 0 };
+    } catch (error) {
+      console.error('Online oyun ödülü verme hatası:', error);
+      return { success: false, error: error.message };
+    }
+  },
+
   // Reklam izleme ödülü
   async rewardForAd() {
     return await this.addDiamonds(1);

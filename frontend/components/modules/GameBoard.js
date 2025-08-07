@@ -296,11 +296,15 @@ const GameBoard = ({ pawns, onPawnPress, currentPlayer, diceValue, playersInfo, 
               
               // Her oyuncunun kendi seçili piyonunu kullan
               const playerInfo = players[pawn.color];
-              const playerSelectedPawn = playerInfo?.selectedPawn;
+              const playerSelectedPawn = playerInfo?.selectedPawn || 'default';
               
-              // Eğer bu oyuncunun seçili piyonu varsa onu kullan, yoksa varsayılan emoji
-              const pawnEmoji = playerSelectedPawn ? 
-                PawnService.getPawnEmoji(playerSelectedPawn) : '●';
+              // Seçili piyonu kullan - sadece kırmızı oyuncu için selectedPawnId, diğerleri için varsayılan
+              const finalSelectedPawn = pawn.color === 'red' ? selectedPawnId : playerSelectedPawn;
+              const pawnEmoji = PawnService.getPawnEmoji(finalSelectedPawn);
+              
+              // Takım piyonu kontrolü
+              const isTeam = PawnService.isTeamPawn(finalSelectedPawn);
+              const teamColors = isTeam ? PawnService.getTeamColors(finalSelectedPawn) : [];
               
               return (
                 <AnimatedPawn 
@@ -310,6 +314,8 @@ const GameBoard = ({ pawns, onPawnPress, currentPlayer, diceValue, playersInfo, 
                   onPress={() => onPawnPress(pawn.id)}
                   isMoving={isMoving}
                   moveSteps={moveSteps}
+                  isTeam={isTeam}
+                  teamColors={teamColors}
                 />
               );
             })}

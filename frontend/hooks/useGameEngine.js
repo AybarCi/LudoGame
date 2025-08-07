@@ -398,9 +398,13 @@ const gameReducer = (state, action) => {
         for (let i = startPos + 1; i < Math.min(endPos, 56); i++) pathToCheck.push(i);
       }
       // Path in the home stretch
-      if (endPos > 56) { // Only check if moving into or within home stretch
+      if (endPos >= 56) { // Check if moving into or within home stretch
         const startOfHomeStretch = Math.max(startPos, 56);
         for (let i = startOfHomeStretch + 1; i < endPos; i++) pathToCheck.push(i);
+      }
+      // Additional check for movement entirely within home stretch
+      if (startPos >= 56 && endPos >= 56) {
+        for (let i = startPos + 1; i < endPos; i++) pathToCheck.push(i);
       }
 
       const isJumpingOverTeammate = pathToCheck.some(pos =>
@@ -416,7 +420,7 @@ const gameReducer = (state, action) => {
         const absoluteStart = (PATH_MAP[currentPlayer].start + startPos) % 56;
         const absoluteEnd = (PATH_MAP[currentPlayer].start + endPos) % 56;
 
-        // Create an array of all absolute squares the pawn travels over.
+        // Create an array of all absolute squares the pawn travels over INCLUDING the destination.
         const absolutePath = [];
         let currentPathPos = (absoluteStart + 1) % 56;
         while (currentPathPos !== (absoluteEnd + 1) % 56) {
@@ -442,6 +446,31 @@ const gameReducer = (state, action) => {
               if (!capturedPawnInfo) {
                 capturedPawnInfo = { color: opponent.color, nickname: playersInfo[opponent.color].nickname };
               }
+            }
+          }
+        }
+      }
+      
+      // --- Special case: Capture logic for pawns entering from home base ---
+      if (startPos === -1 && endPos <= 55) {
+        const absoluteEnd = (PATH_MAP[currentPlayer].start + endPos) % 56;
+        
+        // Check if there are opponents on the destination square
+        const opponentsOnDestination = pawns.filter(p => {
+          if (p.color === currentPlayer || p.position < 0 || p.position > 55) return false;
+          const opponentAbsPos = (PATH_MAP[p.color].start + p.position) % 56;
+          return opponentAbsPos === absoluteEnd;
+        });
+
+        for (const opponent of opponentsOnDestination) {
+          // Pawns on their own start square are safe.
+          const isOpponentOnOwnStart = PATH_MAP[opponent.color].start === absoluteEnd;
+          const alreadyCaptured = capturedPawnIds.includes(opponent.id);
+
+          if (!isOpponentOnOwnStart && !alreadyCaptured) {
+            capturedPawnIds.push(opponent.id);
+            if (!capturedPawnInfo) {
+              capturedPawnInfo = { color: opponent.color, nickname: playersInfo[opponent.color].nickname };
             }
           }
         }

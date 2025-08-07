@@ -324,6 +324,10 @@ const OnlineGameBoard = ({ players = [], gameState = {}, onPawnPress, currentPla
               const pawnEmoji = playerSelectedPawn ? 
                 PawnService.getPawnEmoji(playerSelectedPawn) : '●';
               
+              // Takım piyonu kontrolü
+              const isTeam = playerSelectedPawn ? PawnService.isTeamPawn(playerSelectedPawn) : false;
+              const teamColors = isTeam ? PawnService.getTeamColors(playerSelectedPawn) : [];
+              
               return (
                 <AnimatedPawn 
                   key={pawn.id} 
@@ -332,6 +336,8 @@ const OnlineGameBoard = ({ players = [], gameState = {}, onPawnPress, currentPla
                   onPress={() => onPawnPress(pawn.pawnIndex, pawn.position)}
                   isMoving={isMoving}
                   moveSteps={moveSteps}
+                  isTeam={isTeam}
+                  teamColors={teamColors}
                 />
               );
             })}

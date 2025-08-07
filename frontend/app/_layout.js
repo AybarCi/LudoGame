@@ -4,6 +4,7 @@ import { Stack, SplashScreen, useRouter, useSegments } from 'expo-router';
 import { ActivityIndicator, ImageBackground, StyleSheet } from 'react-native';
 import { useFonts, Poppins_400Regular, Poppins_600SemiBold, Poppins_700Bold } from '@expo-google-fonts/poppins';
 import { useEffect } from 'react';
+import { AdService } from '../services/AdService';
 
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
@@ -33,6 +34,8 @@ function InitialLayout() {
 
     if (fontsLoaded) {
       SplashScreen.hideAsync();
+      // AdService'i initialize et
+      AdService.initialize();
     }
   }, [fontsLoaded, fontError]);
 

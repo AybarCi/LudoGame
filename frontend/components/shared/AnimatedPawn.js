@@ -3,7 +3,7 @@ import { StyleSheet, TouchableOpacity, View, Animated, Text } from 'react-native
 import { Svg, Path } from 'react-native-svg';
 import { COLORS } from '../../constants/game';
 
-const AnimatedPawn = ({ color, emoji = '●', onPress, isMoving = false, moveSteps = 0, onMoveComplete }) => {
+const AnimatedPawn = ({ color, emoji = '●', onPress, isMoving = false, moveSteps = 0, onMoveComplete, isTeam = false, teamColors = [] }) => {
   const pawnColor = COLORS[color] || COLORS.default;
   const bounceAnim = useRef(new Animated.Value(1)).current;
   const stepAnim = useRef(new Animated.Value(0)).current;
@@ -87,6 +87,12 @@ const AnimatedPawn = ({ color, emoji = '●', onPress, isMoving = false, moveSte
               strokeWidth={1}
             />
           </Svg>
+        ) : isTeam && teamColors.length >= 2 ? (
+          <View style={[styles.teamContainer, { backgroundColor: teamColors[0] }]}>
+            <View style={[styles.teamInner, { backgroundColor: teamColors[1] }]}>
+              <Text style={[styles.teamText, { color: teamColors[0] }]}>⚽</Text>
+            </View>
+          </View>
         ) : (
           <View style={styles.emojiContainer}>
             <Text style={styles.emojiText}>{emoji}</Text>
@@ -144,6 +150,29 @@ const styles = StyleSheet.create({
   },
   emojiText: {
     fontSize: 16,
+    textAlign: 'center',
+  },
+  teamContainer: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 50,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.8)',
+  },
+  teamInner: {
+    width: '70%',
+    height: '70%',
+    borderRadius: 50,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(0, 0, 0, 0.2)',
+  },
+  teamText: {
+    fontSize: 14,
+    fontWeight: 'bold',
     textAlign: 'center',
   },
 });

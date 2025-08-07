@@ -18,7 +18,7 @@ import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { DiamondService } from '../../services/DiamondService';
 import CustomModal from '../../components/shared/CustomModal';
-import Svg, { Circle, Path, Text as SvgText, Line } from 'react-native-svg';
+import Svg, { Circle, Path, Text as SvgText, Line, Rect } from 'react-native-svg';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3001';
 
@@ -64,9 +64,9 @@ const generatePawnItems = (baseItems, categoryPrefix, count = 100) => {
 };
 
 const PAWN_CATEGORIES = {
-  teams: {
-    title: 'Takımlar',
-    icon: '⚽',
+    teams: {
+      name: 'Takımlar',
+      icon: '⚽',
     items: [
       { id: 'team_1', name: 'Takım 1', price: 45, currency: 'diamonds', isTeam: true, colors: ['#000000', '#FFFFFF'] },
       { id: 'team_2', name: 'Takım 2', price: 45, currency: 'diamonds', isTeam: true, colors: ['#FFD700', '#FF0000'] },
@@ -83,7 +83,7 @@ const PAWN_CATEGORIES = {
     ]
   },
   emoji: {
-    title: 'Emoji Piyonlar',
+    name: 'Emoji',
     icon: '😊',
     items: generatePawnItems([
        { id: 'emoji_1', emoji: '😀', name: 'Mutlu Yüz', price: 5, currency: 'diamonds' },
@@ -96,7 +96,7 @@ const PAWN_CATEGORIES = {
      ], 'emoji', 100)
   },
   animals: {
-    title: 'Hayvan Figürleri',
+    name: 'Hayvan',
     icon: '🐾',
     items: generatePawnItems([
        { id: 'animal_1', emoji: '🐱', name: 'Kedi', price: 6, currency: 'diamonds' },
@@ -108,7 +108,7 @@ const PAWN_CATEGORIES = {
      ], 'animals', 100)
   },
   nature: {
-    title: 'Doğa Figürleri',
+    name: 'Doğa',
     icon: '🌿',
     items: generatePawnItems([
        { id: 'nature_1', emoji: '🌸', name: 'Kiraz Çiçeği', price: 5, currency: 'diamonds' },
@@ -120,7 +120,7 @@ const PAWN_CATEGORIES = {
      ], 'nature', 100)
   },
   vehicles: {
-    title: 'Araç Figürleri',
+    name: 'Araç',
     icon: '🚗',
     items: generatePawnItems([
       { id: 'brand_1', emoji: '🏷️', name: 'Aura Motors', price: 35, currency: 'diamonds', isBrand: true, logoType: 'aura' },
@@ -143,7 +143,7 @@ const PAWN_CATEGORIES = {
 };
 
 // Takım renkleri render fonksiyonu
-const renderTeamColors = (colors) => {
+  const renderTeamColors = (colors) => {
     return (
       <Svg width="40" height="40" viewBox="0 0 40 40">
         {/* Forma ana gövdesi */}
@@ -746,7 +746,7 @@ const ShopScreen = () => {
               styles.categoryText,
               selectedCategory === key && styles.activeCategoryText
             ]}>
-              {category.title}
+              {category.name}
             </Text>
           </TouchableOpacity>
         ))}
