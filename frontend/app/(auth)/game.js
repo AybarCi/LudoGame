@@ -213,7 +213,9 @@ const GameScreen = () => {
           <View style={styles.modalView}>
             <Text style={styles.winnerText}>Kazanan</Text>
             <Text style={styles.winnerName}>{winner && playersInfo ? playersInfo[winner]?.nickname : ''}</Text>
-            <Text style={styles.pointsWonText}>+10 Puan!</Text>
+            {winner && playersInfo && playersInfo[winner]?.user_id && playersInfo[winner].user_id === user.id && (
+              <Text style={styles.pointsWonText}>+10 Puan!</Text>
+            )}
             <LottieView
               source={require("../../assets/animations/firstwinner.json")}
               style={styles.lottieWinner}

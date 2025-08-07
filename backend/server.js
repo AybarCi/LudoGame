@@ -15,7 +15,7 @@ const HOME_STRETCH_LENGTH = 6;
 const GOAL_START_INDEX = PATH_LENGTH + HOME_STRETCH_LENGTH; // 58
 const MAX_POSITION_INDEX = GOAL_START_INDEX + PAWN_COUNT - 1; // 61
 const START_OFFSET = { red: 41, green: 55, yellow: 13, blue: 27 };
-const SAFE_SPOTS_GLOBAL = [0, 8, 21, 34, 39, 47];
+const SAFE_SPOTS_GLOBAL = [];
 const HOME_POSITIONS = { red: [-1, -1, -1, -1], green: [-1, -1, -1, -1], yellow: [-1, -1, -1, -1], blue: [-1, -1, -1, -1] };
 const AI_MALE_NAMES = [
   "Ahmet", "Mehmet", "Mustafa", "Ali", "Hasan", "Hüseyin", "İbrahim", "İsmail", "Ömer", "Yusuf",
@@ -82,11 +82,18 @@ let roomTimeouts = {}; // Track timeouts for each room
 
 // --- Helper Functions ---
 const isGameWon = (playerPositions) => {
-    // A player wins when all 4 pawns are in their home stretch (positions 56-59)
-    // Check if all pawns are in home stretch positions (56, 57, 58, 59)
+    // A player wins when they have at least one pawn in each home stretch position (56, 57, 58, 59)
+    // This means the first player to fill all 4 home stretch positions wins
     const homeStretchPositions = [56, 57, 58, 59];
-    const sortedPositions = [...playerPositions].sort((a, b) => a - b);
-    return JSON.stringify(sortedPositions) === JSON.stringify(homeStretchPositions);
+    const playerPawnsInHomeStretch = playerPositions.filter(pos => pos >= 56 && pos <= 59);
+    
+    // Check if player has exactly 4 pawns in home stretch and covers all positions
+    if (playerPawnsInHomeStretch.length === 4) {
+        const sortedPositions = [...playerPawnsInHomeStretch].sort((a, b) => a - b);
+        return JSON.stringify(sortedPositions) === JSON.stringify(homeStretchPositions);
+    }
+    
+    return false;
 };
 
 const convertPositionsToPawns = (positions) => {

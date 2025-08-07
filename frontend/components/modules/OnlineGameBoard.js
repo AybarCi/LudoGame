@@ -308,9 +308,28 @@ const OnlineGameBoard = ({ players = [], gameState = {}, onPawnPress, currentPla
           cellStyle.push(style);
         }
 
+        // Ana yol pozisyonunu hesapla
+        const getMainPathPosition = (gridIndex) => {
+          const row = Math.floor(gridIndex / GRID_SIZE);
+          const col = gridIndex % GRID_SIZE;
+          
+          // MAIN_PATH_COORDS dizisinde bu koordinatın pozisyonunu bul
+          for (let i = 0; i < MAIN_PATH_COORDS.length; i++) {
+            if (MAIN_PATH_COORDS[i][0] === row && MAIN_PATH_COORDS[i][1] === col) {
+              return i;
+            }
+          }
+          return null;
+        };
+        
+        const mainPathPos = getMainPathPosition(index);
+        
         return (
           <View key={index} style={cellStyle}>
             {/* <Text style={styles.cellNumber}>{index}</Text> */}
+            {/* {mainPathPos !== null && (
+              <Text style={styles.mainPathNumber}>{mainPathPos}</Text>
+            )} */}
             {cell.homeStretchEntranceFor && !cell.pawns.length && <Arrow color={cell.homeStretchEntranceFor} />}
             {cell.pawns.map((pawn, pawnIndex) => {
               const isMoving = movingPawns.has(pawn.id);
@@ -364,6 +383,17 @@ const styles = StyleSheet.create({
     fontSize: 8,
     fontWeight: 'bold',
     color: 'rgba(0,0,0,0.4)',
+  },
+  mainPathNumber: {
+    position: 'absolute',
+    top: 1,
+    right: 1,
+    fontSize: 8,
+    fontWeight: 'bold',
+    color: 'rgba(255,0,0,0.8)',
+    backgroundColor: 'rgba(255,255,255,0.8)',
+    borderRadius: 2,
+    paddingHorizontal: 2,
   },
   board: {
     width: '100%',

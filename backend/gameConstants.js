@@ -24,7 +24,7 @@ const START_OFFSET = {
 };
 
 // Global safe spots, identified by their position on the 52-step main path.
-const SAFE_SPOTS_GLOBAL = [0, 8, 13, 21, 26, 34, 39, 47];
+const SAFE_SPOTS_GLOBAL = [];
 
 module.exports = { 
     HOME_POSITIONS,
