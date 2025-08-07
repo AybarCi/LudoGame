@@ -19,6 +19,7 @@ import Animated, {
   withSequence,
   withTiming
 } from 'react-native-reanimated';
+import LottieView from 'lottie-react-native';
 
 import FreeModeBoard from '../../components/modules/FreeModeBoard';
 import { useFreeModeEngine } from '../../hooks/useFreeModeEngine';
@@ -362,6 +363,13 @@ const FreeModeGame = () => {
                   </Text>
                   <Text style={styles.winnerSubtitle}>Oyunu Kazandı!</Text>
                   
+                  <LottieView
+                    source={require("../../assets/animations/firstwinner.json")}
+                    style={styles.lottieWinner}
+                    autoPlay
+                    loop={false}
+                  />
+                  
                   <View style={styles.winnerButtons}>
                     <TouchableOpacity
                       onPress={async () => {
@@ -610,8 +618,13 @@ const styles = StyleSheet.create({
   winnerSubtitle: {
     fontSize: isTablet ? 18 : 16,
     color: '#FFF',
-    marginBottom: 20,
+    marginBottom: 10,
     opacity: 0.9
+  },
+  lottieWinner: {
+    width: isTablet ? 200 : 150,
+    height: isTablet ? 200 : 150,
+    marginVertical: 10
   },
   winnerButtons: {
     flexDirection: isTablet ? 'row' : 'column',

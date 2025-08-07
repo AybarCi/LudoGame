@@ -121,8 +121,8 @@ const getPossibleMoves = (pawns, playerColor, diceValue) => {
             return teammateAbs === checkPosAbs;
           });
           
-          if (teammateOnPath && checkPosAbs !== finalLandingAbs) {
-            // Teammate blocks the path (cannot jump over teammates)
+          if (teammateOnPath) {
+            // Teammate blocks the path (cannot jump over teammates or land on them)
             canMove = false;
             break;
           }
@@ -146,8 +146,8 @@ const getPossibleMoves = (pawns, playerColor, diceValue) => {
             return p.position === checkPos;
           });
           
-          if (teammateOnPath && checkPos !== finalLandingPos) {
-            // Teammate blocks the path in home stretch (cannot jump over teammates)
+          if (teammateOnPath) {
+            // Teammate blocks the path in home stretch (cannot jump over teammates or land on them)
             canMove = false;
             break;
           }
@@ -396,7 +396,7 @@ const gameReducer = (state, action) => {
               p => p.color === pawn.color && p.id !== pawn.id && p.position === checkPos
             );
             if (teammateOnPath) {
-              return state; // Invalid move - teammate blocking the path
+              return state; // Invalid move - teammate blocking the path (cannot jump over or land on teammates)
             }
           }
         } else if (pawn.position >= 56 && newPosition >= 56) {
@@ -407,7 +407,7 @@ const gameReducer = (state, action) => {
               p => p.color === pawn.color && p.id !== pawn.id && p.position === checkPos
             );
             if (teammateOnPath) {
-              return state; // Invalid move - teammate blocking the path in home stretch
+              return state; // Invalid move - teammate blocking the path in home stretch (cannot jump over or land on teammates)
             }
           }
         }
@@ -578,11 +578,12 @@ export const useFreeModeEngine = (mode, playersInfo) => {
     }
   }, [state.turnOrderRolls, state.gamePhase]);
 
-  // Auto-pass turn if no moves possible for human players
+  // Auto-pass turn if no moves possible for all players
   useEffect(() => {
-    if (state.diceValue && state.gamePhase === 'playing' && !state.aiPlayers.includes(state.currentPlayer)) {
+    if (state.diceValue && state.gamePhase === 'playing' && !state.winner) {
       const possibleMoves = getPossibleMoves(state.pawns, state.currentPlayer, state.diceValue);
       if (possibleMoves.length === 0) {
+        // If no moves possible, pass turn regardless of dice value (even if 6)
         const timer = setTimeout(() => dispatch({ type: 'NEXT_TURN' }), 1500);
         return () => clearTimeout(timer);
       }
