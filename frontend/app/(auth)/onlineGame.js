@@ -83,7 +83,37 @@ const OnlineGameScreen = () => {
   //   }
   // }, [room, router, gameState?.phase]);
 
-  // Check if current user is the room creator and start countdown
+  // Geri sayım için socket olaylarını dinle
+  useEffect(() => {
+    if (!socket) return;
+
+    const handleCountdownStarted = (data) => {
+      console.log('[COUNTDOWN] Geri sayım başladı:', data);
+      setTimeLeft(data.timeLeft);
+    };
+
+    const handleCountdownUpdate = (data) => {
+      console.log('[COUNTDOWN] Geri sayım güncellendi:', data.timeLeft);
+      setTimeLeft(data.timeLeft);
+    };
+
+    const handleCountdownStopped = () => {
+      console.log('[COUNTDOWN] Geri sayım durduruldu');
+      setTimeLeft(0);
+    };
+
+    socket.on('countdown_started', handleCountdownStarted);
+    socket.on('countdown_update', handleCountdownUpdate);
+    socket.on('countdown_stopped', handleCountdownStopped);
+
+    return () => {
+      socket.off('countdown_started', handleCountdownStarted);
+      socket.off('countdown_update', handleCountdownUpdate);
+      socket.off('countdown_stopped', handleCountdownStopped);
+    };
+  }, [socket]);
+
+  // Check if current user is the room creator
   useEffect(() => {
     if (room && players && players.length > 0) {
       const firstPlayer = players[0];
@@ -94,34 +124,10 @@ const OnlineGameScreen = () => {
         amICreator,
         gamePhase,
         playersLength: players.length,
-        timeLeft,
-        shouldStartCountdown: amICreator && gamePhase === 'waiting' && players.length < 4
+        timeLeft
       });
-      
-      // Start countdown only for room creator and only in waiting phase
-      if (amICreator && gamePhase === 'waiting') {
-        console.log('[COUNTDOWN] Starting countdown timer');
-        const interval = setInterval(() => {
-          setTimeLeft(prev => {
-            console.log('[COUNTDOWN] Timer tick:', prev - 1);
-            if (prev <= 1) {
-              clearInterval(interval);
-              return 0;
-            }
-            return prev - 1;
-          });
-        }, 1000);
-        
-        return () => {
-          console.log('[COUNTDOWN] Clearing countdown timer');
-          clearInterval(interval);
-        };
-      } else if (gamePhase !== 'waiting') {
-        console.log('[COUNTDOWN] Resetting timer, game phase changed to:', gamePhase);
-        setTimeLeft(20); // Reset timer when game starts
-      }
     }
-  }, [room, players, user?.id, socket?.id, gamePhase]);
+  }, [room, players, user?.id, socket?.id, gamePhase, timeLeft]);
 
   // Award diamond for winning online game
   useEffect(() => {
@@ -202,7 +208,7 @@ const canRollDice = useMemo(() => {
 
 
 useEffect(() => {
-  if (gameState?.turn && gamePhase === 'playing') {
+  if (gameState?.currentPlayer && gamePhase === 'playing') {
     setShowTurnPopup(true);
     Animated.sequence([
       Animated.timing(popupAnim, { toValue: 1, duration: 500, useNativeDriver: true }),
@@ -210,7 +216,7 @@ useEffect(() => {
       Animated.timing(popupAnim, { toValue: 0, duration: 500, useNativeDriver: true }),
     ]).start(() => setShowTurnPopup(false));
   }
-}, [gameState?.turn, gamePhase]);
+}, [gameState?.currentPlayer, gamePhase]);
 
   // Chat mesajları için unread sayısını takip et
   useEffect(() => {

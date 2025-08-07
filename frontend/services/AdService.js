@@ -32,8 +32,8 @@ class AdService {
   static async initialize() {
     try {
       // Web ortamında ve simülatörde AdMob çalışmaz
-      if (!isRealDevice) {
-        console.log('AdService: Non-real device detected, skipping AdMob initialization');
+      if (!isRealDevice || !setTestDeviceIDAsync) {
+        console.log('AdService: Non-real device or AdMob not available, skipping AdMob initialization');
         return;
       }
       
@@ -54,8 +54,8 @@ class AdService {
     return new Promise(async (resolve, reject) => {
       try {
         // Web ortamında ve simülatörde AdMob çalışmaz
-        if (!isRealDevice) {
-          console.log('AdService: Non-real device detected, skipping interstitial ad');
+        if (!isRealDevice || !AdMobInterstitial) {
+          console.log('AdService: Non-real device or AdMob not available, skipping interstitial ad');
           resolve();
           return;
         }
@@ -80,8 +80,8 @@ class AdService {
     return new Promise(async (resolve, reject) => {
       try {
         // Web ortamında ve simülatörde AdMob çalışmaz
-        if (!isRealDevice) {
-          console.log('AdService: Non-real device detected, skipping rewarded ad');
+        if (!isRealDevice || !AdMobRewarded) {
+          console.log('AdService: Non-real device or AdMob not available, skipping rewarded ad');
           resolve({ userDidWatchAd: false });
           return;
         }
@@ -105,8 +105,8 @@ class AdService {
   static async loadAds() {
     try {
       // Web ortamında ve simülatörde AdMob çalışmaz
-      if (!isRealDevice) {
-        console.log('AdService: Non-real device detected, skipping ad loading');
+      if (!isRealDevice || !AdMobInterstitial || !AdMobRewarded) {
+        console.log('AdService: Non-real device or AdMob not available, skipping ad loading');
         return;
       }
       
@@ -129,7 +129,7 @@ class AdService {
   static async isInterstitialReady() {
     try {
       // Web ortamında ve simülatörde AdMob çalışmaz
-      if (!isRealDevice) {
+      if (!isRealDevice || !AdMobInterstitial) {
         return false;
       }
       
@@ -143,7 +143,7 @@ class AdService {
   static async isRewardedReady() {
     try {
       // Web ortamında ve simülatörde AdMob çalışmaz
-      if (!isRealDevice) {
+      if (!isRealDevice || !AdMobRewarded) {
         return false;
       }
       

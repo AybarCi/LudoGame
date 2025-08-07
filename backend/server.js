@@ -276,20 +276,23 @@ const joinRoomAsync = async (roomId, userId, nickname, socketId) => {
     console.log(`[Join Room] ${nickname} (${user.id}) joined room ${roomId} as ${color}`);
     
     // If room is full with real players, start the game immediately
-    if (room.players.length === 4 && room.gameState.phase === 'waiting') {
-        console.log(`[Join Room] Room ${roomId} is full, starting game immediately`);
-        // Clear the timeout since room is full
-        if (roomTimeouts[roomId]) {
-            clearTimeout(roomTimeouts[roomId]);
-            delete roomTimeouts[roomId];
-            console.log(`[Join Room] Cleared timeout for full room ${roomId}`);
+        if (room.players.length === 4 && room.gameState.phase === 'waiting') {
+            console.log(`[Join Room] Room ${roomId} is full, starting game immediately`);
+            // Clear the timeout since room is full
+            if (roomTimeouts[roomId]) {
+                clearTimeout(roomTimeouts[roomId]);
+                delete roomTimeouts[roomId];
+                console.log(`[Join Room] Cleared timeout for full room ${roomId}`);
+            }
+            // Notify clients that countdown is stopped
+            console.log(`[COUNTDOWN] Sending countdown_stopped to room ${roomId} - room is full`);
+            io.to(roomId).emit('countdown_stopped');
+            room.gameState.message = 'Oda dolu! Oyun başlıyor...';
+            await updateRoom(roomId);
+            setTimeout(() => {
+                startPreGame(roomId);
+            }, 1000); // Small delay to show the message
         }
-        room.gameState.message = 'Oda dolu! Oyun başlıyor...';
-        await updateRoom(roomId);
-        setTimeout(() => {
-            startPreGame(roomId);
-        }, 1000); // Small delay to show the message
-    }
     
     return { room, player };
 };
@@ -398,13 +401,25 @@ const getValidMoves = (player, diceValue, room) => {
         );
         if (isLandingOnTeammate) return;
         
-        // Rule 3: In home stretch (56-59), pawns cannot jump over each other
+        // Rule 3: Pawns cannot jump over teammates
+        // Rule 3a: In home stretch (56-59), pawns cannot jump over each other
         if (finalLandingPos >= 56 && finalLandingPos <= 59 && currentPos >= 56) {
             // Check if there's any teammate between current position and landing position
             const minPos = Math.min(currentPos, finalLandingPos);
             const maxPos = Math.max(currentPos, finalLandingPos);
             
             for (let pos = minPos + 1; pos <= maxPos; pos++) {
+                const isBlocked = playerPositions.some(
+                    (p, idx) => idx !== pawnIndex && p === pos
+                );
+                if (isBlocked) return; // Cannot jump over teammate
+            }
+        }
+        
+        // Rule 3b: On main path (0-55), pawns cannot jump over teammates
+        if (currentPos >= 0 && currentPos <= 55 && finalLandingPos >= 0 && finalLandingPos <= 55 && currentPos < finalLandingPos) {
+            // Check if there's any teammate between current position and landing position
+            for (let pos = currentPos + 1; pos < finalLandingPos; pos++) {
                 const isBlocked = playerPositions.some(
                     (p, idx) => idx !== pawnIndex && p === pos
                 );
@@ -734,10 +749,28 @@ const startRoomTimeout = (roomId) => {
         console.log(`[Room Timeout] Cleared existing timeout for room ${roomId}`);
     }
     
+    // Notify clients that countdown has started
+    console.log(`[COUNTDOWN] Sending countdown_started to room ${roomId} with timeLeft: ${ROOM_TIMEOUT / 1000}`);
+    io.to(roomId).emit('countdown_started', { timeLeft: ROOM_TIMEOUT / 1000 });
+    
+    // Send countdown updates every second
+    let timeLeft = ROOM_TIMEOUT / 1000;
+    const countdownInterval = setInterval(() => {
+        timeLeft--;
+        if (timeLeft > 0) {
+            console.log(`[COUNTDOWN] Sending countdown_update to room ${roomId} with timeLeft: ${timeLeft}`);
+            io.to(roomId).emit('countdown_update', { timeLeft });
+        } else {
+            console.log(`[COUNTDOWN] Countdown finished for room ${roomId}`);
+            clearInterval(countdownInterval);
+        }
+    }, 1000);
+    
     roomTimeouts[roomId] = setTimeout(async () => {
         const room = rooms[roomId];
         if (!room || room.gameState.phase !== 'waiting') {
             console.log(`[Room Timeout] Room ${roomId} no longer in waiting phase, timeout cancelled`);
+            clearInterval(countdownInterval);
             delete roomTimeouts[roomId];
             return;
         }
@@ -745,6 +778,7 @@ const startRoomTimeout = (roomId) => {
         const humanPlayers = room.players.filter(p => !p.isBot).length;
         if (humanPlayers === 0) {
             console.log(`[Room Timeout] No human players left in room ${roomId}, deleting room`);
+            clearInterval(countdownInterval);
             delete roomTimeouts[roomId];
             await deleteRoom(roomId, 'Timeout - no human players');
             return;
@@ -752,6 +786,7 @@ const startRoomTimeout = (roomId) => {
         
         console.log(`[Room Timeout] Timeout reached for room ${roomId}, adding AI players and starting game`);
         room.gameState.message = 'Bekleme süresi doldu, oyun başlıyor...';
+        clearInterval(countdownInterval);
         updateRoom(roomId);
         
         await addAIPlayersToRoom(roomId);
@@ -1315,8 +1350,29 @@ app.post('/api/user/diamonds/spend', authenticateToken, async (req, res) => {
 
 
 // --- Socket.IO Handlers ---
-io.on('connection', (socket) => {
+io.on('connection', async (socket) => {
     const userId = socket.handshake.auth.userId || `guest_${socket.id}`;
+    const token = socket.handshake.auth.token;
+    
+    // Verify token if provided
+    if (token) {
+        try {
+            const decoded = jwt.verify(token, JWT_SECRET);
+            if (decoded.userId !== userId) {
+                console.log(`Token userId mismatch: ${decoded.userId} vs ${userId}`);
+                socket.disconnect();
+                return;
+            }
+            console.log(`User connected with valid token: ${socket.id} with UserID: ${userId}`);
+        } catch (error) {
+            console.log(`Invalid token for user ${userId}: ${error.message}`);
+            socket.disconnect();
+            return;
+        }
+    } else {
+        console.log(`User connected without token: ${socket.id} with UserID: ${userId}`);
+    }
+    
     console.log(`User connected: ${socket.id} with UserID: ${userId}`);
 
     socket.on('get_rooms', (callback) => {

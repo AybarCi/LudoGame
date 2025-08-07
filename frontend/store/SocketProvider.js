@@ -1,7 +1,8 @@
 import React, { createContext, useContext, useState, useMemo, useRef, useCallback, useEffect } from 'react';
 import { io } from 'socket.io-client';
+import { useAuth } from './AuthProvider';
 
-// 1. Context'i oluştur
+// Context oluştur
 const SocketContext = createContext(null);
 
 // 2. Kolay erişim için hook'u oluştur
@@ -33,6 +34,7 @@ export const useSocket = ({
 
 // 3. Provider bileşenini oluştur
 export const SocketProvider = ({ children }) => {
+    const { session, user } = useAuth(); // Get session token and user from AuthProvider
     const socketRef = useRef(null); // Soket örneğini re-render'lar arasında korumak için ref kullan
     const [isConnected, setIsConnected] = useState(false);
     const [room, setRoom] = useState(null);
@@ -69,6 +71,102 @@ export const SocketProvider = ({ children }) => {
         console.log('[SocketProvider] Bağlantı manuel olarak kesiliyor.');
         socketRef.current.disconnect();
     }, []);
+
+    // Socket bağlantısını yönet
+    useEffect(() => {
+        if (!session) {
+            // Session yoksa bağlantıyı kes
+            if (socketRef.current) {
+                console.log('[SocketProvider] Session yok, bağlantı kesiliyor');
+                socketRef.current.disconnect();
+                setIsConnected(false);
+                setRoom(null);
+                setSocketId(null);
+            }
+            return;
+        }
+
+        // Session varsa veya değiştiyse bağlantı kur/yenile
+        if (!socketRef.current || !socketRef.current.connected) {
+            console.log('[SocketProvider] Session mevcut, bağlantı kuruluyor');
+            if (user) {
+                // connect fonksiyonunu çağır (contextValue içinde tanımlı)
+                const connect = (user) => {
+                    if (socketRef.current?.connected) {
+                        console.log('[SocketProvider] Zaten bağlı.');
+                        return;
+                    }
+                    if (!user) {
+                        console.error('[SocketProvider] Bağlanmak için kullanıcı bilgisi gerekli!');
+                        return;
+                    }
+                    
+                    if (!socketRef.current) {
+                        const socketUrl = process.env.EXPO_PUBLIC_SOCKET_URL || 'http://localhost:3001';
+                        console.log('[SocketProvider] Creating socket with auth:', {
+                            userId: user.id,
+                            nickname: user.nickname,
+                            token: session ? 'TOKEN_EXISTS' : 'NO_TOKEN'
+                        });
+                        socketRef.current = io(socketUrl, {
+                            auth: { 
+                                userId: user.id,
+                                nickname: user.nickname,
+                                token: session
+                            },
+                            autoConnect: false,
+                            reconnection: true,
+                            reconnectionAttempts: 5,
+                            reconnectionDelay: 2000,
+                            timeout: 20000,
+                            transports: ['websocket', 'polling'],
+                            pingTimeout: 30000,
+                            pingInterval: 25000,
+                        });
+                        
+                        // Event listeners ekle
+                        socketRef.current.on('connect', () => {
+                            console.log(`[SocketProvider] ✅ Sunucuya bağlanıldı! ID: ${socketRef.current.id}`);
+                            setSocketId(socketRef.current.id);
+                            setIsConnected(true);
+                        });
+                        
+                        socketRef.current.on('disconnect', (reason) => {
+                            console.log(`[SocketProvider] ❌ Bağlantı kesildi: ${reason}`);
+                            setSocketId(undefined);
+                            setIsConnected(false);
+                        });
+                        
+                        socketRef.current.on('connect_error', (err) => {
+                            console.error(`[SocketProvider] ❌ Bağlantı Hatası: ${err.message}`);
+                        });
+                    }
+                    
+                    socketRef.current.connect();
+                };
+                connect(user);
+            }
+        } else {
+            // Eğer socket bağlı ama session değiştiyse, auth bilgilerini güncelle
+            console.log('[SocketProvider] Session güncellendi, auth bilgileri yenileniyor');
+            socketRef.current.auth = {
+                userId: user?.id,
+                nickname: user?.nickname,
+                token: session
+            };
+            // Yeniden bağlan
+            socketRef.current.disconnect();
+            socketRef.current.connect();
+        }
+
+        // Cleanup function
+        return () => {
+            if (socketRef.current) {
+                console.log('[SocketProvider] Component unmount, bağlantı kesiliyor');
+                socketRef.current.disconnect();
+            }
+        };
+    }, [session]);
 
     // Bağlantı yeniden kurulduğunda odaya tekrar katılmayı dene
     useEffect(() => {
@@ -109,8 +207,15 @@ export const SocketProvider = ({ children }) => {
                 console.log(`[SocketProvider] Socket URL: ${socketUrl}`);
 
                 console.log(`[SocketProvider] İlk bağlantı. Soket oluşturuluyor: ${socketUrl}`);
+                console.log('[SocketProvider] Creating socket with auth (contextValue):', {
+                    userId: user.id,
+                    token: session ? 'TOKEN_EXISTS' : 'NO_TOKEN'
+                });
                                 socketRef.current = io(socketUrl, {
-                    auth: { userId: user.id },
+                    auth: { 
+                        userId: user.id,
+                        token: session // Include token for authentication
+                    },
                     autoConnect: false, // We will connect manually
                     reconnection: true,
                     reconnectionAttempts: 5,
@@ -217,7 +322,11 @@ export const SocketProvider = ({ children }) => {
 
             // Kullanıcı bilgileriyle birlikte manuel olarak bağlan
             console.log(`[SocketProvider] Kullanıcı ile bağlantı başlatılıyor: ${user.id}`);
-            socketRef.current.auth = { userId: user.id, nickname: user.nickname };
+            socketRef.current.auth = { 
+                userId: user.id, 
+                nickname: user.nickname,
+                token: session // Include token for authentication
+            };
             socketRef.current.connect();
         };
 

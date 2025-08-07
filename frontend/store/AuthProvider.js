@@ -52,6 +52,19 @@ export function AuthProvider({ children }) {
         }
     };
 
+    // Token'ın geçerliliğini kontrol eden fonksiyon
+    const isTokenExpired = (token) => {
+        if (!token) return true;
+        try {
+            const payload = JSON.parse(atob(token.split('.')[1]));
+            const currentTime = Date.now() / 1000;
+            return payload.exp < currentTime;
+        } catch (error) {
+            console.error('Token parsing error:', error);
+            return true;
+        }
+    };
+
     useEffect(() => {
         const loadAuthData = async () => {
             try {
@@ -60,8 +73,21 @@ export function AuthProvider({ children }) {
                 const storedUser = await AsyncStorage.getItem('user');
 
                 if (accessToken && refreshToken && storedUser) {
-                    setSession(accessToken);
-                    setUser(JSON.parse(storedUser));
+                    // Token'ın süresini kontrol et
+                    if (isTokenExpired(accessToken)) {
+                        console.log('Access token expired, attempting refresh...');
+                        try {
+                            await refreshAccessToken();
+                        } catch (error) {
+                            console.error('Failed to refresh token on load:', error);
+                            await signOut();
+                        }
+                    } else {
+                        setSession(accessToken);
+                        setUser(JSON.parse(storedUser));
+                    }
+                } else {
+                    console.log('No valid auth data found');
                 }
             } catch (e) {
                 console.error('Failed to load auth data from storage', e);
@@ -72,6 +98,25 @@ export function AuthProvider({ children }) {
 
         loadAuthData();
     }, []);
+
+    // Token'ı periyodik olarak kontrol eden useEffect
+    useEffect(() => {
+        if (!session) return;
+
+        const checkTokenExpiry = () => {
+            if (isTokenExpired(session)) {
+                console.log('Token expired, refreshing...');
+                refreshAccessToken().catch(error => {
+                    console.error('Failed to refresh token:', error);
+                });
+            }
+        };
+
+        // Her 5 dakikada bir token'ı kontrol et
+        const interval = setInterval(checkTokenExpiry, 5 * 60 * 1000);
+
+        return () => clearInterval(interval);
+    }, [session]);
 
     const signIn = async (email, password) => {
         setLoading(true);
