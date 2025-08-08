@@ -17,6 +17,7 @@ export default function AuthLayout() {
       <Stack.Screen name="freemode" options={{ headerShown: false }} />
       <Stack.Screen name="freemodegame" options={{ headerShown: false }} />
       <Stack.Screen name="shop" options={{ headerShown: false }} />
+      <Stack.Screen name="earndiamonds" options={{ headerShown: false }} />
     </Stack>
   );
 }

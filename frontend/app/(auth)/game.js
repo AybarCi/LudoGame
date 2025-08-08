@@ -223,12 +223,25 @@ const GameScreen = () => {
               loop={false}
             />
             <View style={styles.modalFooterButtons}>
-              <TouchableOpacity onPress={handleResetGame} style={styles.footerButton}>
+              <TouchableOpacity onPress={async () => {
+                try {
+                  await AdService.showInterstitialAd();
+                  handleResetGame();
+                } catch (error) {
+                  console.error('Ad failed, proceeding anyway:', error);
+                  handleResetGame();
+                }
+              }} style={styles.footerButton}>
                 <Text style={styles.footerButtonText}>Yeni Oyun</Text>
               </TouchableOpacity>
-              <TouchableOpacity onPress={() => {
-                AdService.showInterstitialAd();
-                router.back();
+              <TouchableOpacity onPress={async () => {
+                try {
+                  await AdService.showInterstitialAd();
+                  router.replace('/(auth)/home');
+                } catch (error) {
+                  console.error('Ad failed, proceeding anyway:', error);
+                  router.replace('/(auth)/home');
+                }
               }} style={styles.footerButton}>
                 <Text style={styles.footerButtonText}>Ana Menü</Text>
               </TouchableOpacity>

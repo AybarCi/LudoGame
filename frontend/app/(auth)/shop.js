@@ -893,6 +893,18 @@ const ShopScreen = () => {
           <Text style={styles.diamondText}>{diamonds}</Text>
         </View>
 
+        {/* Elmas Kazanma Butonu */}
+        <View style={styles.earnDiamondsContainer}>
+          <TouchableOpacity 
+            style={styles.earnDiamondsButton}
+            onPress={() => router.push('/(auth)/earndiamonds')}
+          >
+            <Ionicons name="diamond" size={20} color="#FFFFFF" />
+            <Text style={styles.earnDiamondsText}>Elmas Kazan</Text>
+            <Ionicons name="chevron-forward" size={16} color="#FFFFFF" />
+          </TouchableOpacity>
+        </View>
+
         {renderCategoryTabs()}
 
         <Animated.View 
@@ -1023,7 +1035,7 @@ const styles = StyleSheet.create({
   categoryTabs: {
     flexDirection: 'row',
     paddingHorizontal: 20,
-    paddingTop: 120,
+    paddingTop: 10,
     marginBottom: 20,
   },
   categoryTab: {
@@ -1048,6 +1060,39 @@ const styles = StyleSheet.create({
   },
   activeCategoryText: {
     color: 'white',
+  },
+  earnDiamondsContainer: {
+    paddingHorizontal: 20,
+    paddingTop: 100,
+    marginBottom: 5,
+  },
+  earnDiamondsButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(156, 39, 176, 0.25)',
+    borderWidth: 2,
+    borderColor: '#9C27B0',
+    borderRadius: 15,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    shadowColor: '#9C27B0',
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  earnDiamondsText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontFamily: 'Poppins_700Bold',
+    marginHorizontal: 8,
+    textShadowColor: 'rgba(156, 39, 176, 0.5)',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 2,
   },
   content: {
     flex: 1,

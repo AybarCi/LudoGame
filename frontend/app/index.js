@@ -101,14 +101,7 @@ export default function Welcome() {
               <Text style={styles.shopButtonText}>Mağaza</Text>
             </TouchableOpacity>
             
-            {/* Elmas Kazan Butonu */}
-            <TouchableOpacity
-              style={styles.earnButton}
-              onPress={() => router.push('/(auth)/earndiamonds')}
-            >
-              <Ionicons name="diamond" size={20} color="#FFD700" />
-              <Text style={styles.earnButtonText}>Elmas Kazan</Text>
-            </TouchableOpacity>
+
           </Animated.View>
 
           <Animated.View 
@@ -235,23 +228,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
-  earnButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(255, 215, 0, 0.2)',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 25,
-    marginTop: 15,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 215, 0, 0.4)',
-    gap: 8,
-  },
-  earnButtonText: {
-    color: '#FFD700',
-    fontSize: 16,
-    fontWeight: '600',
-  },
+
   button: {
     backgroundColor: '#FF6B35',
     borderRadius: 25,

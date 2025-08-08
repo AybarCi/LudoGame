@@ -128,7 +128,7 @@ const FreeModeGame = () => {
   
   // Confirm back to menu
   const confirmBackToMenu = () => {
-    router.replace('/');
+    router.replace('/(auth)/home');
     setShowBackModal(false);
   };
   
@@ -390,10 +390,10 @@ const FreeModeGame = () => {
                       onPress={async () => {
                         try {
                           await AdService.showInterstitialAd();
-                          router.replace('/home');
+                          router.replace('/(auth)/home');
                         } catch (error) {
                           console.error('Ad failed, proceeding anyway:', error);
-                          router.replace('/home');
+                          router.replace('/(auth)/home');
                         }
                       }}
                       style={[styles.winnerButton, styles.winnerButtonSecondary]}
