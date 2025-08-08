@@ -24,6 +24,7 @@ import LottieView from 'lottie-react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { DiamondService } from '../../services/DiamondService';
 import { AdService } from '../../services/AdService';
+import { EnergyService } from '../../services/EnergyService';
 
 const { width, height } = Dimensions.get('window');
 
@@ -41,6 +42,7 @@ const OnlineGameScreen = () => {
   const [chatBlocked, setChatBlocked] = useState(false);
   const [chatBlockDuration, setChatBlockDuration] = useState(0);
   const [showLeaveModal, setShowLeaveModal] = useState(false);
+  const [energyChecked, setEnergyChecked] = useState(false);
 
   const handleProfanityWarning = (data) => {
     setChatWarning(data.message);
@@ -112,6 +114,30 @@ const OnlineGameScreen = () => {
       socket.off('countdown_stopped', handleCountdownStopped);
     };
   }, [socket]);
+
+  // Energy check before game starts
+  useEffect(() => {
+    const checkEnergyAndStartGame = async () => {
+      try {
+        const hasEnergy = await EnergyService.hasEnoughEnergy();
+        if (!hasEnergy) {
+          router.replace('/(auth)/energy');
+          return;
+        }
+        
+        // Use energy when game starts
+        await EnergyService.useEnergy();
+        setEnergyChecked(true);
+      } catch (error) {
+        console.error('Energy check error:', error);
+        router.replace('/(auth)/energy');
+      }
+    };
+
+    if (!energyChecked) {
+      checkEnergyAndStartGame();
+    }
+  }, [energyChecked, router]);
 
   // Check if current user is the room creator
   useEffect(() => {
@@ -489,7 +515,7 @@ useEffect(() => {
     if (socket && room?.id) {
       console.log(`[Game] Leaving room: ${room.id}`);
       socket.emit('leave_room', { roomId: room.id });
-      router.replace('/');
+      router.replace('/(auth)/home');
     }
     setShowLeaveModal(false);
   };

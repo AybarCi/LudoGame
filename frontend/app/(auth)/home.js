@@ -7,7 +7,9 @@ import { useAuth } from '../../store/AuthProvider';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import HomeButtons from '../../components/modules/HomeButtons';
+import RotatingStatsCard from '../../components/modules/RotatingStatsCard';
 import { DiamondService } from '../../services/DiamondService';
+import { EnergyService } from '../../services/EnergyService';
 
 
 const { width, height } = Dimensions.get('window');
@@ -18,6 +20,7 @@ const HomeScreen = () => {
   const { user, signOut } = useAuth();
   const [loading, setLoading] = useState(false);
   const [diamonds, setDiamonds] = useState(0);
+  const [energy, setEnergy] = useState({ current: 0, max: 5, timeUntilNext: null });
   
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(30)).current;
@@ -29,7 +32,16 @@ const HomeScreen = () => {
   ]).current;
 
   useEffect(() => {
-    loadDiamonds();
+    // Enerji sistemini başlat
+    EnergyService.initializeEnergySystem().then(() => {
+      loadDiamonds();
+      loadEnergy();
+    });
+    
+    // Set up energy refresh interval
+    const energyInterval = setInterval(() => {
+      loadEnergy();
+    }, 60000); // Update every minute
     
     Animated.parallel([
       Animated.timing(fadeAnim, {
@@ -59,6 +71,11 @@ const HomeScreen = () => {
         useNativeDriver: true,
       }).start();
     });
+
+    // Cleanup interval on unmount
+    return () => {
+      clearInterval(energyInterval);
+    };
   }, []);
 
 
@@ -68,7 +85,30 @@ const HomeScreen = () => {
     setDiamonds(currentDiamonds);
   };
 
-  const handlePlayWithAI = () => {
+  const loadEnergy = async () => {
+    try {
+      const energyInfo = await EnergyService.getEnergyInfo();
+      setEnergy({
+        current: energyInfo.current,
+        max: energyInfo.max,
+        timeUntilNext: energyInfo.timeUntilNext
+      });
+    } catch (error) {
+      console.error('Error loading energy:', error);
+    }
+  };
+
+  const handlePlayWithAI = async () => {
+    // Check energy before starting game
+    const hasEnergy = await EnergyService.hasEnoughEnergy();
+    if (!hasEnergy) {
+      router.push('/(auth)/energy');
+      return;
+    }
+
+    // Use energy
+    await EnergyService.useEnergy();
+
     const playerNickname = user?.nickname || 'Oyuncu 1';
     const playersInfo = {
       red: { nickname: playerNickname, type: 'human' },
@@ -88,15 +128,15 @@ const HomeScreen = () => {
   };
 
   const handlePlayOnline = () => {
-    router.push('/lobby');
+    router.push('/(auth)/lobby');
   };
 
   const handleShop = () => {
-    router.push('/shop');
+    router.push('/(auth)/shop');
   };
 
   const handleFreeMode = () => {
-    router.push('/freemode');
+    router.push('/(auth)/freemode');
   };
 
   if (!user) {
@@ -141,21 +181,43 @@ const HomeScreen = () => {
           </View>
           
           <View style={styles.statsContainer}>
-            <View style={styles.statCard}>
-              <Ionicons name="trophy" size={24} color="#FFD700" />
-              <Text style={styles.statValue}>{user?.score || 0}</Text>
-              <Text style={styles.statLabel}>Puan</Text>
-            </View>
-            <View style={styles.statCard}>
-              <Ionicons name="trending-up" size={24} color="#4CAF50" />
-              <Text style={styles.statValue}>{Math.floor((user?.score || 0) / 100) + 1}</Text>
-              <Text style={styles.statLabel}>Seviye</Text>
-            </View>
-            <View style={styles.statCard}>
-              <Ionicons name="diamond" size={24} color="#9C27B0" />
-              <Text style={styles.statValue}>{diamonds}</Text>
-              <Text style={styles.statLabel}>Elmas</Text>
-            </View>
+            <RotatingStatsCard
+              stats={[
+                {
+                  icon: 'flash',
+                  iconColor: '#FFD700',
+                  value: `${energy.current}/${energy.max}`,
+                  label: 'Enerji',
+                  gradient: ['#FFD700', '#FFA000'],
+                  valueColor: '#FFFFFF',
+                  onPress: () => router.push('/(auth)/energy')
+                },
+                {
+                  icon: 'diamond',
+                  iconColor: '#9C27B0',
+                  value: diamonds,
+                  label: 'Elmas',
+                  gradient: ['#9C27B0', '#BA68C8'],
+                  valueColor: '#FFFFFF'
+                },
+                {
+                  icon: 'trophy',
+                  iconColor: '#FF6B35',
+                  value: user?.score || 0,
+                  label: 'Puan',
+                  gradient: ['#FF6B35', '#FF8A65'],
+                  valueColor: '#FFFFFF'
+                },
+                {
+                  icon: 'trending-up',
+                  iconColor: '#4CAF50',
+                  value: Math.floor((user?.score || 0) / 100) + 1,
+                  label: 'Seviye',
+                  gradient: ['#4CAF50', '#66BB6A'],
+                  valueColor: '#FFFFFF'
+                }
+              ]}
+            />
           </View>
         </Animated.View>
 
@@ -288,40 +350,10 @@ const styles = StyleSheet.create({
     textShadowRadius: 5,
   },
   statsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
     width: '100%',
     paddingHorizontal: 15,
-    gap: 10,
-  },
-  statCard: {
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    borderRadius: 15,
-    padding: 15,
-    alignItems: 'center',
-    flex: 1,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.2)',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 6,
-  },
-  statValue: {
-    fontSize: 24,
-    color: '#FFFFFF',
-    fontFamily: 'Poppins_700Bold',
-    marginTop: 8,
-    textShadowColor: 'rgba(0, 0, 0, 0.6)',
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 3,
-  },
-  statLabel: {
-    fontSize: 14,
-    color: 'rgba(255, 255, 255, 0.8)',
-    fontFamily: 'Poppins_400Regular',
-    marginTop: 4,
+    height: 140,
+    justifyContent: 'center',
   },
   bottomContainer: {
     flex: 1,

@@ -20,12 +20,14 @@ import { COLORS } from '../../constants/game';
 import LottieView from 'lottie-react-native';
 import { DiamondService } from '../../services/DiamondService';
 import { AdService } from '../../services/AdService';
+import { EnergyService } from '../../services/EnergyService';
 
 const GameScreen = () => {
   const { session, user, updateScore } = useAuth();
   const { gameId, mode, playersInfo: playersInfoString } = useLocalSearchParams();
   const { socket } = useSocket();
   const router = useRouter();
+  const [energyChecked, setEnergyChecked] = useState(false);
 
   // Decode playersInfo from the navigation parameters if it exists
   const playersInfoFromParams = playersInfoString ? JSON.parse(playersInfoString) : null;
@@ -40,15 +42,15 @@ const GameScreen = () => {
   );
   const { gamePhase, winner, pawns, currentPlayer, diceValue, isRolling, gameMessage, turnOrderRolls, aiPlayers, playersInfo, isInitialized } = state;
 
+  // Initialize game (energy check is done in home.js before navigation)
   useEffect(() => {
-    // Only initialize if we have the params and the game isn't already initialized.
-    if (playersInfoFromParams && !isInitialized) {
+    if (!isInitialized) {
+      // Initialize game
       dispatch({
         type: 'INITIALIZE_GAME',
         payload: { mode, playersInfo: playersInfoFromParams },
       });
     }
-    // Use the string version in the dependency array to prevent re-runs from new object creation.
   }, [playersInfoString, mode, isInitialized, dispatch]);
 
   const [showTurnPopup, setShowTurnPopup] = useState(false);

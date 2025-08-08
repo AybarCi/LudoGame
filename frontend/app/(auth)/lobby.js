@@ -6,6 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSocket } from '@/store/SocketProvider';
 import { useAuth } from '@/store/AuthProvider';
 import { useRouter } from 'expo-router';
+import { EnergyService } from '../../services/EnergyService';
 
 const { width, height } = Dimensions.get('window');
 
@@ -125,6 +126,14 @@ const Lobby = () => {
 
   const handleCreateRoom = async () => {
     if (!socket) return;
+    
+    // Check energy before creating room
+    const hasEnergy = await EnergyService.hasEnoughEnergy();
+    if (!hasEnergy) {
+      router.push('/(auth)/energy');
+      return;
+    }
+    
     setIsLoading(true);
     try {
       const nickname = await AsyncStorage.getItem('user_nickname') || 'Guest';
@@ -146,6 +155,14 @@ const Lobby = () => {
 
   const handleJoinRoom = async (roomId) => {
     if (!socket) return;
+    
+    // Check energy before joining room
+    const hasEnergy = await EnergyService.hasEnoughEnergy();
+    if (!hasEnergy) {
+      router.push('/(auth)/energy');
+      return;
+    }
+    
     try {
       const nickname = await AsyncStorage.getItem('user_nickname') || 'Guest';
       socket.emit('join_room', { roomId, nickname }, (response) => {

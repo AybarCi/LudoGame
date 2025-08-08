@@ -24,6 +24,7 @@ import LottieView from 'lottie-react-native';
 import FreeModeBoard from '../../components/modules/FreeModeBoard';
 import { useFreeModeEngine } from '../../hooks/useFreeModeEngine';
 import { AdService } from '../../services/AdService';
+import { EnergyService } from '../../services/EnergyService';
 
 const { width, height } = Dimensions.get('window');
 const isTablet = width > 768;
@@ -31,6 +32,8 @@ const isTablet = width > 768;
 const FreeModeGame = () => {
   const router = useRouter();
   const params = useLocalSearchParams();
+  const [energyChecked, setEnergyChecked] = useState(false);
+  const [gameInitialized, setGameInitialized] = useState(false);
   
   // Parse game parameters
   const playerCount = parseInt(params.playerCount) || 2;
@@ -56,6 +59,12 @@ const FreeModeGame = () => {
   // Modal states
   const [showResetModal, setShowResetModal] = useState(false);
   const [showBackModal, setShowBackModal] = useState(false);
+
+  // Initialize game (energy check is done in freemode.js before navigation)
+  useEffect(() => {
+    setEnergyChecked(true);
+    setGameInitialized(true);
+  }, []);
 
   // Get possible moves for current player
   const possibleMoves = state && state.diceValue ? 
@@ -128,8 +137,14 @@ const FreeModeGame = () => {
   
   // Confirm back to menu
   const confirmBackToMenu = () => {
-    router.replace('/(auth)/home');
-    setShowBackModal(false);
+    try {
+      setShowBackModal(false);
+      router.replace('/');
+    } catch (error) {
+      console.error('Navigation error:', error);
+      // Fallback navigation
+      router.push('/');
+    }
   };
   
   // Animated styles
@@ -261,6 +276,8 @@ const FreeModeGame = () => {
                state.diceValue && possibleMoves.length === 0 ? 'Hamle yok - Bekle...' : 'Bekle...'}
             </Text>
           </View>
+          
+
         </View>
         
         {/* Reset Confirmation Modal */}
@@ -345,6 +362,8 @@ const FreeModeGame = () => {
           </View>
         </Modal>
         
+
+        
         {/* Winner Modal */}
         {state.winner && (
           <View style={styles.winnerOverlay}>
@@ -393,7 +412,7 @@ const FreeModeGame = () => {
                           router.replace('/(auth)/home');
                         } catch (error) {
                           console.error('Ad failed, proceeding anyway:', error);
-                          router.replace('/(auth)/home');
+                          router.push('/(auth)/home');
                         }
                       }}
                       style={[styles.winnerButton, styles.winnerButtonSecondary]}

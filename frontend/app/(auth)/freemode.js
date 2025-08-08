@@ -16,6 +16,7 @@ import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../store/AuthProvider';
+import { EnergyService } from '../../services/EnergyService';
 
 const { width, height } = Dimensions.get('window');
 const isTablet = width > 768;
@@ -119,7 +120,7 @@ const FreeModeScreen = () => {
     setTempPlayerNames({});
   };
 
-  const handleStartGame = () => {
+  const handleStartGame = async () => {
     if (selectedPlayers.length !== playerCount) {
       Alert.alert('Hata', 'Lütfen tüm oyuncular için renk seçin.');
       return;
@@ -131,6 +132,16 @@ const FreeModeScreen = () => {
       return;
     }
 
+    // Check energy before starting game
+    const hasEnergy = await EnergyService.hasEnoughEnergy();
+    if (!hasEnergy) {
+      router.push('/(auth)/energy');
+      return;
+    }
+
+    // Use energy
+    await EnergyService.useEnergy();
+
     // Navigate to free mode game with selected parameters
     const gameParams = {
       playerCount: playerCount.toString(),
@@ -139,7 +150,7 @@ const FreeModeScreen = () => {
     };
     
     router.push({
-      pathname: '/freemodegame',
+      pathname: '/(auth)/freemodegame',
       params: gameParams
     });
   };
