@@ -198,7 +198,8 @@ const HomeScreen = () => {
                   value: diamonds,
                   label: 'Elmas',
                   gradient: ['#9C27B0', '#BA68C8'],
-                  valueColor: '#FFFFFF'
+                  valueColor: '#FFFFFF',
+                  onPress: () => router.push('/(auth)/diamonds')
                 },
                 {
                   icon: 'trophy',

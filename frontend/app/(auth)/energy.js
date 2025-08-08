@@ -129,7 +129,20 @@ export default function EnergyScreen() {
       }
 
       if (diamonds < 50) {
-        showModal('Yetersiz Elmas', 'Enerji satın almak için 50 elmasınız olmalı.');
+        showModal(
+          'Yetersiz Elmas', 
+          'Enerji satın almak için 50 elmasınız olmalı. Elmas satın almak istiyor musunuz?',
+          [
+            { text: 'İptal', onPress: () => setModalVisible(false) },
+            {
+              text: 'Elmas Al',
+              onPress: () => {
+                setModalVisible(false);
+                router.push('/(auth)/diamonds');
+              }
+            }
+          ]
+        );
         return;
       }
 
@@ -294,7 +307,7 @@ export default function EnergyScreen() {
           >
             <Ionicons name="arrow-back" size={24} color="white" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Enerji & Elmas</Text>
+          <Text style={styles.headerTitle}>Enerji</Text>
           <View style={styles.diamondHeader}>
             <Ionicons name="diamond" size={20} color="#FFD700" />
             <Text style={styles.diamondCount}>{diamonds}</Text>
@@ -320,7 +333,7 @@ export default function EnergyScreen() {
                 style={styles.energyOptionGradient}
               >
                 <View style={styles.energyOptionContent}>
-                  <Ionicons name="flash" size={24} color="white" />
+                  <Ionicons name="flash" size={36} color="white" />
                   <View style={styles.energyOptionText}>
                     <Text style={styles.energyOptionTitle}>Tam Enerji</Text>
                     <Text style={styles.energyOptionSubtitle}>50 Elmas</Text>
@@ -338,7 +351,7 @@ export default function EnergyScreen() {
                 style={styles.energyOptionGradient}
               >
                 <View style={styles.energyOptionContent}>
-                  <Ionicons name="checkmark-circle" size={24} color="white" />
+                  <Ionicons name="checkmark-circle" size={36} color="white" />
                   <View style={styles.energyOptionText}>
                     <Text style={styles.energyOptionTitle}>Enerji Tam Dolu</Text>
                     <Text style={styles.energyOptionSubtitle}>Satın alma gerekmiyor</Text>
@@ -360,7 +373,7 @@ export default function EnergyScreen() {
                 style={styles.energyOptionGradient}
               >
                 <View style={styles.energyOptionContent}>
-                  <Ionicons name="play-circle" size={24} color="white" />
+                  <Ionicons name="play-circle" size={36} color="white" />
                   <View style={styles.energyOptionText}>
                     <Text style={styles.energyOptionTitle}>Reklam İzle</Text>
                     <Text style={styles.energyOptionSubtitle}>+1 Enerji</Text>
@@ -371,40 +384,9 @@ export default function EnergyScreen() {
           )}
         </View>
 
-        {/* Elmas Paketleri */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Elmas Paketleri</Text>
-          <View style={styles.packagesGrid}>
-            {diamondPackages.map((packageInfo, index) => 
-              renderDiamondPackage(packageInfo, index)
-            )}
-          </View>
-        </View>
 
-        {/* Satın Almaları Geri Yükle */}
-        <TouchableOpacity
-          style={styles.restoreButton}
-          onPress={async () => {
-            try {
-              setPurchaseLoading(true);
-              const result = await PurchaseService.restorePurchases();
-              
-              if (result.success) {
-                await loadData();
-                showModal('Başarılı', `${result.restoredCount} satın alma geri yüklendi.`);
-              } else {
-                showModal('Hata', result.error);
-              }
-            } catch (error) {
-              showModal('Hata', 'Geri yükleme sırasında bir hata oluştu.');
-            } finally {
-              setPurchaseLoading(false);
-            }
-          }}
-          disabled={purchaseLoading}
-        >
-          <Text style={styles.restoreButtonText}>Satın Almaları Geri Yükle</Text>
-        </TouchableOpacity>
+
+
 
 
       </ScrollView>
@@ -569,28 +551,41 @@ const styles = StyleSheet.create({
     marginBottom: 15,
   },
   energyOption: {
-    marginBottom: 10,
-    borderRadius: 12,
+    marginBottom: 20,
+    borderRadius: 20,
     overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 8,
   },
   energyOptionGradient: {
-    padding: 15,
+    padding: 25,
+    minHeight: 100,
+    justifyContent: 'center',
   },
   energyOptionContent: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
   },
   energyOptionText: {
-    marginLeft: 15,
+    marginLeft: 20,
+    flex: 1,
   },
   energyOptionTitle: {
     color: 'white',
-    fontSize: 16,
+    fontSize: 20,
     fontWeight: 'bold',
   },
   energyOptionSubtitle: {
-    color: 'rgba(255, 255, 255, 0.8)',
-    fontSize: 14,
+    color: 'rgba(255, 255, 255, 0.9)',
+    fontSize: 16,
+    marginTop: 4,
   },
   packagesGrid: {
     flexDirection: 'row',
