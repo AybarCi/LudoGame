@@ -1,0 +1,47 @@
+version: '3.8'
+
+services:
+  ludo-backend:
+    image: ghcr.io/aybarci/ludogame/ludo-backend:latest
+    container_name: ludo-backend
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+    volumes:
+      - ./database.db:/app/database.db
+      - ./logs:/app/logs
+    networks:
+      - ludo-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  redis:
+    image: redis:7-alpine
+    container_name: ludo-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - ludo-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+networks:
+  ludo-network:
+    driver: bridge
+
+volumes:
+  redis-data:
+    driver: local
