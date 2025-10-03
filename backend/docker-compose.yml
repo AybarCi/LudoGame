@@ -18,6 +18,9 @@ services:
       - DB_ENCRYPT=false
       - DB_TRUST_SERVER_CERTIFICATE=true
       - JWT_SECRET=your-jwt-secret-key-here-change-this-in-production
+      - REDIS_HOST=172.22.0.3
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=
     volumes:
       - ./logs:/app/logs
     networks:
