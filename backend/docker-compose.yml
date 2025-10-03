@@ -10,6 +10,14 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=3001
+      - DB_SERVER=mssql.istekbilisim.com
+      - DB_DATABASE=ludoturcodb
+      - DB_USER=sa
+      - DB_PASSWORD=SeKo153759++
+      - DB_PORT=1433
+      - DB_ENCRYPT=false
+      - DB_TRUST_SERVER_CERTIFICATE=true
+      - JWT_SECRET=your-jwt-secret-key-here-change-this-in-production
     volumes:
       - ./logs:/app/logs
     networks:
