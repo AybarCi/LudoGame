@@ -1610,6 +1610,31 @@ io.on('connection', async (socket) => {
     });
 });
 
+// --- Health Check Endpoint ---
+app.get('/health', async (req, res) => {
+    try {
+        // Database connection check
+        await executeQuery('SELECT 1');
+        
+        res.status(200).json({
+            status: 'healthy',
+            timestamp: new Date().toISOString(),
+            service: 'ludo-backend',
+            database: 'connected',
+            port: PORT
+        });
+    } catch (error) {
+        console.error('Health check failed:', error);
+        res.status(503).json({
+            status: 'unhealthy',
+            timestamp: new Date().toISOString(),
+            service: 'ludo-backend',
+            database: 'disconnected',
+            error: error.message
+        });
+    }
+});
+
 // --- Server Listen ---
 server.listen(PORT, async () => {
     try {
