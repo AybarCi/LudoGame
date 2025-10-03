@@ -11,7 +11,6 @@ services:
       - NODE_ENV=production
       - PORT=3001
     volumes:
-      - ./database.db:/app/database.db
       - ./logs:/app/logs
     networks:
       - ludo-network
