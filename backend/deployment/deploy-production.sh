@@ -32,6 +32,10 @@ if [ ! -f "ssl/cert.pem" ] || [ ! -f "ssl/key.pem" ]; then
         -subj "/C=TR/ST=Istanbul/L=Istanbul/O=LudoGame/CN=your-domain.com"
 fi
 
+# Telefon doğrulama tabloları kontrolü
+echo -e "${YELLOW}📱 Telefon doğrulama tabloları kontrol ediliyor...${NC}"
+echo -e "${YELLOW}💡 Telefon doğrulama tabloları için ../create_phone_verification_tables.sql script'ini çalıştırmayı unutmayın!${NC}"
+
 # Docker network'ünü kontrol et
 if ! docker network ls | grep -q "ludo-production-network"; then
     echo -e "${YELLOW}🔧 Docker network oluşturuluyor...${NC}"

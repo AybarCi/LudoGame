@@ -227,6 +227,136 @@ export function AuthProvider({ children }) {
         // Placeholder for score update logic
     };
 
+    // Telefon doğrulama kodu gönder
+    const sendPhoneVerificationCode = async (phoneNumber) => {
+        setLoading(true);
+        try {
+            const response = await fetch(`${API_URL}/api/send-sms-code`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ phoneNumber }),
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(data.message || 'Doğrulama kodu gönderilemedi');
+            }
+            
+            return { success: true, message: data.message };
+        } catch (error) {
+            console.error('Send phone verification code error:', error);
+            return { error };
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    // Telefon doğrulama kodunu kontrol et
+    const verifyPhoneCode = async (phoneNumber, verificationCode) => {
+        setLoading(true);
+        try {
+            const response = await fetch(`${API_URL}/api/verify-phone`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ phoneNumber, verificationCode }),
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(data.message || 'Doğrulama başarısız');
+            }
+            
+            return { success: true, message: data.message };
+        } catch (error) {
+            console.error('Verify phone code error:', error);
+            return { error };
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    // Telefonla kayıt ol
+    const signUpWithPhone = async (phoneNumber, verificationCode, nickname) => {
+        setLoading(true);
+        try {
+            const response = await fetch(`${API_URL}/api/register-phone`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ phoneNumber, verificationCode, nickname }),
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(data.message || 'Kayıt başarısız');
+            }
+
+            const { accessToken, refreshToken, user: userData } = data;
+            setSession(accessToken);
+            setUser(userData);
+
+            await AsyncStorage.setItem('accessToken', accessToken);
+            await AsyncStorage.setItem('refreshToken', refreshToken);
+            await AsyncStorage.setItem('user', JSON.stringify(userData));
+            
+            // Kullanıcı giriş yaptığında elmaslarını sunucudan senkronize et
+            try {
+                await DiamondService.syncDiamondsFromServer();
+            } catch (error) {
+                console.error('Error syncing diamonds after login:', error);
+            }
+            
+            return { success: true };
+        } catch (error) {
+            console.error('Sign up with phone error:', error);
+            return { error };
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    // Telefonla giriş yap
+    const signInWithPhone = async (phoneNumber, verificationCode) => {
+        setLoading(true);
+        try {
+            const response = await fetch(`${API_URL}/api/login-phone`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ phoneNumber, verificationCode }),
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(data.message || 'Giriş başarısız');
+            }
+
+            const { accessToken, refreshToken, user: userData } = data;
+            setSession(accessToken);
+            setUser(userData);
+
+            await AsyncStorage.setItem('accessToken', accessToken);
+            await AsyncStorage.setItem('refreshToken', refreshToken);
+            await AsyncStorage.setItem('user', JSON.stringify(userData));
+            
+            // Kullanıcı giriş yaptığında elmaslarını sunucudan senkronize et
+            try {
+                await DiamondService.syncDiamondsFromServer();
+            } catch (error) {
+                console.error('Error syncing diamonds after login:', error);
+            }
+            
+            return { success: true };
+        } catch (error) {
+            console.error('Sign in with phone error:', error);
+            return { error };
+        } finally {
+            setLoading(false);
+        }
+    };
+
     const value = {
         user,
         session,
@@ -236,6 +366,10 @@ export function AuthProvider({ children }) {
         signOut,
         updateScore,
         refreshAccessToken,
+        sendPhoneVerificationCode,
+        verifyPhoneCode,
+        signUpWithPhone,
+        signInWithPhone,
     };
 
     return (

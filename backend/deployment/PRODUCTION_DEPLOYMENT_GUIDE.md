@@ -8,6 +8,7 @@ Bu doküman, Ludo Backend uygulamasını production ortamına deploy etmek için
 - Domain adı ve SSL sertifikası
 - Production SQL Server erişimi
 - Minimum 2GB RAM, 2 CPU çekirdeği
+- Telefon doğrulama için: SQL Server'da `phone_verifications` tablosu ve `users` tablosunda `phone_number` alanı
 
 ## 🔧 Production Konfigürasyon Dosyaları
 
@@ -27,6 +28,13 @@ cp env.production .env
 - **Database**: ludoturcodb
 - **User**: sa
 - **Password**: SeKo153759++
+
+### 2.1 Telefon Doğrulama Tabloları
+Telefon doğrulama sistemi için aşağıdaki SQL scriptini çalıştırın:
+```bash
+# Telefon doğrulama tablolarını oluştur
+sqlcmd -S mssql.istekbilisim.com -d ludoturcodb -U sa -P "SeKo153759++" -i ../create_phone_verification_tables.sql
+```
 
 ### 3. SSL Sertifikaları
 ```bash

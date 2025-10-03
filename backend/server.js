@@ -1635,6 +1635,286 @@ app.get('/health', async (req, res) => {
     }
 });
 
+// --- Phone Verification API Routes (SMS Service Olmadan) ---
+
+// Telefon doğrulama kodu gönder (SMS servisi yok, sadece DB'ye kaydet)
+app.post('/api/send-sms-code', async (req, res) => {
+    const { phoneNumber } = req.body;
+    
+    if (!phoneNumber) {
+        return res.status(400).json({ message: 'Telefon numarası gerekli.' });
+    }
+
+    try {
+        // Türkiye formatını kontrol et (5xx xxx xx xx)
+        const cleanPhone = phoneNumber.replace(/\s/g, '');
+        if (!cleanPhone.match(/^5[0-9]{9}$/)) {
+            return res.status(400).json({ message: 'Geçersiz telefon numarası formatı. 5xx xxx xx xx formatında olmalı.' });
+        }
+
+        // 6 haneli rastgele kod oluştur
+        const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
+        const verificationId = uuidv4();
+        const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 dakika sonra expires
+
+        // Eski kodları temizle
+        await executeQuery(
+            'DELETE FROM phone_verifications WHERE phone_number = @phoneNumber',
+            [{ name: 'phoneNumber', type: sql.NVarChar(20), value: cleanPhone }]
+        );
+
+        // Yeni kodu kaydet
+        await executeQuery(
+            'INSERT INTO phone_verifications (id, phone_number, verification_code, expires_at) VALUES (@id, @phoneNumber, @code, @expiresAt)',
+            [
+                { name: 'id', type: sql.NVarChar(36), value: verificationId },
+                { name: 'phoneNumber', type: sql.NVarChar(20), value: cleanPhone },
+                { name: 'code', type: sql.NVarChar(6), value: verificationCode },
+                { name: 'expiresAt', type: sql.DateTime2, value: expiresAt }
+            ]
+        );
+
+        // Demo için konsola yazdır (SMS servisi yok)
+        console.log(`[PHONE VERIFICATION] Telefon: ${cleanPhone}, Kod: ${verificationCode} (5 dakika geçerli)`);
+
+        res.json({ 
+            success: true, 
+            message: 'Doğrulama kodu oluşturuldu. (SMS servisi yok - kod konsolda)',
+            phoneNumber: cleanPhone,
+            expiresIn: 300 // 5 dakika
+        });
+    } catch (error) {
+        console.error('Send SMS code error:', error);
+        res.status(500).json({ message: 'İç sunucu hatası', error: error.message });
+    }
+});
+
+// Telefon doğrulama kodunu kontrol et
+app.post('/api/verify-phone', async (req, res) => {
+    const { phoneNumber, verificationCode } = req.body;
+    
+    if (!phoneNumber || !verificationCode) {
+        return res.status(400).json({ message: 'Telefon numarası ve doğrulama kodu gerekli.' });
+    }
+
+    try {
+        const cleanPhone = phoneNumber.replace(/\s/g, '');
+
+        // Kodu kontrol et
+        const result = await executeQuery(
+            'SELECT * FROM phone_verifications WHERE phone_number = @phoneNumber AND verification_code = @code AND expires_at > GETDATE() AND is_used = 0',
+            [
+                { name: 'phoneNumber', type: sql.NVarChar(20), value: cleanPhone },
+                { name: 'code', type: sql.NVarChar(6), value: verificationCode }
+            ]
+        );
+
+        if (result.length === 0) {
+            return res.status(400).json({ message: 'Geçersiz veya süresi dolmuş doğrulama kodu.' });
+        }
+
+        // Kodu kullanıldı olarak işaretle
+        await executeQuery(
+            'UPDATE phone_verifications SET is_used = 1 WHERE id = @id',
+            [{ name: 'id', type: sql.NVarChar(36), value: result[0].id }]
+        );
+
+        res.json({ 
+            success: true, 
+            message: 'Telefon numarası doğrulandı.',
+            phoneNumber: cleanPhone
+        });
+    } catch (error) {
+        console.error('Verify phone error:', error);
+        res.status(500).json({ message: 'İç sunucu hatası', error: error.message });
+    }
+});
+
+// Telefonla kayıt ol
+app.post('/api/register-phone', async (req, res) => {
+    const { phoneNumber, verificationCode, nickname } = req.body;
+    
+    if (!phoneNumber || !verificationCode || !nickname) {
+        return res.status(400).json({ message: 'Telefon numarası, doğrulama kodu ve rumuz gerekli.' });
+    }
+
+    try {
+        const cleanPhone = phoneNumber.replace(/\s/g, '');
+
+        // Önce doğrulama kodunu kontrol et
+        const verifyResult = await executeQuery(
+            'SELECT * FROM phone_verifications WHERE phone_number = @phoneNumber AND verification_code = @code AND expires_at > GETDATE() AND is_used = 0',
+            [
+                { name: 'phoneNumber', type: sql.NVarChar(20), value: cleanPhone },
+                { name: 'code', type: sql.NVarChar(6), value: verificationCode }
+            ]
+        );
+
+        if (verifyResult.length === 0) {
+            return res.status(400).json({ message: 'Geçersiz veya süresi dolmuş doğrulama kodu.' });
+        }
+
+        // Telefon numarasının daha önce kullanılıp kullanılmadığını kontrol et
+        const existingUser = await executeQuery(
+            'SELECT * FROM users WHERE phone_number = @phoneNumber',
+            [{ name: 'phoneNumber', type: sql.NVarChar(20), value: cleanPhone }]
+        );
+
+        if (existingUser.length > 0) {
+            return res.status(400).json({ message: 'Bu telefon numarası ile zaten kayıt olunmuş.' });
+        }
+
+        // Rumuz kontrolü
+        const existingNickname = await executeQuery(
+            'SELECT * FROM users WHERE nickname = @nickname',
+            [{ name: 'nickname', type: sql.NVarChar(50), value: nickname }]
+        );
+
+        if (existingNickname.length > 0) {
+            return res.status(400).json({ message: 'Bu rumuz zaten kullanılıyor.' });
+        }
+
+        // Yeni kullanıcı oluştur
+        const userId = uuidv4();
+        const password_hash = await bcrypt.hash(cleanPhone + JWT_SECRET, 10); // Telefon + secret ile geçici şifre
+
+        await executeQuery(
+            'INSERT INTO users (id, email, password_hash, username, nickname, phone_number, salt, score, games_played, wins) VALUES (@id, @email, @passwordHash, @username, @nickname, @phoneNumber, @salt, 0, 0, 0)',
+            [
+                { name: 'id', type: sql.NVarChar(36), value: userId },
+                { name: 'email', type: sql.NVarChar(255), value: `${cleanPhone}@phone.user` }, // Geçici email
+                { name: 'passwordHash', type: sql.NVarChar(255), value: password_hash },
+                { name: 'username', type: sql.NVarChar(50), value: nickname },
+                { name: 'nickname', type: sql.NVarChar(50), value: nickname },
+                { name: 'phoneNumber', type: sql.NVarChar(20), value: cleanPhone },
+                { name: 'salt', type: sql.NVarChar(255), value: '' }
+            ]
+        );
+
+        // Kodu kullanıldı olarak işaretle
+        await executeQuery(
+            'UPDATE phone_verifications SET is_used = 1 WHERE id = @id',
+            [{ name: 'id', type: sql.NVarChar(36), value: verifyResult[0].id }]
+        );
+
+        // Token'ları oluştur
+        const accessToken = jwt.sign({ userId: userId, nickname: nickname }, JWT_SECRET, { expiresIn: '1h' });
+        const refreshToken = jwt.sign({ userId: userId, type: 'refresh' }, JWT_SECRET, { expiresIn: '90d' });
+
+        // Refresh token'ı kaydet
+        const refreshTokenId = uuidv4();
+        const expiresAt = new Date();
+        expiresAt.setDate(expiresAt.getDate() + 90);
+
+        await executeQuery(
+            'INSERT INTO refresh_tokens (id, user_id, token, expires_at) VALUES (@id, @userId, @token, @expiresAt)',
+            [
+                { name: 'id', type: sql.NVarChar(36), value: refreshTokenId },
+                { name: 'userId', type: sql.NVarChar(36), value: userId },
+                { name: 'token', type: sql.NVarChar(255), value: refreshToken },
+                { name: 'expiresAt', type: sql.DateTime2, value: expiresAt }
+            ]
+        );
+
+        res.json({
+            success: true,
+            message: 'Telefonla kayıt başarılı.',
+            accessToken,
+            refreshToken,
+            user: {
+                id: userId,
+                email: `${cleanPhone}@phone.user`,
+                nickname: nickname,
+                phoneNumber: cleanPhone,
+                score: 0
+            }
+        });
+    } catch (error) {
+        console.error('Register phone error:', error);
+        res.status(500).json({ message: 'İç sunucu hatası', error: error.message });
+    }
+});
+
+// Telefonla giriş yap
+app.post('/api/login-phone', async (req, res) => {
+    const { phoneNumber, verificationCode } = req.body;
+    
+    if (!phoneNumber || !verificationCode) {
+        return res.status(400).json({ message: 'Telefon numarası ve doğrulama kodu gerekli.' });
+    }
+
+    try {
+        const cleanPhone = phoneNumber.replace(/\s/g, '');
+
+        // Önce doğrulama kodunu kontrol et
+        const verifyResult = await executeQuery(
+            'SELECT * FROM phone_verifications WHERE phone_number = @phoneNumber AND verification_code = @code AND expires_at > GETDATE() AND is_used = 0',
+            [
+                { name: 'phoneNumber', type: sql.NVarChar(20), value: cleanPhone },
+                { name: 'code', type: sql.NVarChar(6), value: verificationCode }
+            ]
+        );
+
+        if (verifyResult.length === 0) {
+            return res.status(400).json({ message: 'Geçersiz veya süresi dolmuş doğrulama kodu.' });
+        }
+
+        // Kullanıcıyı telefon numarası ile bul
+        const userResult = await executeQuery(
+            'SELECT * FROM users WHERE phone_number = @phoneNumber',
+            [{ name: 'phoneNumber', type: sql.NVarChar(20), value: cleanPhone }]
+        );
+
+        if (userResult.length === 0) {
+            return res.status(404).json({ message: 'Bu telefon numarası ile kayıtlı kullanıcı bulunamadı.' });
+        }
+
+        const user = userResult[0];
+
+        // Kodu kullanıldı olarak işaretle
+        await executeQuery(
+            'UPDATE phone_verifications SET is_used = 1 WHERE id = @id',
+            [{ name: 'id', type: sql.NVarChar(36), value: verifyResult[0].id }]
+        );
+
+        // Token'ları oluştur
+        const accessToken = jwt.sign({ userId: user.id, nickname: user.nickname }, JWT_SECRET, { expiresIn: '1h' });
+        const refreshToken = jwt.sign({ userId: user.id, type: 'refresh' }, JWT_SECRET, { expiresIn: '90d' });
+
+        // Refresh token'ı kaydet
+        const refreshTokenId = uuidv4();
+        const expiresAt = new Date();
+        expiresAt.setDate(expiresAt.getDate() + 90);
+
+        await executeQuery(
+            'INSERT INTO refresh_tokens (id, user_id, token, expires_at) VALUES (@id, @userId, @token, @expiresAt)',
+            [
+                { name: 'id', type: sql.NVarChar(36), value: refreshTokenId },
+                { name: 'userId', type: sql.NVarChar(36), value: user.id },
+                { name: 'token', type: sql.NVarChar(255), value: refreshToken },
+                { name: 'expiresAt', type: sql.DateTime2, value: expiresAt }
+            ]
+        );
+
+        res.json({
+            success: true,
+            message: 'Telefonla giriş başarılı.',
+            accessToken,
+            refreshToken,
+            user: {
+                id: user.id,
+                email: user.email,
+                nickname: user.nickname,
+                phoneNumber: user.phone_number,
+                score: user.score
+            }
+        });
+    } catch (error) {
+        console.error('Login phone error:', error);
+        res.status(500).json({ message: 'İç sunucu hatası', error: error.message });
+    }
+});
+
 // --- Server Listen ---
 server.listen(PORT, async () => {
     try {
