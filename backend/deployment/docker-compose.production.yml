@@ -1,0 +1,117 @@
+version: '3.8'
+
+services:
+  ludo-backend:
+    build:
+      context: ../
+      dockerfile: deployment/Dockerfile
+    container_name: ludo-backend-production
+    ports:
+      - "3001:3001"
+    environment:
+      # Production Database Configuration
+      - DB_SERVER=mssql.istekbilisim.com
+      - DB_USER=sa
+      - DB_PASSWORD=SeKo153759++
+      - DB_DATABASE=ludoturcodb
+      - DB_PORT=1433
+      - DB_ENCRYPT=false
+      - DB_TRUST_SERVER_CERTIFICATE=true
+      
+      # JWT Configuration
+      - JWT_SECRET=your-production-jwt-secret-key-here
+      - JWT_EXPIRES_IN=24h
+      
+      # Application Configuration
+      - NODE_ENV=production
+      - PORT=3001
+      - HOST=0.0.0.0
+      
+      # CORS Configuration
+      - CORS_ORIGIN=https://your-frontend-domain.com
+      - CORS_CREDENTIALS=true
+      
+      # Rate Limiting
+      - RATE_LIMIT_WINDOW_MS=900000  # 15 dakika
+      - RATE_LIMIT_MAX_REQUESTS=100
+      
+      # Logging
+      - LOG_LEVEL=info
+      - LOG_FILE=/app/logs/production.log
+    
+    volumes:
+      - ./logs:/app/logs
+      - ./uploads:/app/uploads
+      - ./temp:/app/temp
+    
+    restart: unless-stopped
+    
+    # Health check
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+    
+    # Security
+    security_opt:
+      - no-new-privileges:true
+    
+    networks:
+      - ludo-production-network
+
+  # Optional: Redis for caching and session management
+  redis:
+    image: redis:7-alpine
+    container_name: ludo-redis-production
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    networks:
+      - ludo-production-network
+
+  # Optional: Nginx reverse proxy
+  nginx:
+    image: nginx:alpine
+    container_name: ludo-nginx-production
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./ssl:/etc/nginx/ssl:ro
+      - ./logs/nginx:/var/log/nginx
+    depends_on:
+      - ludo-backend
+    restart: unless-stopped
+    networks:
+      - ludo-production-network
+
+networks:
+  ludo-production-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
+volumes:
+  redis_data:
+    driver: local
+  logs:
+    driver: local
+  uploads:
+    driver: local

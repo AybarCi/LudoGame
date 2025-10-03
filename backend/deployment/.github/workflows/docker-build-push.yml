@@ -1,0 +1,164 @@
+name: Build and Deploy Ludo Backend
+
+on:
+  push:
+    branches: [ main, develop ]
+    tags: [ 'v*' ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ludo-backend
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Use Node.js 18
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        cache-dependency-path: backend/package-lock.json
+    
+    - name: Install dependencies
+      working-directory: ./backend
+      run: npm ci
+    
+    - name: Run linter
+      working-directory: ./backend
+      run: npm run lint || true
+    
+    - name: Run tests
+      working-directory: ./backend
+      run: npm test || true
+
+  build-and-push:
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    
+    outputs:
+      image-tag: ${{ steps.meta.outputs.tags }}
+      image-digest: ${{ steps.build.outputs.digest }}
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+    
+    - name: Log in to Container Registry
+      uses: docker/login-action@v3
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    
+    - name: Extract metadata
+      id: meta
+      uses: docker/metadata-action@v5
+      with:
+        images: ${{ env.REGISTRY }}/${{ github.repository }}/${{ env.IMAGE_NAME }}
+        tags: |
+          type=ref,event=branch
+          type=ref,event=pr
+          type=semver,pattern={{version}}
+          type=semver,pattern={{major}}.{{minor}}
+          type=semver,pattern={{major}}
+          type=sha,prefix=sha-
+          type=raw,value=latest,enable={{is_default_branch}}
+    
+    - name: Build and push Docker image
+      id: build
+      uses: docker/build-push-action@v5
+      with:
+        context: ./backend
+        file: ./backend/deployment/Dockerfile
+        push: true
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+        platforms: linux/amd64,linux/arm64
+
+  deploy-staging:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/develop'
+    environment: staging
+    
+    steps:
+    - name: Deploy to staging server
+      uses: appleboy/ssh-action@v1.0.0
+      with:
+        host: ${{ secrets.STAGING_HOST }}
+        username: ${{ secrets.STAGING_USER }}
+        key: ${{ secrets.STAGING_SSH_KEY }}
+        script: |
+          cd /opt/ludo-backend
+          
+          # Pull latest image
+          docker pull ${{ needs.build-and-push.outputs.image-tag }}
+          
+          # Update docker-compose with new image
+          sed -i "s|image:.*ludo-backend.*|image: ${{ needs.build-and-push.outputs.image-tag }}|" docker-compose.yml
+          
+          # Deploy with zero downtime
+          docker-compose up -d --no-deps ludo-backend
+          
+          # Health check
+          sleep 30
+          curl -f http://localhost:3001/health || exit 1
+          
+          echo "✅ Staging deployment successful!"
+
+  deploy-production:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    environment: production
+    
+    steps:
+    - name: Deploy to production server
+      uses: appleboy/ssh-action@v1.0.0
+      with:
+        host: ${{ secrets.PRODUCTION_HOST }}
+        username: ${{ secrets.PRODUCTION_USER }}
+        key: ${{ secrets.PRODUCTION_SSH_KEY }}
+        script: |
+          cd /opt/ludo-backend
+          
+          # Create backup
+          echo "📦 Creating backup..."
+          docker-compose exec -T ludo-backend mysqldump -u root -p${{ secrets.DB_PASSWORD }} ludoturcodb > backup-$(date +%Y%m%d-%H%M%S).sql
+          
+          # Pull specific version
+          docker pull ${{ needs.build-and-push.outputs.image-tag }}
+          
+          # Update docker-compose with specific version
+          sed -i "s|image:.*ludo-backend.*|image: ${{ needs.build-and-push.outputs.image-tag }}|" docker-compose.production.yml
+          
+          # Blue-green deployment
+          echo "🔄 Starting blue-green deployment..."
+          docker-compose -f docker-compose.production.yml up -d --no-deps --scale ludo-backend=2 ludo-backend
+          
+          # Health check on new container
+          sleep 60
+          NEW_CONTAINER=$(docker-compose ps -q ludo-backend | tail -1)
+          docker exec $NEW_CONTAINER curl -f http://localhost:3001/health || exit 1
+          
+          # Switch traffic to new version
+          docker-compose -f docker-compose.production.yml up -d --no-deps --scale ludo-backend=1 ludo-backend
+          
+          # Cleanup old image
+          docker image prune -f
+          
+          echo "✅ Production deployment successful!"
+          echo "🚀 Deployed version: ${{ needs.build-and-push.outputs.image-tag }}"

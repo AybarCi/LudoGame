@@ -1,0 +1,55 @@
+{
+  "name": "ludo-backend",
+  "version": "1.0.0",
+  "description": "Backend server for Ludo multiplayer game - Production Build",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js",
+    "production": "NODE_ENV=production node server.js",
+    "install-production": "npm install --production",
+    "test-db": "node -e \"require('./db').executeQuery('SELECT 1 as test').then(r => console.log('DB OK:', r)).catch(e => console.error('DB Error:', e))\"",
+    "health-check": "curl http://localhost:3000/health || echo 'Health check failed'",
+    "logs": "tail -f ./logs/*.log",
+    "restart": "taskkill /f /im node.exe && npm run production"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.52.0",
+    "bcrypt": "^6.0.0",
+    "cors": "^2.8.5",
+    "express": "^4.18.2",
+    "jsonwebtoken": "^9.0.2",
+    "mssql": "^11.0.1",
+    "socket.io": "^4.8.1",
+    "uuid": "^9.0.1",
+    "dotenv": "^16.0.3",
+    "helmet": "^7.0.0",
+    "express-rate-limit": "^6.7.0",
+    "winston": "^3.8.2"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=8.0.0"
+  },
+  "keywords": [
+    "ludo",
+    "game",
+    "multiplayer",
+    "socket.io",
+    "express",
+    "sql-server"
+  ],
+  "author": "Ludo Game Team",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "your-repository-url"
+  },
+  "bugs": {
+    "url": "your-repository-url/issues"
+  },
+  "homepage": "your-repository-url#readme"
+}
