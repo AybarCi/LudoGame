@@ -10,7 +10,7 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=3001
-      - DB_SERVER=mssql.istekbilisim.com
+      - DB_SERVER=172.17.0.5
       - DB_DATABASE=ludoturcodb
       - DB_USER=sa
       - DB_PASSWORD=SeKo153759++
