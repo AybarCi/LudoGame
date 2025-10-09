@@ -4,7 +4,7 @@ const http = require('http');
 const { Server } = require('socket.io');
 const cors = require('cors');
 const { v4: uuidv4 } = require('uuid');
-const { findOrCreateUser } = require('./services/user-service');
+const { findOrCreateUser, updateUserAvatar, getUserAvatar } = require('./services/user-service');
 const { executeQuery, sql } = require('./db');
 const { checkProfanity, filterProfanity, profanityTracker, SEVERITY_LEVELS } = require('./utils/messageFilter');
 
@@ -71,9 +71,32 @@ const ROOM_TIMEOUT = 20000; // 20 seconds
 // --- Server Setup ---
 const app = express();
 app.use(cors());
+
+// Serve static files (avatars)
+app.use('/avatars', express.static('/Users/cihanaybar/Projects/Ludo/backend/public/avatars'));
+
 const server = http.createServer(app);
-const io = new Server(server, { cors: { origin: "*", methods: ["GET", "POST"] } });
-app.use(express.json()); // Body parser middleware
+const io = new Server(server, { 
+  cors: { origin: "*", methods: ["GET", "POST"] },
+  connectionStateRecovery: {
+    maxDisconnectionDuration: 10000, // 10 saniye
+    skipMiddlewares: true
+  },
+  pingTimeout: 60000, // 60 saniye
+  pingInterval: 25000, // 25 saniye
+  upgradeTimeout: 10000, // 10 saniye
+  maxHttpBufferSize: 1e6, // 1MB
+  transports: ['polling', 'websocket'],
+  allowEIO3: true
+});
+app.use(express.json({ limit: '10mb' })); // Body parser middleware - 10MB limit for avatar uploads
+
+// Request logging middleware
+app.use((req, res, next) => {
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.url} from ${req.ip || req.connection.remoteAddress}`);
+  next();
+});
+
 const PORT = 3001;
 
 // --- In-Memory State ---
@@ -111,12 +134,17 @@ const convertPositionsToPawns = (positions) => {
 const updateRoom = async (roomId) => {
     const room = rooms[roomId];
     if (room) {
+        console.log(`[UPDATE_ROOM] Updating room ${roomId}, phase: ${room.gameState.phase}`);
+        console.log(`[UPDATE_ROOM] turnRolls before conversion:`, room.gameState.turnRolls);
+        
         // Convert turnRolls to turnOrderRolls format for frontend compatibility
         const turnOrderRolls = room.gameState.turnRolls ? 
             Object.entries(room.gameState.turnRolls).map(([color, rollData]) => ({
                 color,
-                roll: rollData.diceValue
+                roll: rollData?.diceValue || rollData // Handle both object and direct value formats
             })) : [];
+        
+        console.log(`[UPDATE_ROOM] turnOrderRolls after conversion:`, turnOrderRolls);
 
         // Get selected pawns for all human players
         const playersWithSelectedPawns = await Promise.all(
@@ -193,19 +221,85 @@ const deleteRoom = async (roomId, reason) => {
 
 // --- DB Integrated Room/Player Management ---
 const createRoomAsync = async (userId, nickname) => {
-    const hostUser = await findOrCreateUser(userId, nickname);
-    const gameId = uuidv4();
-    const roomCode = gameId.substring(0, 6).toUpperCase();
+    try {
+        console.log(`[CREATE_ROOM_ASYNC] Starting room creation for user: ${userId}, nickname: ${nickname}`);
+        const hostUser = await findOrCreateUser(userId, nickname);
+        console.log(`[CREATE_ROOM_ASYNC] Host user found/created: ${hostUser.id}`);
+        
+        const gameId = uuidv4();
+        
+        // Daha benzersiz room code oluştur
+        let roomCode;
+        let attempts = 0;
+        const maxAttempts = 5;
+        
+        while (attempts < maxAttempts) {
+            // UUID'nin farklı bölümlerini kullanarak daha rastgele bir kod oluştur
+            const uuidSegments = gameId.split('-');
+            if (attempts === 0) {
+                roomCode = uuidSegments[0].substring(0, 6).toUpperCase();
+            } else {
+                // Çakışma durumunda farklı segment kullan
+                const segmentIndex = attempts % uuidSegments.length;
+                const startIndex = attempts * 2;
+                roomCode = uuidSegments[segmentIndex].substring(startIndex % 8, (startIndex % 8) + 6).toUpperCase();
+            }
+            
+            // Bu room code zaten var mı kontrol et
+            try {
+                const existingRoom = await executeQuery('SELECT id FROM games WHERE room_code = @roomCode', [
+                    { name: 'roomCode', type: sql.NVarChar(6), value: roomCode }
+                ]);
+                
+                if (!existingRoom || existingRoom.length === 0) {
+                    // Room code kullanılabilir
+                    break;
+                }
+                
+                console.log(`[CREATE_ROOM_ASYNC] Room code ${roomCode} already exists, trying alternative...`);
+                attempts++;
+                
+            } catch (checkError) {
+                console.error(`[CREATE_ROOM_ASYNC] Room code check error:`, checkError);
+                break; // Kontrol edemediysek devam et
+            }
+        }
+        
+        if (attempts >= maxAttempts) {
+            // Son çare olarak timestamp bazlı kod kullan
+            roomCode = Date.now().toString(36).substring(0, 6).toUpperCase();
+            console.log(`[CREATE_ROOM_ASYNC] Using timestamp-based room code: ${roomCode}`);
+        }
+        
+        console.log(`[CREATE_ROOM_ASYNC] Generated room code: ${roomCode} (attempts: ${attempts})`);
 
-    await executeQuery(
-        'INSERT INTO games (id, room_code, status, host_id) VALUES (@id, @room_code, @status, @host_id)',
-        [
-            { name: 'id', type: sql.NVarChar(36), value: gameId },
-            { name: 'room_code', type: sql.NVarChar(6), value: roomCode },
-            { name: 'status', type: sql.NVarChar(20), value: 'waiting' },
-            { name: 'host_id', type: sql.NVarChar(36), value: hostUser.id },
-        ]
-    );
+        try {
+            await executeQuery(
+                'INSERT INTO games (id, room_code, status, host_id) VALUES (@id, @room_code, @status, @host_id)',
+                [
+                    { name: 'id', type: sql.NVarChar(36), value: gameId },
+                    { name: 'room_code', type: sql.NVarChar(6), value: roomCode },
+                    { name: 'status', type: sql.NVarChar(20), value: 'waiting' },
+                    { name: 'host_id', type: sql.NVarChar(36), value: hostUser.id },
+                ]
+            );
+            console.log(`[CREATE_ROOM_ASYNC] Room inserted into database successfully`);
+        } catch (error) {
+            console.error(`[CREATE_ROOM_ASYNC] Database error while creating room:`, {
+                error: error.message,
+                constraintType: error.constraintType,
+                stack: error.stack
+            });
+            
+            if (error.constraintType === 'UNIQUE_KEY') {
+                if (error.message.includes('room_code')) {
+                    throw new Error(`Oda kodu zaten kullanılıyor. Lütfen tekrar deneyin.`);
+                } else {
+                    throw new Error(`Oda oluşturulamadı: ${error.message}`);
+                }
+            }
+            throw new Error(`Oda oluşturulurken bir hata oluştu: ${error.message}`);
+        }
 
     const room = {
         id: gameId,
@@ -224,46 +318,108 @@ const createRoomAsync = async (userId, nickname) => {
         },
     };
     rooms[gameId] = room;
-    console.log(`[Create Room] Room created in DB & Memory: ${gameId}`);
+    console.log(`[CREATE_ROOM_ASYNC] Room created in memory: ${gameId}`);
     
     // Start the 20-second timeout for adding bots
     startRoomTimeout(gameId);
     
     broadcastRoomList();
+    console.log(`[CREATE_ROOM_ASYNC] Room creation completed successfully`);
     return room;
+    } catch (error) {
+        console.error('[CREATE_ROOM_ASYNC] Error in createRoomAsync:', {
+            userId: userId,
+            nickname: nickname,
+            error: error.message,
+            stack: error.stack
+        });
+        throw error;
+    }
 };
 
 const joinRoomAsync = async (roomId, userId, nickname, socketId) => {
-    const room = rooms[roomId];
-    if (!room) throw new Error('Oda bulunamadı.');
-    if (room.players.length >= 4) throw new Error('Oda dolu.');
+    try {
+        console.log(`[JOIN_ROOM_ASYNC] Starting join room for user: ${userId}, roomId: ${roomId}, nickname: ${nickname}`);
+        
+        const room = rooms[roomId];
+        if (!room) {
+            console.error(`[JOIN_ROOM_ASYNC] Room not found: ${roomId}`);
+            throw new Error('Oda bulunamadı.');
+        }
+        
+        if (room.players.length >= 4) {
+            console.error(`[JOIN_ROOM_ASYNC] Room is full: ${roomId}, players: ${room.players.length}`);
+            throw new Error('Oda dolu.');
+        }
 
-    const user = await findOrCreateUser(userId, nickname);
-    const existingPlayer = room.players.find(p => p.id === user.id);
-    if (existingPlayer) {
-        existingPlayer.socketId = socketId;
-        console.log(`[Join Room] ${nickname} reconnected to room ${roomId}.`);
-        return { room, player: existingPlayer };
-    }
+        const user = await findOrCreateUser(userId, nickname);
+        console.log(`[JOIN_ROOM_ASYNC] User found/created: ${user.id}`);
+        
+        const existingPlayer = room.players.find(p => p.id === user.id);
+        if (existingPlayer) {
+            existingPlayer.socketId = socketId;
+            console.log(`[JOIN_ROOM_ASYNC] ${nickname} reconnected to room ${roomId}.`);
+            
+            // If room is in pre-game phase, ensure existing player is in turnRolls
+            if (room.gameState.phase === 'pre-game') {
+                console.log(`[JOIN_ROOM_ASYNC] Room ${roomId} is in pre-game phase, checking ${existingPlayer.color} in turnRolls`);
+                if (!room.gameState.turnRolls) {
+                    room.gameState.turnRolls = {};
+                }
+                // Ensure the existing player is in turnRolls (they might not be if they joined before pre-game started)
+                if (!(existingPlayer.color in room.gameState.turnRolls)) {
+                    room.gameState.turnRolls[existingPlayer.color] = null;
+                    console.log(`[JOIN_ROOM_ASYNC] Added ${existingPlayer.color} to turnRolls during reconnection:`, room.gameState.turnRolls);
+                }
+            }
+            
+            return { room, player: existingPlayer };
+        }
 
-    const availableColors = ['red', 'green', 'blue', 'yellow'].filter(c => !room.players.some(p => p.color === c));
-    if (availableColors.length === 0) throw new Error('Uygun renk bulunamadı.');
-    const color = availableColors[0];
+        const availableColors = ['red', 'green', 'blue', 'yellow'].filter(c => !room.players.some(p => p.color === c));
+        if (availableColors.length === 0) {
+            console.error(`[JOIN_ROOM_ASYNC] No available colors in room: ${roomId}`);
+            throw new Error('Uygun renk bulunamadı.');
+        }
+        const color = availableColors[0];
+        console.log(`[JOIN_ROOM_ASYNC] Assigned color: ${color}`);
 
-    const dbPlayerId = uuidv4();
-    const playerOrder = room.players.length + 1; // Assign player order based on join sequence
-    await executeQuery(
-        'INSERT INTO game_players (id, game_id, user_id, socket_id, nickname, color, player_order) VALUES (@id, @game_id, @user_id, @socket_id, @nickname, @color, @player_order)',
-        [
-            { name: 'id', type: sql.NVarChar(36), value: dbPlayerId },
-            { name: 'game_id', type: sql.NVarChar(36), value: roomId },
-            { name: 'user_id', type: sql.NVarChar(36), value: user.id },
-            { name: 'socket_id', type: sql.NVarChar(255), value: socketId },
-            { name: 'nickname', type: sql.NVarChar(50), value: nickname },
-            { name: 'color', type: sql.NVarChar(10), value: color },
-            { name: 'player_order', type: sql.Int, value: playerOrder },
-        ]
-    );
+        const dbPlayerId = uuidv4();
+        const playerOrder = room.players.length + 1;
+        console.log(`[JOIN_ROOM_ASYNC] Generated player ID: ${dbPlayerId}, order: ${playerOrder}`);
+        
+        try {
+            await executeQuery(
+                'INSERT INTO game_players (id, game_id, user_id, socket_id, nickname, color, player_order) VALUES (@id, @game_id, @user_id, @socket_id, @nickname, @color, @player_order)',
+                [
+                    { name: 'id', type: sql.NVarChar(36), value: dbPlayerId },
+                    { name: 'game_id', type: sql.NVarChar(36), value: roomId },
+                    { name: 'user_id', type: sql.NVarChar(36), value: user.id },
+                    { name: 'socket_id', type: sql.NVarChar(255), value: socketId },
+                    { name: 'nickname', type: sql.NVarChar(50), value: nickname },
+                    { name: 'color', type: sql.NVarChar(10), value: color },
+                    { name: 'player_order', type: sql.Int, value: playerOrder },
+                ]
+            );
+            console.log(`[JOIN_ROOM_ASYNC] Player inserted into database successfully`);
+        } catch (error) {
+            console.error(`[JOIN_ROOM_ASYNC] Database error while adding player:`, {
+                error: error.message,
+                constraintType: error.constraintType,
+                stack: error.stack
+            });
+            
+            if (error.constraintType === 'UNIQUE_KEY') {
+                if (error.message.includes('game_id') && error.message.includes('user_id')) {
+                    throw new Error('Bu oyuncu zaten bu oyunda yer alıyor.');
+                } else if (error.message.includes('room_code')) {
+                    throw new Error('Bu oda kodu zaten kullanılıyor.');
+                } else {
+                    throw new Error(`Oyuncu odaya eklenemedi: ${error.message}`);
+                }
+            }
+            throw new Error(`Oyuncu odaya eklenirken bir hata oluştu: ${error.message}`);
+        }
 
     // Get user's selected pawn
     let selectedPawn = 'default';
@@ -273,35 +429,66 @@ const joinRoomAsync = async (roomId, userId, nickname, socketId) => {
             [{ name: 'userId', type: sql.NVarChar(36), value: user.id }]
         );
         selectedPawn = pawnResult[0]?.selected_pawn || 'default';
+        console.log(`[JOIN_ROOM_ASYNC] Selected pawn for user: ${selectedPawn}`);
 
     } catch (error) {
-        console.error('Error fetching selected pawn for joining user:', user.id, error);
+        console.error('[JOIN_ROOM_ASYNC] Error fetching selected pawn:', user.id, error);
     }
 
     const player = { id: user.id, dbPlayerId, socketId, nickname, color, isBot: false, userId: user.id, selectedPawn };
     room.players.push(player);
-    console.log(`[Join Room] ${nickname} (${user.id}) joined room ${roomId} as ${color}`);
+    console.log(`[JOIN_ROOM_ASYNC] ${nickname} (${user.id}) joined room ${roomId} as ${color}`);
+    
+    // If room is in pre-game phase, add the new player to turnRolls
+    if (room.gameState.phase === 'pre-game') {
+        console.log(`[JOIN_ROOM_ASYNC] Room ${roomId} is in pre-game phase, adding ${color} to turnRolls`);
+        if (!room.gameState.turnRolls) {
+            room.gameState.turnRolls = {};
+        }
+        // Add the new player to turnRolls with a default value (they haven't rolled yet)
+        room.gameState.turnRolls[color] = null;
+        console.log(`[JOIN_ROOM_ASYNC] Updated turnRolls for room ${roomId}:`, room.gameState.turnRolls);
+    }
     
     // If room is full with real players, start the game immediately
         if (room.players.length === 4 && room.gameState.phase === 'waiting') {
-            console.log(`[Join Room] Room ${roomId} is full, starting game immediately`);
+            console.log(`[JOIN_ROOM_ASYNC] Room ${roomId} is full, starting game immediately`);
             // Clear the timeout since room is full
             if (roomTimeouts[roomId]) {
                 clearTimeout(roomTimeouts[roomId]);
                 delete roomTimeouts[roomId];
-                console.log(`[Join Room] Cleared timeout for full room ${roomId}`);
+                console.log(`[JOIN_ROOM_ASYNC] Cleared timeout for full room ${roomId}`);
             }
             // Notify clients that countdown is stopped
-            console.log(`[COUNTDOWN] Sending countdown_stopped to room ${roomId} - room is full`);
+            console.log(`[JOIN_ROOM_ASYNC] Sending countdown_stopped to room ${roomId} - room is full`);
             io.to(roomId).emit('countdown_stopped');
             room.gameState.message = 'Oda dolu! Oyun başlıyor...';
             await updateRoom(roomId);
+            
+            // Oyuncu ayrıldı event'ini bildir
+            io.to(roomId).emit('player_left', { 
+                playerId: player.id, 
+                playerNickname: player.nickname,
+                isHost: isHostLeaving,
+                remainingHumanPlayers: room.players.filter(p => !p.isBot).length
+            });
             setTimeout(() => {
                 startPreGame(roomId);
             }, 1000); // Small delay to show the message
         }
     
+    console.log(`[JOIN_ROOM_ASYNC] Join room completed successfully`);
     return { room, player };
+    } catch (error) {
+        console.error('[JOIN_ROOM_ASYNC] Error in joinRoomAsync:', {
+            userId: userId,
+            roomId: roomId,
+            nickname: nickname,
+            error: error.message,
+            stack: error.stack
+        });
+        throw error;
+    }
 };
 
 const leaveRoomAsync = async (socketId) => {
@@ -311,15 +498,52 @@ const leaveRoomAsync = async (socketId) => {
         if (playerIndex > -1) {
             const player = room.players[playerIndex];
             console.log(`[Leave Room] ${player.nickname} is leaving room ${roomId}`);
+            
+            // Check if this is the host leaving during an active game
+            const isHostLeaving = room.hostId === player.id;
+            const isActiveGame = room.gameState.phase === 'playing' || room.gameState.phase === 'pre-game';
+            const humanPlayersBeforeLeave = room.players.filter(p => !p.isBot).length;
+            
+            console.log(`[Leave Room] Host leaving: ${isHostLeaving}, Active game: ${isActiveGame}, Human players before leave: ${humanPlayersBeforeLeave}`);
+            
             await executeQuery('DELETE FROM game_players WHERE id = @dbPlayerId', [{ name: 'dbPlayerId', type: sql.NVarChar(36), value: player.dbPlayerId }]);
             room.players.splice(playerIndex, 1);
+            
             if (room.players.length === 0 || room.players.every(p => p.isBot)) {
+                // No human players left, delete room
                 await deleteRoom(roomId, 'Tüm insan oyuncular ayrıldı.');
             } else {
-                if (room.hostId === player.id && room.players.length > 0) {
+                // Handle host departure during active game
+                if (isHostLeaving && isActiveGame) {
+                    const remainingHumanPlayers = room.players.filter(p => !p.isBot);
+                    
+                    if (remainingHumanPlayers.length === 0) {
+                        // No human players left after host departure, delete room
+                        console.log(`[Leave Room] Host left active game with no remaining humans, deleting room ${roomId}`);
+                        await deleteRoom(roomId, 'Oda kurucusu ayrıldı ve gerçek oyuncu kalmadı.');
+                        return;
+                    } else {
+                        // There are still human players, add AI replacement and continue
+                        console.log(`[Leave Room] Host left active game but humans remain, adding AI replacement`);
+                        
+                        // Assign new host
+                        room.hostId = remainingHumanPlayers[0].id;
+                        console.log(`[Leave Room] New host for room ${roomId} is ${room.hostId}`);
+                        
+                        // Add AI player to replace the departed human
+                        await addAIPlayersToRoom(roomId);
+                        
+                        // Update turn order if the departed player was in the current turn
+                        if (room.gameState.currentPlayer === player.color) {
+                            await updateTurn(room);
+                        }
+                    }
+                } else if (room.hostId === player.id) {
+                    // Regular host reassignment (not during active game)
                     room.hostId = room.players.find(p => !p.isBot)?.id || room.players[0].id;
                     console.log(`[Leave Room] New host for room ${roomId} is ${room.hostId}`);
                 }
+                
                 await updateRoom(roomId);
             }
             return;
@@ -654,6 +878,11 @@ const determineTurnOrder = async (roomId) => {
     console.log(`[DEBUG] Players:`, room.players.map(p => p.color));
     console.log(`[DEBUG] Turn rolls:`, room.gameState.turnRolls);
     console.log(`[DEBUG] All players rolled?`, room.players.every(p => room.gameState.turnRolls[p.color]));
+    
+    // Check each player's roll status individually
+    room.players.forEach(p => {
+        console.log(`[DEBUG] Player ${p.color} (${p.nickname}): rolled = ${!!room.gameState.turnRolls[p.color]}`);
+    });
 
     if (room.players.every(p => room.gameState.turnRolls[p.color])) {
         const sortedRolls = Object.entries(room.gameState.turnRolls).sort(([, a], [, b]) => b.diceValue - a.diceValue);
@@ -676,12 +905,18 @@ const determineTurnOrder = async (roomId) => {
 
 const addAIPlayersToRoom = async (roomId) => {
     const room = rooms[roomId];
-    if (!room || room.gameState.phase !== 'waiting') return;
+    if (!room) return;
     
-    const neededPlayers = 4 - room.players.length;
+    // Allow AI players during both waiting and active game phases
+    const isWaitingPhase = room.gameState.phase === 'waiting';
+    const isActiveGame = room.gameState.phase === 'playing' || room.gameState.phase === 'pre-game';
+    
+    if (!isWaitingPhase && !isActiveGame) return;
+    
+    const neededPlayers = isWaitingPhase ? 4 - room.players.length : 1; // Add 1 AI for replacement during active game
     if (neededPlayers <= 0) return;
     
-    console.log(`[AI System] Adding ${neededPlayers} AI players to room ${roomId}`);
+    console.log(`[AI System] Adding ${neededPlayers} AI players to room ${roomId} (phase: ${room.gameState.phase})`);
     
     const availableColors = ['red', 'green', 'blue', 'yellow'].filter(c => !room.players.some(p => p.color === c));
     const usedAINames = room.players.filter(p => p.isBot).map(p => p.nickname);
@@ -733,6 +968,27 @@ const addAIPlayersToRoom = async (roomId) => {
             
             room.players.push(aiPlayer);
             console.log(`[AI System] Added AI player ${aiName} (${color}) to room ${roomId}`);
+            
+            // If during active game, add AI to game state
+            if (isActiveGame) {
+                // Initialize AI player's game state
+                if (!room.gameState.pawns) {
+                    room.gameState.pawns = {};
+                }
+                room.gameState.pawns[color] = [
+                    { id: `${color}_pawn_1`, position: 'home', isHome: true },
+                    { id: `${color}_pawn_2`, position: 'home', isHome: true },
+                    { id: `${color}_pawn_3`, position: 'home', isHome: true },
+                    { id: `${color}_pawn_4`, position: 'home', isHome: true }
+                ];
+                
+                // Add AI to turn rolls if in pre-game phase
+                if (room.gameState.phase === 'pre-game' && room.gameState.turnRolls) {
+                    const diceValue = Math.floor(Math.random() * 6) + 1;
+                    room.gameState.turnRolls[color] = { nickname: aiName, diceValue };
+                    console.log(`[AI System] AI player ${aiName} rolled ${diceValue} for turn order`);
+                }
+            }
         } catch (error) {
             console.error(`[AI System] Error adding AI player to room ${roomId}:`, error);
         }
@@ -740,10 +996,15 @@ const addAIPlayersToRoom = async (roomId) => {
     
     updateRoom(roomId);
     
-    // Start the game if we have enough players
-    if (room.players.length >= 2) {
+    // Start the game if we have enough players (only during waiting phase)
+    if (isWaitingPhase && room.players.length >= 2) {
         console.log(`[AI System] Starting game in room ${roomId} with ${room.players.length} players`);
         startPreGame(roomId);
+    }
+    
+    // If during pre-game phase, check if all players have rolled
+    if (isActiveGame && room.gameState.phase === 'pre-game') {
+        determineTurnOrder(roomId);
     }
 };
 
@@ -933,6 +1194,9 @@ app.post('/api/login', async (req, res) => {
 app.post('/api/refresh-token', async (req, res) => {
     const { refreshToken } = req.body;
     
+    console.log('[REFRESH TOKEN] Request received');
+    console.log('[REFRESH TOKEN] Has refresh token:', !!refreshToken);
+    
     if (!refreshToken) {
         return res.status(401).json({ message: 'Refresh token is required.' });
     }
@@ -940,12 +1204,15 @@ app.post('/api/refresh-token', async (req, res) => {
     try {
         // Refresh token'ı doğrula
         const decoded = jwt.verify(refreshToken, JWT_SECRET);
+        console.log('[REFRESH TOKEN] JWT decoded successfully:', { userId: decoded.userId, type: decoded.type });
         
         if (decoded.type !== 'refresh') {
+            console.log('[REFRESH TOKEN] Invalid token type:', decoded.type);
             return res.status(403).json({ message: 'Invalid token type.' });
         }
 
         // Veritabanından refresh token'ı kontrol et
+        console.log('[REFRESH TOKEN] Checking database for token...');
         const tokenResult = await executeQuery(
             'SELECT * FROM refresh_tokens WHERE token = @token AND user_id = @userId AND is_revoked = 0 AND expires_at > GETDATE()',
             [
@@ -953,6 +1220,8 @@ app.post('/api/refresh-token', async (req, res) => {
                 { name: 'userId', type: sql.NVarChar(36), value: decoded.userId }
             ]
         );
+
+        console.log('[REFRESH TOKEN] Database check result:', tokenResult.length > 0 ? 'Token found' : 'Token not found');
 
         if (tokenResult.length === 0) {
             return res.status(403).json({ message: 'Invalid or expired refresh token.' });
@@ -969,6 +1238,7 @@ app.post('/api/refresh-token', async (req, res) => {
         }
 
         const user = userResult[0];
+        console.log('[REFRESH TOKEN] User found:', user.nickname);
 
         // Yeni access token oluştur
         const newAccessToken = jwt.sign(
@@ -976,6 +1246,8 @@ app.post('/api/refresh-token', async (req, res) => {
             JWT_SECRET,
             { expiresIn: '1h' }
         );
+
+        console.log('[REFRESH TOKEN] New access token created successfully');
 
         res.json({
             accessToken: newAccessToken,
@@ -986,8 +1258,10 @@ app.post('/api/refresh-token', async (req, res) => {
                 score: user.score
             }
         });
+        
+        console.log('[REFRESH TOKEN] Response sent successfully');
     } catch (error) {
-        console.error('Refresh token error:', error);
+        console.error('[REFRESH TOKEN] Error:', error);
         if (error.name === 'JsonWebTokenError' || error.name === 'TokenExpiredError') {
             return res.status(403).json({ message: 'Invalid or expired refresh token.' });
         }
@@ -1360,27 +1634,74 @@ app.post('/api/user/diamonds/spend', authenticateToken, async (req, res) => {
 io.on('connection', async (socket) => {
     const userId = socket.handshake.auth.userId || `guest_${socket.id}`;
     const token = socket.handshake.auth.token;
+    const nickname = socket.handshake.auth.nickname || 'Unknown';
+    const clientIp = socket.handshake.address || socket.request.socket.remoteAddress;
+    
+    console.log(`[CONNECTION] New connection attempt - Socket: ${socket.id}, UserID: ${userId}, Nickname: ${nickname}, IP: ${clientIp}`);
+    console.log(`[CONNECTION] Auth details:`, {
+        hasUserId: !!socket.handshake.auth.userId,
+        hasToken: !!token,
+        hasNickname: !!socket.handshake.auth.nickname,
+        fullAuth: socket.handshake.auth
+    });
+    
+    // Connection attempt tracking
+    const connectionStartTime = Date.now();
     
     // Verify token if provided
     if (token) {
         try {
             const decoded = jwt.verify(token, JWT_SECRET);
+            console.log(`[CONNECTION] Token decoded successfully:`, {
+                decodedUserId: decoded.userId,
+                socketUserId: userId,
+                match: decoded.userId === userId
+            });
             if (decoded.userId !== userId) {
-                console.log(`Token userId mismatch: ${decoded.userId} vs ${userId}`);
+                console.log(`[CONNECTION] Token userId mismatch: ${decoded.userId} vs ${userId}`);
                 socket.disconnect();
                 return;
             }
-            console.log(`User connected with valid token: ${socket.id} with UserID: ${userId}`);
+            console.log(`[CONNECTION] User connected with valid token: ${socket.id} with UserID: ${userId}`);
         } catch (error) {
-            console.log(`Invalid token for user ${userId}: ${error.message}`);
+            console.log(`[CONNECTION] Invalid token for user ${userId}: ${error.message}`);
+            console.log(`[CONNECTION] Token details:`, {
+                tokenLength: token.length,
+                tokenStart: token.substring(0, 20) + '...',
+                error: error.message
+            });
             socket.disconnect();
             return;
         }
     } else {
-        console.log(`User connected without token: ${socket.id} with UserID: ${userId}`);
+        console.log(`[CONNECTION] User connected without token: ${socket.id} with UserID: ${userId}`);
     }
     
-    console.log(`User connected: ${socket.id} with UserID: ${userId}`);
+    console.log(`[CONNECTION] User successfully connected: ${socket.id} with UserID: ${userId}, Nickname: ${nickname}`);
+    
+    // Connection error handling with detailed logging
+    socket.on('error', (error) => {
+        console.error(`[CONNECTION ERROR] Socket error for ${socket.id}:`, {
+            error: error.message,
+            userId: userId,
+            nickname: nickname,
+            timestamp: new Date().toISOString()
+        });
+    });
+    
+    socket.on('connect_error', (error) => {
+        console.error(`[CONNECT ERROR] Connection error for ${socket.id}:`, {
+            error: error.message,
+            userId: userId,
+            nickname: nickname,
+            timestamp: new Date().toISOString()
+        });
+    });
+    
+    socket.on('disconnect', (reason) => {
+        const connectionDuration = Date.now() - connectionStartTime;
+        console.log(`[DISCONNECT] User disconnected: ${socket.id}, UserID: ${userId}, Reason: ${reason}, Duration: ${connectionDuration}ms`);
+    });
 
     socket.on('get_rooms', (callback) => {
         const roomList = Object.values(rooms);
@@ -1392,26 +1713,61 @@ io.on('connection', async (socket) => {
 
     socket.on('create_room', async ({ nickname }, callback) => {
         try {
+            console.log(`[CREATE_ROOM] Starting room creation for user: ${userId}, nickname: ${nickname}`);
             const room = await createRoomAsync(userId, nickname);
+            console.log(`[CREATE_ROOM] Room created successfully: ${room.id}`);
+            
             const { player } = await joinRoomAsync(room.id, userId, nickname, socket.id);
+            console.log(`[CREATE_ROOM] Player joined room successfully: ${player.nickname}`);
+            
             socket.join(room.id);
             updateRoom(room.id);
-            if (callback) callback({ success: true, room, player });
+            
+            if (callback) {
+                console.log(`[CREATE_ROOM] Sending success response`);
+                callback({ success: true, room, player });
+            }
         } catch (error) {
-            console.error('Create room error:', error);
-            if (callback) callback({ success: false, message: error.message });
+            console.error('[CREATE_ROOM] Error during room creation:', {
+                userId: userId,
+                nickname: nickname,
+                error: error.message,
+                stack: error.stack
+            });
+            
+            if (callback) {
+                const errorMessage = error.message || 'Oda oluşturulurken bir hata oluştu';
+                callback({ success: false, message: errorMessage });
+            }
         }
     });
 
     socket.on('join_room', async ({ roomId, nickname }, callback) => {
         try {
-            const { room, player } = await joinRoomAsync(roomId, userId, nickname, socket.id);
+            console.log(`[JOIN_ROOM] Starting join room for user: ${userId}, roomId: ${roomId}, nickname: ${nickname}`);
+            const { player } = await joinRoomAsync(roomId, userId, nickname, socket.id);
+            console.log(`[JOIN_ROOM] Player joined successfully: ${player.nickname}`);
+            
             socket.join(roomId);
             updateRoom(roomId);
-            if (callback) callback({ success: true, room, player });
+            
+            if (callback) {
+                console.log(`[JOIN_ROOM] Sending success response`);
+                callback({ success: true, player });
+            }
         } catch (error) {
-            console.error('Join room error:', error);
-            if (callback) callback({ success: false, message: error.message });
+            console.error('[JOIN_ROOM] Error during room join:', {
+                userId: userId,
+                roomId: roomId,
+                nickname: nickname,
+                error: error.message,
+                stack: error.stack
+            });
+            
+            if (callback) {
+                const errorMessage = error.message || 'Odaya katılırken bir hata oluştu';
+                callback({ success: false, message: errorMessage });
+            }
         }
     });
 
@@ -1426,70 +1782,143 @@ io.on('connection', async (socket) => {
 
     socket.on('roll_dice_turn_order', ({ roomId }) => {
         console.log(`[Roll Dice Turn Order] Player ${socket.id} rolling dice for turn order in room ${roomId}`);
+        
+        // Input validation
+        if (!roomId) {
+            console.error(`[Roll Dice Turn Order] Missing roomId`);
+            socket.emit('error', { type: 'INVALID_REQUEST', message: 'Room ID is required' });
+            return;
+        }
+        
         const room = rooms[roomId];
         if (!room) {
             console.log(`[Roll Dice Turn Order] Room ${roomId} not found`);
+            socket.emit('error', { type: 'ROOM_NOT_FOUND', message: 'Room not found' });
             return;
         }
+        
         const player = room.players.find(p => p.socketId === socket.id);
         if (!player) {
             console.log(`[Roll Dice Turn Order] Player ${socket.id} not found in room ${roomId}`);
+            socket.emit('error', { type: 'PLAYER_NOT_FOUND', message: 'Player not found in room' });
             return;
         }
 
         if (room.gameState.phase !== 'pre-game') {
             console.log(`[Roll Dice Turn Order] Game is not in pre-game phase. Current phase: ${room.gameState.phase}`);
+            socket.emit('error', { type: 'WRONG_PHASE', message: 'Game is not in pre-game phase' });
             return;
         }
+
+        // Initialize turnRolls if it doesn't exist
+        if (!room.gameState.turnRolls) {
+            room.gameState.turnRolls = {};
+        }
+
+        console.log(`[Roll Dice Turn Order] Current turnRolls state:`, room.gameState.turnRolls);
+        console.log(`[Roll Dice Turn Order] Player ${player.nickname} (${player.color}) attempting to roll`);
 
         if (room.gameState.turnRolls[player.color]) {
             console.log(`[Roll Dice Turn Order] ${player.nickname} already rolled in pre-game`);
+            socket.emit('error', { type: 'ALREADY_ROLLED', message: 'You have already rolled for turn order' });
             return;
         }
 
-        const diceValue = Math.floor(Math.random() * 6) + 1;
-        room.gameState.turnRolls[player.color] = { nickname: player.nickname, diceValue };
-        console.log(`[Pre-Game] ${player.nickname} rolled: ${diceValue}`);
-        updateRoom(roomId);
-        determineTurnOrder(roomId);
+        try {
+            const diceValue = Math.floor(Math.random() * 6) + 1;
+            room.gameState.turnRolls[player.color] = { 
+                nickname: player.nickname, 
+                diceValue,
+                timestamp: Date.now()
+            };
+            
+            console.log(`[Pre-Game] ${player.nickname} rolled: ${diceValue}`);
+            console.log(`[Pre-Game] Updated turnRolls:`, room.gameState.turnRolls);
+            
+            // Send success response to the player
+            socket.emit('roll_success', { 
+                diceValue, 
+                color: player.color,
+                message: `You rolled a ${diceValue}!`
+            });
+            
+            updateRoom(roomId);
+            determineTurnOrder(roomId);
+            
+        } catch (error) {
+            console.error(`[Roll Dice Turn Order] Error rolling dice:`, error);
+            socket.emit('error', { type: 'DICE_ROLL_ERROR', message: 'Error rolling dice. Please try again.' });
+        }
     });
 
     socket.on('roll_dice', ({ roomId }) => {
         console.log(`[Roll Dice] Player ${socket.id} rolling dice in room ${roomId}`);
+        
+        // Input validation
+        if (!roomId) {
+            console.error(`[Roll Dice] Missing roomId`);
+            socket.emit('error', { type: 'INVALID_REQUEST', message: 'Room ID is required' });
+            return;
+        }
+        
         const room = rooms[roomId];
         if (!room) {
             console.log(`[Roll Dice] Room ${roomId} not found`);
+            socket.emit('error', { type: 'ROOM_NOT_FOUND', message: 'Room not found' });
             return;
         }
+        
         const player = room.players.find(p => p.socketId === socket.id);
         if (!player) {
             console.log(`[Roll Dice] Player ${socket.id} not found in room ${roomId}`);
+            socket.emit('error', { type: 'PLAYER_NOT_FOUND', message: 'Player not found in room' });
             return;
         }
 
         if (room.gameState.phase !== 'playing') {
             console.log(`[Roll Dice] Game is not in playing phase. Current phase: ${room.gameState.phase}`);
+            socket.emit('error', { type: 'WRONG_PHASE', message: 'Game is not in playing phase' });
             return;
         }
 
         if (player.color !== room.gameState.currentPlayer) {
             console.log(`[Roll Dice] Not ${player.nickname}'s turn. Current: ${room.gameState.currentPlayer}`);
+            socket.emit('error', { type: 'NOT_YOUR_TURN', message: 'It is not your turn' });
             return;
         }
+        
         if (room.gameState.diceValue !== null) {
             console.log(`[Roll Dice] ${player.nickname} already rolled this turn`);
+            socket.emit('error', { type: 'ALREADY_ROLLED', message: 'You have already rolled this turn' });
             return;
         }
-        const diceValue = Math.floor(Math.random() * 6) + 1;
-        room.gameState.diceValue = diceValue;
-        room.gameState.message = `${player.nickname} ${diceValue} attı.`;
-        console.log(`[Game] ${player.nickname} rolled: ${diceValue}`);
-        const validMoves = getValidMoves(player, diceValue, room);
-        room.gameState.validMoves = validMoves;
-        updateRoom(roomId);
-        if (validMoves.length === 0) {
-            console.log(`[Game] ${player.nickname} has no valid moves`);
-            setTimeout(async () => await updateTurn(room), 1000);
+        
+        try {
+            const diceValue = Math.floor(Math.random() * 6) + 1;
+            room.gameState.diceValue = diceValue;
+            room.gameState.message = `${player.nickname} ${diceValue} attı.`;
+            
+            console.log(`[Game] ${player.nickname} rolled: ${diceValue}`);
+            
+            // Send success response
+            socket.emit('roll_success', { 
+                diceValue, 
+                color: player.color,
+                message: `You rolled a ${diceValue}!`
+            });
+            
+            const validMoves = getValidMoves(player, diceValue, room);
+            room.gameState.validMoves = validMoves;
+            updateRoom(roomId);
+            
+            if (validMoves.length === 0) {
+                console.log(`[Game] ${player.nickname} has no valid moves`);
+                setTimeout(async () => await updateTurn(room), 1000);
+            }
+            
+        } catch (error) {
+            console.error(`[Roll Dice] Error rolling dice:`, error);
+            socket.emit('error', { type: 'DICE_ROLL_ERROR', message: 'Error rolling dice. Please try again.' });
         }
     });
 
@@ -1604,14 +2033,594 @@ io.on('connection', async (socket) => {
     });
 
     socket.on('leave_room', async () => { await leaveRoomAsync(socket.id); });
-    socket.on('disconnect', async () => {
-        console.log(`User disconnected: ${socket.id}`);
+    socket.on('disconnect', async (reason) => {
+        console.log(`[DISCONNECT] User disconnected: ${socket.id}, Reason: ${reason}`);
+        
+        // Disconnect reason'a göre loglama
+        if (reason === 'io server disconnect') {
+            console.log(`[DISCONNECT] ${socket.id} - Sunucu tarafından kapatıldı`);
+        } else if (reason === 'client namespace disconnect') {
+            console.log(`[DISCONNECT] ${socket.id} - İstemci tarafından kapatıldı`);
+        } else if (reason === 'ping timeout') {
+            console.log(`[DISCONNECT] ${socket.id} - Ping timeout`);
+        } else if (reason === 'transport close') {
+            console.log(`[DISCONNECT] ${socket.id} - Transport bağlantısı kapandı`);
+        } else if (reason === 'transport error') {
+            console.log(`[DISCONNECT] ${socket.id} - Transport hatası`);
+        }
+        
         await leaveRoomAsync(socket.id);
     });
 });
 
+// --- Health Check Endpoint ---
+app.get('/health', async (req, res) => {
+    try {
+        // Database connection check
+        await executeQuery('SELECT 1');
+        
+        res.status(200).json({
+            status: 'healthy',
+            timestamp: new Date().toISOString(),
+            service: 'ludo-backend',
+            database: 'connected',
+            port: PORT
+        });
+    } catch (error) {
+        console.error('Health check failed:', error);
+        res.status(503).json({
+            status: 'unhealthy',
+            timestamp: new Date().toISOString(),
+            service: 'ludo-backend',
+            database: 'disconnected',
+            error: error.message
+        });
+    }
+});
+
+// --- Phone Verification API Routes (SMS Service Olmadan) ---
+
+// Telefon doğrulama kodu gönder (SMS servisi yok, sadece DB'ye kaydet)
+app.post('/api/send-sms-code', async (req, res) => {
+    const { phoneNumber } = req.body;
+    
+    if (!phoneNumber) {
+        return res.status(400).json({ message: 'Telefon numarası gerekli.' });
+    }
+
+    try {
+        // Türkiye formatını kontrol et (5xx xxx xx xx)
+        const cleanPhone = phoneNumber.replace(/\s/g, '');
+        if (!cleanPhone.match(/^5[0-9]{9}$/)) {
+            return res.status(400).json({ message: 'Geçersiz telefon numarası formatı. 5xx xxx xx xx formatında olmalı.' });
+        }
+
+        // 6 haneli rastgele kod oluştur
+        const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
+        const verificationId = uuidv4();
+        const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 dakika sonra expires
+
+        // Eski kodları temizle
+        await executeQuery(
+            'DELETE FROM phone_verifications WHERE phone_number = @phoneNumber',
+            [{ name: 'phoneNumber', type: sql.NVarChar(20), value: cleanPhone }]
+        );
+
+        // Yeni kodu kaydet
+        await executeQuery(
+            'INSERT INTO phone_verifications (id, phone_number, verification_code, expires_at) VALUES (@id, @phoneNumber, @code, @expiresAt)',
+            [
+                { name: 'id', type: sql.NVarChar(36), value: verificationId },
+                { name: 'phoneNumber', type: sql.NVarChar(20), value: cleanPhone },
+                { name: 'code', type: sql.NVarChar(6), value: verificationCode },
+                { name: 'expiresAt', type: sql.DateTime2, value: expiresAt }
+            ]
+        );
+
+        // Demo için konsola yazdır (SMS servisi yok)
+        console.log(`[PHONE VERIFICATION] Telefon: ${cleanPhone}, Kod: ${verificationCode} (10 dakika geçerli)`);
+
+        res.json({ 
+            success: true, 
+            message: 'Doğrulama kodu oluşturuldu. (SMS servisi yok - kod konsolda)',
+            phoneNumber: cleanPhone,
+            expiresIn: 600 // 10 dakika
+        });
+    } catch (error) {
+        console.error('Send SMS code error:', error);
+        res.status(500).json({ message: 'İç sunucu hatası', error: error.message });
+    }
+});
+
+// Database connection test endpoint
+app.get('/api/test-db-connection', async (req, res) => {
+    console.log(`[${new Date().toISOString()}] 🧪 Testing database connection...`);
+    
+    try {
+        const startTime = Date.now();
+        const result = await executeQuery('SELECT 1 as test, GETDATE() as current_time');
+        const endTime = Date.now();
+        
+        console.log(`[${new Date().toISOString()}] ✅ Database connection test successful`);
+        console.log(`[${new Date().toISOString()}] ⏱️  Query time: ${endTime - startTime}ms`);
+        console.log(`[${new Date().toISOString()}] 📊 Result:`, result);
+        
+        res.json({
+            success: true,
+            message: 'Database connection successful',
+            queryTime: `${endTime - startTime}ms`,
+            result: result
+        });
+    } catch (error) {
+        console.error(`[${new Date().toISOString()}] ❌ Database connection test failed:`, error);
+        res.status(500).json({
+            success: false,
+            message: 'Database connection failed',
+            error: error.message
+        });
+    }
+});
+
+// Telefon doğrulama kodunu kontrol et
+app.post('/api/verify-phone', async (req, res) => {
+    console.log(`[${new Date().toISOString()}] 📞 VERIFY-PHONE REQUEST STARTED`);
+    console.log(`[${new Date().toISOString()}] 📱 Request Body:`, JSON.stringify(req.body, null, 2));
+    console.log(`[${new Date().toISOString()}] 📝 Headers:`, JSON.stringify(req.headers, null, 2));
+    console.log(`[${new Date().toISOString()}] 🔍 IP: ${req.ip || req.connection.remoteAddress}`);
+    
+    const { phoneNumber, verificationCode } = req.body;
+    
+    if (!phoneNumber || !verificationCode) {
+        console.log(`[${new Date().toISOString()}] ❌ ERROR: Missing phoneNumber or verificationCode`);
+        console.log(`[${new Date().toISOString()}] 📞 VERIFY-PHONE REQUEST ENDED - Status: 400`);
+        return res.status(400).json({ message: 'Telefon numarası ve doğrulama kodu gerekli.' });
+    }
+
+    try {
+        const cleanPhone = phoneNumber.replace(/\s/g, '');
+        console.log(`[${new Date().toISOString()}] 🧹 Cleaned phone number: ${cleanPhone}`);
+        console.log(`[${new Date().toISOString()}] 🔑 Verification code: ${verificationCode}`);
+
+        // Kodu kontrol et
+        console.log(`[${new Date().toISOString()}] 🔍 Checking verification code in database...`);
+        console.log(`[${new Date().toISOString()}] 📊 Query: SELECT * FROM phone_verifications WHERE phone_number='${cleanPhone}' AND verification_code='${verificationCode}' AND expires_at > GETDATE() AND is_used = 0`);
+        
+        const queryStartTime = Date.now();
+        const result = await executeQuery(
+            'SELECT * FROM phone_verifications WHERE phone_number = @phoneNumber AND verification_code = @code AND expires_at > GETDATE() AND is_used = 0',
+            [
+                { name: 'phoneNumber', type: sql.NVarChar(20), value: cleanPhone },
+                { name: 'code', type: sql.NVarChar(6), value: verificationCode }
+            ]
+        );
+        const queryEndTime = Date.now();
+        console.log(`[${new Date().toISOString()}] ⏱️  Query execution time: ${queryEndTime - queryStartTime}ms`);
+
+        console.log(`[${new Date().toISOString()}] 📊 Database query result:`, result);
+
+        if (result.length === 0) {
+            console.log(`[${new Date().toISOString()}] ❌ ERROR: No valid verification code found in database`);
+            console.log(`[${new Date().toISOString()}] 📞 VERIFY-PHONE REQUEST ENDED - Status: 400`);
+            return res.status(400).json({ message: 'Geçersiz veya süresi dolmuş doğrulama kodu.' });
+        }
+
+        // Kodu kullanıldı olarak işaretle
+        console.log(`[${new Date().toISOString()}] ✅ Valid verification code found, marking as used...`);
+        await executeQuery(
+            'UPDATE phone_verifications SET is_used = 1 WHERE id = @id',
+            [{ name: 'id', type: sql.NVarChar(36), value: result[0].id }]
+        );
+
+        // Check if user exists with this phone number
+        console.log(`[${new Date().toISOString()}] 🔍 Checking if user exists with phone number...`);
+        const userResult = await executeQuery(
+            'SELECT id, nickname, email, phone_number, score, games_played, wins FROM users WHERE phone_number = @phoneNumber',
+            [{ name: 'phoneNumber', type: sql.NVarChar(20), value: cleanPhone }]
+        );
+
+        let response;
+        if (userResult.length > 0) {
+            // User exists
+            const user = userResult[0];
+            console.log(`[${new Date().toISOString()}] ✅ User found:`, user);
+            response = { 
+                success: true, 
+                message: 'Telefon numarası doğrulandı.',
+                phoneNumber: cleanPhone,
+                userExists: true,
+                user: {
+                    id: user.id,
+                    nickname: user.nickname,
+                    email: user.email,
+                    phoneNumber: user.phone_number,
+                    score: user.score,
+                    gamesPlayed: user.games_played,
+                    wins: user.wins
+                }
+            };
+        } else {
+            // User doesn't exist, needs registration
+            console.log(`[${new Date().toISOString()}] 📱 User not found, needs registration`);
+            response = { 
+                success: true, 
+                message: 'Telefon numarası doğrulandı.',
+                phoneNumber: cleanPhone,
+                userExists: false
+            };
+        }
+        
+        console.log(`[${new Date().toISOString()}] ✅ SUCCESS: Verification completed`);
+        console.log(`[${new Date().toISOString()}] 📤 Response:`, JSON.stringify(response, null, 2));
+        console.log(`[${new Date().toISOString()}] 📞 VERIFY-PHONE REQUEST ENDED - Status: 200`);
+        
+        res.json(response);
+    } catch (error) {
+        console.error(`[${new Date().toISOString()}] ❌ VERIFY-PHONE ERROR:`, error);
+        console.error(`[${new Date().toISOString()}] 📞 VERIFY-PHONE REQUEST ENDED - Status: 500`);
+        res.status(500).json({ message: 'İç sunucu hatası', error: error.message });
+    }
+});
+
+// Telefonla kayıt ol
+app.post('/api/register-phone', async (req, res) => {
+    const { phoneNumber, verificationCode, nickname } = req.body;
+    
+    if (!phoneNumber || !verificationCode || !nickname) {
+        return res.status(400).json({ message: 'Telefon numarası, doğrulama kodu ve rumuz gerekli.' });
+    }
+
+    try {
+        const cleanPhone = phoneNumber.replace(/\s/g, '');
+
+        // Önce doğrulama kodunu kontrol et (kullanılmış kodları da kabul et - zaten doğrulanmış olmalı)
+        const verifyResult = await executeQuery(
+            'SELECT * FROM phone_verifications WHERE phone_number = @phoneNumber AND verification_code = @code AND expires_at > GETDATE()',
+            [
+                { name: 'phoneNumber', type: sql.NVarChar(20), value: cleanPhone },
+                { name: 'code', type: sql.NVarChar(6), value: verificationCode }
+            ]
+        );
+
+        if (verifyResult.length === 0) {
+            return res.status(400).json({ message: 'Geçersiz veya süresi dolmuş doğrulama kodu.' });
+        }
+
+        // Telefon numarasının daha önce kullanılıp kullanılmadığını kontrol et
+        const existingUser = await executeQuery(
+            'SELECT * FROM users WHERE phone_number = @phoneNumber',
+            [{ name: 'phoneNumber', type: sql.NVarChar(20), value: cleanPhone }]
+        );
+
+        if (existingUser.length > 0) {
+            return res.status(400).json({ message: 'Bu telefon numarası ile zaten kayıt olunmuş.' });
+        }
+
+        // Rumuz kontrolü
+        const existingNickname = await executeQuery(
+            'SELECT * FROM users WHERE nickname = @nickname',
+            [{ name: 'nickname', type: sql.NVarChar(50), value: nickname }]
+        );
+
+        if (existingNickname.length > 0) {
+            return res.status(400).json({ message: 'Bu rumuz zaten kullanılıyor.' });
+        }
+
+        // Yeni kullanıcı oluştur
+        const userId = uuidv4();
+        const password_hash = await bcrypt.hash(cleanPhone + JWT_SECRET, 10); // Telefon + secret ile geçici şifre
+
+        await executeQuery(
+            'INSERT INTO users (id, email, password_hash, username, nickname, phone_number, salt, score, games_played, wins) VALUES (@id, @email, @passwordHash, @username, @nickname, @phoneNumber, @salt, 0, 0, 0)',
+            [
+                { name: 'id', type: sql.NVarChar(36), value: userId },
+                { name: 'email', type: sql.NVarChar(255), value: `${cleanPhone}@phone.user` }, // Geçici email
+                { name: 'passwordHash', type: sql.NVarChar(255), value: password_hash },
+                { name: 'username', type: sql.NVarChar(50), value: nickname },
+                { name: 'nickname', type: sql.NVarChar(50), value: nickname },
+                { name: 'phoneNumber', type: sql.NVarChar(20), value: cleanPhone },
+                { name: 'salt', type: sql.NVarChar(255), value: '' }
+            ]
+        );
+
+        // Kodu kullanıldı olarak işaretle
+        await executeQuery(
+            'UPDATE phone_verifications SET is_used = 1 WHERE id = @id',
+            [{ name: 'id', type: sql.NVarChar(36), value: verifyResult[0].id }]
+        );
+
+        // Token'ları oluştur
+        const accessToken = jwt.sign({ userId: userId, nickname: nickname }, JWT_SECRET, { expiresIn: '1h' });
+        const refreshToken = jwt.sign({ userId: userId, type: 'refresh' }, JWT_SECRET, { expiresIn: '90d' });
+
+        // Refresh token'ı kaydet
+        const refreshTokenId = uuidv4();
+        const expiresAt = new Date();
+        expiresAt.setDate(expiresAt.getDate() + 90);
+
+        await executeQuery(
+            'INSERT INTO refresh_tokens (id, user_id, token, expires_at) VALUES (@id, @userId, @token, @expiresAt)',
+            [
+                { name: 'id', type: sql.NVarChar(36), value: refreshTokenId },
+                { name: 'userId', type: sql.NVarChar(36), value: userId },
+                { name: 'token', type: sql.NVarChar(255), value: refreshToken },
+                { name: 'expiresAt', type: sql.DateTime2, value: expiresAt }
+            ]
+        );
+
+        res.json({
+            success: true,
+            message: 'Telefonla kayıt başarılı.',
+            accessToken,
+            refreshToken,
+            user: {
+                id: userId,
+                email: `${cleanPhone}@phone.user`,
+                nickname: nickname,
+                phoneNumber: cleanPhone,
+                score: 0
+            }
+        });
+    } catch (error) {
+        console.error('Register phone error:', error);
+        res.status(500).json({ message: 'İç sunucu hatası', error: error.message });
+    }
+});
+
+// Telefonla giriş yap
+app.post('/api/login-phone', async (req, res) => {
+    const { phoneNumber, verificationCode } = req.body;
+    
+    if (!phoneNumber || !verificationCode) {
+        return res.status(400).json({ message: 'Telefon numarası ve doğrulama kodu gerekli.' });
+    }
+
+    try {
+        const cleanPhone = phoneNumber.replace(/\s/g, '');
+
+        // Önce doğrulama kodunu kontrol et (kullanılmış kodları da kabul et - zaten doğrulanmış olmalı)
+        const verifyResult = await executeQuery(
+            'SELECT * FROM phone_verifications WHERE phone_number = @phoneNumber AND verification_code = @code AND expires_at > GETDATE()',
+            [
+                { name: 'phoneNumber', type: sql.NVarChar(20), value: cleanPhone },
+                { name: 'code', type: sql.NVarChar(6), value: verificationCode }
+            ]
+        );
+
+        if (verifyResult.length === 0) {
+            return res.status(400).json({ message: 'Geçersiz veya süresi dolmuş doğrulama kodu.' });
+        }
+
+        // Kullanıcıyı telefon numarası ile bul
+        const userResult = await executeQuery(
+            'SELECT * FROM users WHERE phone_number = @phoneNumber',
+            [{ name: 'phoneNumber', type: sql.NVarChar(20), value: cleanPhone }]
+        );
+
+        if (userResult.length === 0) {
+            return res.status(404).json({ message: 'Bu telefon numarası ile kayıtlı kullanıcı bulunamadı.' });
+        }
+
+        const user = userResult[0];
+
+        // Kodu kullanıldı olarak işaretle
+        await executeQuery(
+            'UPDATE phone_verifications SET is_used = 1 WHERE id = @id',
+            [{ name: 'id', type: sql.NVarChar(36), value: verifyResult[0].id }]
+        );
+
+        // Token'ları oluştur
+        const accessToken = jwt.sign({ userId: user.id, nickname: user.nickname }, JWT_SECRET, { expiresIn: '1h' });
+        const refreshToken = jwt.sign({ userId: user.id, type: 'refresh' }, JWT_SECRET, { expiresIn: '90d' });
+
+        // Refresh token'ı kaydet
+        const refreshTokenId = uuidv4();
+        const expiresAt = new Date();
+        expiresAt.setDate(expiresAt.getDate() + 90);
+
+        await executeQuery(
+            'INSERT INTO refresh_tokens (id, user_id, token, expires_at) VALUES (@id, @userId, @token, @expiresAt)',
+            [
+                { name: 'id', type: sql.NVarChar(36), value: refreshTokenId },
+                { name: 'userId', type: sql.NVarChar(36), value: user.id },
+                { name: 'token', type: sql.NVarChar(255), value: refreshToken },
+                { name: 'expiresAt', type: sql.DateTime2, value: expiresAt }
+            ]
+        );
+
+        res.json({
+            success: true,
+            message: 'Telefonla giriş başarılı.',
+            accessToken,
+            refreshToken,
+            user: {
+                id: user.id,
+                email: user.email,
+                nickname: user.nickname,
+                phoneNumber: user.phone_number,
+                score: user.score
+            }
+        });
+    } catch (error) {
+        console.error('Login phone error:', error);
+        res.status(500).json({ message: 'İç sunucu hatası', error: error.message });
+    }
+});
+
+// Kullanıcı profili endpoint'i
+app.get('/api/user/profile', async (req, res) => {
+    const authHeader = req.headers.authorization;
+    
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return res.status(401).json({ message: 'Yetkilendirme başlığı gerekli.' });
+    }
+
+    const token = authHeader.substring(7); // Remove 'Bearer ' prefix
+
+    try {
+        // Verify JWT token
+        const decoded = jwt.verify(token, JWT_SECRET);
+        const userId = decoded.userId;
+
+        // Get user from database
+        const userResult = await executeQuery(
+            'SELECT id, email, username, nickname, phone_number, score, games_played, wins FROM users WHERE id = @userId',
+            [{ name: 'userId', type: sql.NVarChar(36), value: userId }]
+        );
+
+        if (userResult.length === 0) {
+            return res.status(404).json({ message: 'Kullanıcı bulunamadı.' });
+        }
+
+        const user = userResult[0];
+        res.json({
+            success: true,
+            user: {
+                id: user.id,
+                email: user.email,
+                username: user.username,
+                nickname: user.nickname,
+                phoneNumber: user.phone_number,
+                score: user.score,
+                gamesPlayed: user.games_played,
+                wins: user.wins
+            }
+        });
+    } catch (error) {
+        console.error('Profile check error:', error);
+        if (error.name === 'JsonWebTokenError') {
+            return res.status(401).json({ message: 'Geçersiz token.' });
+        } else if (error.name === 'TokenExpiredError') {
+            return res.status(401).json({ message: 'Token süresi dolmuş.' });
+        }
+        res.status(500).json({ message: 'İç sunucu hatası', error: error.message });
+    }
+});
+
+// Avatar yükleme endpoint'i
+app.post('/api/avatar', async (req, res) => {
+    const authHeader = req.headers.authorization;
+    
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return res.status(401).json({ message: 'Yetkilendirme başlığı gerekli.' });
+    }
+
+    const token = authHeader.substring(7); // Remove 'Bearer ' prefix
+
+    try {
+        // Verify JWT token
+        const decoded = jwt.verify(token, JWT_SECRET);
+        const userId = decoded.userId;
+        const { avatarUrl } = req.body;
+        
+        // Log dosyasına da yaz
+        const timestamp = new Date().toISOString();
+        const logMessage = `[${timestamp}] [AVATAR UPLOAD] İstek alındı - UserId: ${userId}, AvatarUrl uzunluğu: ${avatarUrl ? avatarUrl.length : 0}`;
+        console.log(logMessage);
+        
+        // Log dosyasına yaz
+        const fs = require('fs');
+        const logDir = './logs';
+        if (!fs.existsSync(logDir)){
+            fs.mkdirSync(logDir);
+        }
+        fs.appendFileSync(`${logDir}/avatar-uploads.log`, logMessage + '\n');
+        
+        if (!avatarUrl) {
+            console.log(`[AVATAR UPLOAD] Hata: Avatar URL eksik`);
+            return res.status(400).json({ message: 'Avatar URL\'si gerekli.' });
+        }
+
+        // Check avatar URL size (base64 data URLs can be large)
+        const base64Data = avatarUrl.split(',')[1]; // Get base64 part after data:image/jpeg;base64,
+        const mimeType = avatarUrl.split(';')[0].split(':')[1]; // Get mime type like image/jpeg
+        console.log(`[AVATAR UPLOAD] Base64 veri uzunluğu: ${base64Data ? base64Data.length : 0}`);
+        
+        if (base64Data && base64Data.length > 8 * 1024 * 1024) { // 8MB base64 limit
+            console.log(`[AVATAR UPLOAD] Hata: Dosya çok büyük - ${base64Data.length} karakter`);
+            return res.status(413).json({ message: 'Avatar dosyası çok büyük. Maksimum 8MB.' });
+        }
+
+        console.log(`[AVATAR UPLOAD] Avatar dosyası kaydediliyor...`);
+        
+        // Kullanıcının var olup olmadığını kontrol et
+        const userCheck = await executeQuery(
+            'SELECT id, username, nickname FROM users WHERE id = @userId',
+            [{ name: 'userId', type: sql.NVarChar(36), value: userId }]
+        );
+        console.log(`[AVATAR UPLOAD] Kullanıcı kontrolü - Bulunan kayıt sayısı: ${userCheck.length}`);
+        if (userCheck.length > 0) {
+            console.log(`[AVATAR UPLOAD] Kullanıcı bulundu: ${userCheck[0].username} (${userCheck[0].nickname})`);
+        } else {
+            console.log(`[AVATAR UPLOAD] Kullanıcı bulunamadı: ${userId}`);
+            return res.status(404).json({ message: 'Kullanıcı bulunamadı.' });
+        }
+
+        // Dosya uzantısını belirle
+        const extension = mimeType.split('/')[1]; // jpeg, png, etc.
+        const fileName = `${userId}_${Date.now()}.${extension}`;
+        const filePath = `/avatars/${fileName}`;
+        const fullPath = `/Users/cihanaybar/Projects/Ludo/backend/public${filePath}`;
+        
+        // Base64 veriyi buffer'a çevir ve dosyaya yaz
+        const imageBuffer = Buffer.from(base64Data, 'base64');
+        fs.writeFileSync(fullPath, imageBuffer);
+        
+        console.log(`[AVATAR UPLOAD] Dosya kaydedildi: ${fullPath} (${imageBuffer.length} bytes)`);
+        
+        // Veritabanında avatar URL'sini güncelle
+        const avatarFileUrl = filePath;
+        const success = await updateUserAvatar(userId, avatarFileUrl);
+        console.log(`[AVATAR UPLOAD] Veritabanı sonucu: ${success}`);
+        
+        if (success) {
+            console.log(`[AVATAR UPLOAD] Başarılı - avatarUrl geri döndürülüyor`);
+            // Return full URL including the base URL
+            const fullAvatarUrl = `http://192.168.1.21:3001${avatarFileUrl}`;
+            res.json({ 
+                success: true, 
+                message: 'Avatar başarıyla güncellendi.',
+                avatarUrl: fullAvatarUrl
+            });
+        } else {
+            console.log(`[AVATAR UPLOAD] Başarısız - Kullanıcı bulunamadı`);
+            res.status(404).json({ message: 'Kullanıcı bulunamadı.' });
+        }
+    } catch (error) {
+        console.error('[AVATAR UPLOAD] Hata:', error);
+        if (error.name === 'JsonWebTokenError') {
+            return res.status(401).json({ message: 'Geçersiz token.' });
+        } else if (error.name === 'TokenExpiredError') {
+            return res.status(401).json({ message: 'Token süresi dolmuş.' });
+        }
+        res.status(500).json({ message: 'İç sunucu hatası', error: error.message });
+    }
+});
+
+// Avatar getirme endpoint'i
+app.get('/api/avatar/:userId', async (req, res) => {
+    const { userId } = req.params;
+    
+    if (!userId) {
+        return res.status(400).json({ message: 'Kullanıcı ID\'si gerekli.' });
+    }
+
+    try {
+        const avatarUrl = await getUserAvatar(userId);
+        if (avatarUrl) {
+            // Return full URL including the base URL
+            const fullAvatarUrl = `http://192.168.1.21:3001${avatarUrl}`;
+            res.json({ success: true, avatarUrl: fullAvatarUrl });
+        } else {
+            res.json({ success: true, avatarUrl: null });
+        }
+    } catch (error) {
+        console.error('Avatar getirme hatası:', error);
+        res.status(500).json({ message: 'İç sunucu hatası', error: error.message });
+    }
+});
+
 // --- Server Listen ---
-server.listen(PORT, async () => {
+server.listen(PORT, '192.168.1.21', async () => {
     try {
         await executeQuery('SELECT 1');
         console.log('Veritabanı bağlantısı başarıyla doğrulandı.');

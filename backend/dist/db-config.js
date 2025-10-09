@@ -2,14 +2,14 @@
 // Bu dosyayı db-config.js olarak kopyalayın ve ortam değişkenlerinizi ayarlayın
 
 module.exports = {
-    server: process.env.DB_SERVER || '192.168.1.21',
-    database: process.env.DB_DATABASE || 'LudoGameDB',
+    server: process.env.DB_SERVER || 'mssql.istekbilisim.com',
+    database: process.env.DB_DATABASE || 'ludoturcodb',
     user: process.env.DB_USER || 'sa',
-    password: process.env.DB_PASSWORD || 'YourStrongPassword123!',
+    password: process.env.DB_PASSWORD || 'SeKo153759++',
     port: parseInt(process.env.DB_PORT) || 1433,
     options: {
-        encrypt: process.env.DB_ENCRYPT === 'true' || true, // Azure için true
-        trustServerCertificate: process.env.DB_TRUST_SERVER_CERTIFICATE === 'true' || true, // Self-signed sertifikalar için
+        encrypt: process.env.DB_ENCRYPT === 'true' || false, // Production'da false
+        trustServerCertificate: process.env.DB_TRUST_SERVER_CERTIFICATE === 'true' || true,
         enableArithAbort: true,
         requestTimeout: 30000, // 30 saniye
         connectionTimeout: 30000, // 30 saniye
