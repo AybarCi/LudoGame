@@ -24,10 +24,45 @@ const findOrCreateUser = async (userId, nickname) => {
 
     // 2. Kullanıcı yoksa, yeni bir tane oluştur
     // Not: Gerçek bir sistemde şifreler güvenli bir şekilde hash'lenmelidir.
-    // Bu örnekte, misafir kullanıcılar için geçici değerler kullanıyoruz.
+    // Bu örnekte, misafir kullanıcılar için geçili değerler kullanıyoruz.
+    
+    // Misafir kullanıcılar için benzersiz username oluştur
+    let username = nickname;
+    if (!username || username.startsWith('guest_')) {
+        // Tam UUID'yi kullanarak çakışma olasılığını minimize et
+        username = `guest_${userId}`;
+    }
+    
+    // Username çakışmasını kontrol et ve gerekirse sayı ekle
+    let finalUsername = username;
+    let attempt = 0;
+    const maxAttempts = 10;
+    
+    while (attempt < maxAttempts) {
+        try {
+            // Bu username zaten var mı kontrol et
+            const existingUser = await executeQuery('SELECT id FROM users WHERE username = @username', [
+                { name: 'username', type: sql.NVarChar(50), value: finalUsername }
+            ]);
+            
+            if (!existingUser || existingUser.length === 0) {
+                // Username kullanılabilir, devam et
+                break;
+            }
+            
+            // Username zaten var, yeni bir deneme yap
+            attempt++;
+            finalUsername = `${username}_${attempt}`;
+            
+        } catch (error) {
+            console.error(`[findOrCreateUser] Username kontrol hatası (attempt ${attempt}):`, error);
+            break; // Kontrol edemediysek devam et
+        }
+    }
+    
     const newUser = {
         id: userId,
-        username: nickname || `guest_${userId.substring(0, 8)}`,
+        username: finalUsername,
         email: `${userId}@ludo.guest`,
         password_hash: 'not_set',
         salt: 'not_set',
@@ -55,4 +90,57 @@ const findOrCreateUser = async (userId, nickname) => {
     return newUser;
 };
 
-module.exports = { findOrCreateUser };
+/**
+ * Kullanıcının avatar URL'sini günceller
+ * @param {string} userId - Kullanıcı ID'si
+ * @param {string} avatarUrl - Yeni avatar URL'si
+ * @returns {Promise<boolean>} Güncelleme başarılı mı
+ */
+const updateUserAvatar = async (userId, avatarUrl) => {
+    try {
+        console.log(`[updateUserAvatar] Güncelleme başlatıldı - UserId: ${userId}, Avatar uzunluğu: ${avatarUrl.length}`);
+        
+        const query = `
+            UPDATE users 
+            SET avatar_url = @avatarUrl, updated_at = GETDATE()
+            WHERE id = @userId
+        `;
+        
+        // Use executeQuery but handle the result correctly for UPDATE operations
+        const result = await executeQuery(query, [
+            { name: 'userId', type: sql.NVarChar(36), value: userId },
+            { name: 'avatarUrl', type: sql.NVarChar(500), value: avatarUrl }
+        ]);
+        
+        // For UPDATE queries, executeQuery now returns the full result object
+        console.log(`[updateUserAvatar] Sorgu sonucu - rowsAffected: ${result.rowsAffected}`);
+        return result.rowsAffected > 0;
+    } catch (error) {
+        console.error('Avatar güncelleme hatası:', error);
+        return false;
+    }
+};
+
+/**
+ * Kullanıcının avatar URL'sini getirir
+ * @param {string} userId - Kullanıcı ID'si
+ * @returns {Promise<string|null>} Avatar URL'si veya null
+ */
+const getUserAvatar = async (userId) => {
+    try {
+        const result = await executeQuery(
+            'SELECT avatar_url FROM users WHERE id = @userId',
+            [{ name: 'userId', type: sql.NVarChar(36), value: userId }]
+        );
+        
+        if (result && result.length > 0) {
+            return result[0].avatar_url;
+        }
+        return null;
+    } catch (error) {
+        console.error('Avatar getirme hatası:', error);
+        return null;
+    }
+};
+
+module.exports = { findOrCreateUser, updateUserAvatar, getUserAvatar };

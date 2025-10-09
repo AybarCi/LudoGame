@@ -2,7 +2,7 @@
 // Bu dosyayı db-config.js olarak kopyalayın ve ortam değişkenlerinizi ayarlayın
 
 module.exports = {
-    server: process.env.DB_SERVER || 'localhost',
+    server: process.env.DB_SERVER || '192.168.1.21',
     database: process.env.DB_DATABASE || 'LudoGameDB',
     user: process.env.DB_USER || 'sa',
     password: process.env.DB_PASSWORD || 'YourStrongPassword123!',

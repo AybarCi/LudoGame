@@ -10,7 +10,8 @@ CREATE TABLE phone_verifications (
     is_used BIT DEFAULT 0,
     created_at DATETIME2 DEFAULT GETDATE(),
     INDEX IX_phone_verifications_phone_number (phone_number),
-    INDEX IX_phone_verifications_code (verification_code)
+    INDEX IX_phone_verifications_code (verification_code),
+    INDEX IX_phone_verifications_composite (phone_number, verification_code, is_used, expires_at)
 );
 
 -- Kullanıcılar tablosuna telefon numarası alanı ekle
