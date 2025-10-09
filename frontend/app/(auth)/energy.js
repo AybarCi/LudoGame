@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -7,12 +7,16 @@ import {
   ScrollView,
   ActivityIndicator,
   Dimensions,
-  Modal
+  Alert,
+  Animated
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
+import { useDispatch } from 'react-redux';
+import { showAlert } from '../../store/slices/alertSlice';
 import { EnergyService } from '../../services/EnergyService';
+import useEnergy from '../../hooks/useEnergy';
 import { DiamondService } from '../../services/DiamondService';
 import { PurchaseService } from '../../services/PurchaseService';
 import { AdService } from '../../services/AdService';
@@ -20,20 +24,52 @@ import { AdService } from '../../services/AdService';
 const { width } = Dimensions.get('window');
 
 export default function EnergyScreen() {
-  const [energy, setEnergy] = useState(0);
-  const [maxEnergy, setMaxEnergy] = useState(5);
+  const { energy, maxEnergy, timeUntilNext: timeUntilNextEnergy, loadEnergy, buyEnergy } = useEnergy();
   const [diamonds, setDiamonds] = useState(0);
-  const [timeUntilNextEnergy, setTimeUntilNextEnergy] = useState('');
   const [loading, setLoading] = useState(true);
   const [purchaseLoading, setPurchaseLoading] = useState(false);
   const [diamondPackages, setDiamondPackages] = useState([]);
   const [products, setProducts] = useState([]);
-  const [modalVisible, setModalVisible] = useState(false);
-  const [modalConfig, setModalConfig] = useState({ title: '', message: '', buttons: [] });
+  const dispatch = useDispatch();
 
-  const showModal = (title, message, buttons = null) => {
-    setModalConfig({ title, message, buttons });
-    setModalVisible(true);
+  // Animasyon değişkenleri
+  const energyAnim = useRef(new Animated.Value(1)).current;
+  const buttonScaleAnim = useRef(new Animated.Value(1)).current;
+
+  const showModal = (title, message) => {
+    dispatch(showAlert({ title, message, type: 'info' }));
+  };
+
+  // Enerji kazanma animasyonu
+  const animateEnergyGain = () => {
+    Animated.sequence([
+      Animated.timing(energyAnim, {
+        toValue: 1.2,
+        duration: 200,
+        useNativeDriver: true,
+      }),
+      Animated.timing(energyAnim, {
+        toValue: 1,
+        duration: 200,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  };
+
+  // Buton basma animasyonu
+  const animateButtonPress = () => {
+    Animated.sequence([
+      Animated.timing(buttonScaleAnim, {
+        toValue: 0.95,
+        duration: 100,
+        useNativeDriver: true,
+      }),
+      Animated.timing(buttonScaleAnim, {
+        toValue: 1,
+        duration: 100,
+        useNativeDriver: true,
+      }),
+    ]).start();
   };
 
   useEffect(() => {
@@ -42,30 +78,14 @@ export default function EnergyScreen() {
       loadData();
     });
     initializePurchases();
-    
-    // Her saniye enerji durumunu güncelle
-    const interval = setInterval(() => {
-      updateEnergyStatus();
-    }, 1000);
-
-    return () => clearInterval(interval);
   }, []);
 
   const loadData = async () => {
     try {
-      // Debug enerji durumu
-      await EnergyService.debugEnergyStatus();
+      await loadEnergy();
       
-      const [energyData, diamondData] = await Promise.all([
-        EnergyService.getEnergyInfo(),
-        DiamondService.getDiamonds()
-      ]);
-      
-      setEnergy(energyData.current);
-      setMaxEnergy(energyData.max);
-      setDiamonds(diamondData);
-      
-      updateTimeUntilNext();
+      const diamondCount = await DiamondService.getDiamonds();
+      setDiamonds(diamondCount);
     } catch (error) {
       console.error('Error loading data:', error);
     } finally {
@@ -103,22 +123,7 @@ export default function EnergyScreen() {
     }
   };
 
-  const updateTimeUntilNext = async () => {
-    try {
-      const timeLeft = await EnergyService.getTimeUntilNextEnergy();
-      if (timeLeft > 0) {
-        const hours = Math.floor(timeLeft / (1000 * 60 * 60));
-        const minutes = Math.floor((timeLeft % (1000 * 60 * 60)) / (1000 * 60));
-        const seconds = Math.floor((timeLeft % (1000 * 60)) / 1000);
-        
-        setTimeUntilNextEnergy(`${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`);
-      } else {
-        setTimeUntilNextEnergy('');
-      }
-    } catch (error) {
-      console.error('Error calculating time until next energy:', error);
-    }
-  };
+  // Zaman güncelleme artık hook'ta yönetiliyor
 
   const handleBuyEnergyWithDiamonds = async () => {
     try {
@@ -129,15 +134,14 @@ export default function EnergyScreen() {
       }
 
       if (diamonds < 50) {
-        showModal(
+        Alert.alert(
           'Yetersiz Elmas', 
           'Enerji satın almak için 50 elmasınız olmalı. Elmas satın almak istiyor musunuz?',
           [
-            { text: 'İptal', onPress: () => setModalVisible(false) },
+            { text: 'İptal', style: 'cancel' },
             {
               text: 'Elmas Al',
               onPress: () => {
-                setModalVisible(false);
                 router.push('/(auth)/diamonds');
               }
             }
@@ -146,21 +150,19 @@ export default function EnergyScreen() {
         return;
       }
 
-      showModal(
+      Alert.alert(
         'Enerji Satın Al',
         '50 elmas karşılığında enerjinizi tam doldurmak istiyor musunuz?',
         [
-          { text: 'İptal', onPress: () => setModalVisible(false) },
+          { text: 'İptal', style: 'cancel' },
           {
             text: 'Satın Al',
             onPress: async () => {
-              setModalVisible(false);
               try {
                 setPurchaseLoading(true);
-                const success = await EnergyService.buyEnergyWithDiamonds();
+                const success = await buyEnergy();
                 
                 if (success) {
-                  await loadData();
                   showModal('Başarılı', 'Enerjiniz tam dolduruldu!');
                 } else {
                   showModal('Hata', 'Enerji satın alma işlemi başarısız oldu.');
@@ -211,42 +213,49 @@ export default function EnergyScreen() {
       }
 
       setPurchaseLoading(true);
+      animateButtonPress();
       
-      // Reklam göster
-      await AdService.showRewardedAd();
+      // Reklam göster ve kullanıcının reklamı izleyip izlemediğini kontrol et
+      const adResult = await AdService.showRewardedAd();
       
-      // Reklam izlendikten sonra 1 enerji ver
-      const success = await EnergyService.addEnergy(1);
-      
-      if (success) {
-        await loadData();
-        showModal('Tebrikler!', '1 enerji kazandınız!');
+      // Sadece reklam tamamen izlendiyse enerji ver
+      if (adResult.userDidWatchAd) {
+        // Reklam başarıyla izlendi
+        animateEnergyGain();
+        const success = await EnergyService.addEnergy(1);
+        
+        if (success) {
+          await loadData();
+          showModal('Tebrikler!', '1 enerji kazandınız!');
+        } else {
+          showModal('Hata', 'Enerji ekleme işlemi başarısız oldu.');
+        }
       } else {
-        showModal('Hata', 'Enerji ekleme işlemi başarısız oldu.');
+        // Reklam izlenmediyse bilgi mesajı göster
+        showModal('Bilgi', 'Reklam izleme tamamlanmadı. Lütfen tekrar deneyin.');
       }
     } catch (error) {
       console.error('Error watching ad for energy:', error);
-      showModal('Hata', 'Reklam izleme sırasında bir hata oluştu.');
+      showModal('Bilgi', 'Reklam şu anda mevcut değil. Lütfen daha sonra tekrar deneyin.');
     } finally {
       setPurchaseLoading(false);
     }
   };
 
   const renderEnergyBar = () => {
-    const energyPercentage = (energy / maxEnergy) * 100;
+    const energyPercentage = energy && maxEnergy ? (energy / maxEnergy) * 100 : 0;
     
-    return (
-      <View style={styles.energyContainer}>
+    return (<Animated.View style={[styles.energyContainer, { transform: [{ scale: energyAnim }] }]}>
         <View style={styles.energyHeader}>
           <Ionicons name="flash" size={24} color="#FFD700" />
           <Text style={styles.energyTitle}>Enerji</Text>
-          <Text style={styles.energyCount}>{energy}/{maxEnergy}</Text>
+          <Text style={styles.energyCount}>{energy || 0}/{maxEnergy || 5}</Text>
         </View>
         
         <View style={styles.energyBarContainer}>
           <View style={styles.energyBarBackground}>
             <LinearGradient
-              colors={['#FFD700', '#FFA500']}
+              colors={['#00D9CC', '#00B8A6']}
               style={[styles.energyBarFill, { width: `${energyPercentage}%` }]}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 0 }}
@@ -254,12 +263,13 @@ export default function EnergyScreen() {
           </View>
         </View>
         
-        {energy < maxEnergy && timeUntilNextEnergy && (
+        {energy < maxEnergy && timeUntilNextEnergy > 0 && (
           <Text style={styles.nextEnergyText}>
-            Sonraki enerji: {timeUntilNextEnergy}
+            Sonraki enerji: {Math.floor(timeUntilNextEnergy / 60000)}:{Math.floor((timeUntilNextEnergy % 60000) / 1000).toString().padStart(2, '0')}
           </Text>
         )}
-      </View>
+        </Animated.View>      
+      
     );
   };
 
@@ -275,7 +285,7 @@ export default function EnergyScreen() {
         disabled={purchaseLoading}
       >
         <LinearGradient
-          colors={['#4A90E2', '#357ABD']}
+          colors={['#6E00B3', '#4A0080']}
           style={styles.packageGradient}
         >
           <Ionicons name="diamond" size={32} color="#FFD700" />
@@ -290,14 +300,14 @@ export default function EnergyScreen() {
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#4A90E2" />
+        <ActivityIndicator size="large" color="#00D9CC" />
         <Text style={styles.loadingText}>Yükleniyor...</Text>
       </View>
     );
   }
 
   return (
-    <LinearGradient colors={['#1a1a2e', '#16213e']} style={styles.container}>
+    <LinearGradient colors={['#6E00B3', '#4A0080']} style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollContent}>
         {/* Header */}
         <View style={styles.header}>
@@ -329,7 +339,7 @@ export default function EnergyScreen() {
               disabled={purchaseLoading || diamonds < 50}
             >
               <LinearGradient
-                colors={diamonds >= 50 ? ['#FFD700', '#FFA500'] : ['#666', '#444']}
+                colors={diamonds >= 50 ? ['#00D9CC', '#00B8A6'] : ['#666', '#444']}
                 style={styles.energyOptionGradient}
               >
                 <View style={styles.energyOptionContent}>
@@ -347,7 +357,7 @@ export default function EnergyScreen() {
           {energy >= maxEnergy && (
             <View style={[styles.energyOption, { opacity: 0.6 }]}>
               <LinearGradient
-                colors={['#4CAF50', '#45a049']}
+                colors={['#E61A8D', '#C71585']}
                 style={styles.energyOptionGradient}
               >
                 <View style={styles.energyOptionContent}>
@@ -361,26 +371,33 @@ export default function EnergyScreen() {
             </View>
           )}
 
-          {/* Reklam İzleyerek Enerji Al - Sadece enerji tam değilse göster */}
+          {/* Reklam İzle Butonu - Modern Tasarım */}
           {energy < maxEnergy && (
-            <TouchableOpacity
-              style={styles.energyOption}
-              onPress={handleWatchAdForEnergy}
-              disabled={purchaseLoading}
-            >
-              <LinearGradient
-                colors={['#4CAF50', '#45a049']}
-                style={styles.energyOptionGradient}
+            <Animated.View style={{ transform: [{ scale: buttonScaleAnim }] }}>
+              <TouchableOpacity
+                style={styles.energyOption}
+                onPress={handleWatchAdForEnergy}
+                disabled={purchaseLoading}
               >
-                <View style={styles.energyOptionContent}>
-                  <Ionicons name="play-circle" size={36} color="white" />
-                  <View style={styles.energyOptionText}>
-                    <Text style={styles.energyOptionTitle}>Reklam İzle</Text>
-                    <Text style={styles.energyOptionSubtitle}>+1 Enerji</Text>
+                <LinearGradient
+                  colors={['#FF6B6B', '#FF8E53']}
+                  style={styles.energyOptionGradient}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                >
+                  <View style={styles.energyOptionContent}>
+                    <Ionicons name="play-circle" size={36} color="white" />
+                    <View style={styles.energyOptionText}>
+                      <Text style={styles.energyOptionTitle}>Reklam İzle</Text>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
+                        <Text style={[styles.energyOptionSubtitle, { marginRight: 4 }]}>+1</Text>
+                        <Ionicons name="flash" size={16} color="#FFD700" />
+                      </View>
+                    </View>
                   </View>
-                </View>
-              </LinearGradient>
-            </TouchableOpacity>
+                </LinearGradient>
+              </TouchableOpacity>
+            </Animated.View>
           )}
         </View>
 
@@ -391,64 +408,10 @@ export default function EnergyScreen() {
 
       </ScrollView>
 
-      {/* Custom Modal */}
-      <Modal
-        animationType="fade"
-        transparent={true}
-        visible={modalVisible}
-        onRequestClose={() => setModalVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-           <LinearGradient
-             colors={['#1e1e2e', '#2a2a3e', '#1e1e2e']}
-             style={styles.modalContainer}
-           >
-            <Text style={styles.modalTitle}>{modalConfig.title}</Text>
-            <Text style={styles.modalMessage}>{modalConfig.message}</Text>
-            <View style={styles.modalButtonContainer}>
-              {modalConfig.buttons ? (
-                modalConfig.buttons.map((button, index) => (
-                   <TouchableOpacity
-                     key={index}
-                     style={styles.modalButton}
-                     onPress={button.onPress}
-                   >
-                     <LinearGradient
-                       colors={index === 0 ? ['#666', '#555'] : ['#4A90E2', '#357ABD']}
-                       style={[
-                         styles.modalButtonGradient,
-                         index === 0 ? styles.modalButtonSecondary : styles.modalButtonPrimary
-                       ]}
-                     >
-                       <Text style={[
-                         styles.modalButtonText,
-                         index === 0 ? styles.modalButtonTextSecondary : styles.modalButtonTextPrimary
-                       ]}>{button.text}</Text>
-                     </LinearGradient>
-                   </TouchableOpacity>
-                 ))
-              ) : (
-                <TouchableOpacity
-                   style={styles.modalButton}
-                   onPress={() => setModalVisible(false)}
-                 >
-                   <LinearGradient
-                     colors={['#4A90E2', '#357ABD']}
-                     style={[styles.modalButtonGradient, styles.modalButtonPrimary]}
-                   >
-                     <Text style={[styles.modalButtonText, styles.modalButtonTextPrimary]}>Tamam</Text>
-                   </LinearGradient>
-                 </TouchableOpacity>
-              )}
-             </View>
-           </LinearGradient>
-         </View>
-       </Modal>
-
       {/* Loading Overlay */}
       {purchaseLoading && (
         <View style={styles.loadingOverlay}>
-          <ActivityIndicator size="large" color="#4A90E2" />
+          <ActivityIndicator size="large" color="#00D9CC" />
           <Text style={styles.loadingText}>İşlem yapılıyor...</Text>
         </View>
       )}
@@ -467,7 +430,7 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#1a1a2e',
+    backgroundColor: '#6E00B3',
   },
   loadingText: {
     color: 'white',
@@ -503,7 +466,7 @@ const styles = StyleSheet.create({
   energyContainer: {
     margin: 20,
     padding: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    backgroundColor: 'rgba(0, 217, 204, 0.1)',
     borderRadius: 15,
   },
   energyHeader: {
@@ -519,7 +482,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   energyCount: {
-    color: '#FFD700',
+    color: '#00D9CC',
     fontSize: 16,
     fontWeight: 'bold',
   },
@@ -610,7 +573,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   packageDiamonds: {
-    color: '#FFD700',
+    color: '#00D9CC',
     fontSize: 16,
     fontWeight: 'bold',
     marginTop: 4,
@@ -640,77 +603,5 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 0, 0, 0.7)',
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  modalContainer: {
-    backgroundColor: '#1e1e2e',
-    borderRadius: 20,
-    padding: 25,
-    margin: 20,
-    maxWidth: 320,
-    width: '85%',
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
-    shadowOpacity: 0.3,
-    shadowRadius: 6,
-    elevation: 8,
-    borderWidth: 1,
-    borderColor: 'rgba(74, 144, 226, 0.3)',
-  },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#FFD700',
-    textAlign: 'center',
-    marginBottom: 15,
-  },
-  modalMessage: {
-    fontSize: 16,
-    color: '#E0E0E0',
-    textAlign: 'center',
-    marginBottom: 25,
-    lineHeight: 24,
-  },
-  modalButtonContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    gap: 10,
-  },
-  modalButton: {
-     borderRadius: 12,
-     flex: 1,
-     marginHorizontal: 5,
-     overflow: 'hidden',
-   },
-   modalButtonGradient: {
-     paddingVertical: 14,
-     paddingHorizontal: 25,
-     borderRadius: 12,
-   },
-   modalButtonPrimary: {
-     // Gradient ile uygulanacak
-   },
-   modalButtonSecondary: {
-     borderWidth: 1,
-     borderColor: '#666',
-   },
-  modalButtonText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    textAlign: 'center',
-  },
-  modalButtonTextPrimary: {
-    color: 'white',
-  },
-  modalButtonTextSecondary: {
-    color: '#ccc',
   },
 });

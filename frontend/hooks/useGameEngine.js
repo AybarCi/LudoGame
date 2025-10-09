@@ -393,23 +393,67 @@ const gameReducer = (state, action) => {
       // Check for illegal jumps over friendly pawns.
       // This applies to moves on the main path and into/within the home stretch.
       const pathToCheck = [];
-      // Path on the main board
-      if (startPos >= 0 && startPos <= 55) {
-        for (let i = startPos + 1; i < Math.min(endPos, 56); i++) pathToCheck.push(i);
-      }
-      // Path in the home stretch
-      if (endPos >= 56) { // Check if moving into or within home stretch
-        const startOfHomeStretch = Math.max(startPos, 56);
-        for (let i = startOfHomeStretch + 1; i < endPos; i++) pathToCheck.push(i);
-      }
-      // Additional check for movement entirely within home stretch
-      if (startPos >= 56 && endPos >= 56) {
-        for (let i = startPos + 1; i < endPos; i++) pathToCheck.push(i);
+      
+      // Only check for jumps if we're moving more than 1 position
+      // AND we're not moving from home base to start (which is a special case)
+      if (endPos > startPos + 1 && !(startPos === -1 && endPos === 0)) {
+        // Path on the main board (positions 0-55)
+        if (startPos >= 0 && startPos <= 55) {
+          // Check if moving within main board or into home stretch
+          // Handle circular movement (e.g., 55 -> 0)
+          if (endPos <= 55) {
+            if (startPos < endPos) {
+              // Normal forward movement
+              for (let i = startPos + 1; i < endPos; i++) {
+                pathToCheck.push(i);
+              }
+            } else {
+              // Wrapping around (55 -> 0, 54 -> 1, etc.)
+              for (let i = startPos + 1; i < 56; i++) {
+                pathToCheck.push(i);
+              }
+              for (let i = 0; i < endPos; i++) {
+                pathToCheck.push(i);
+              }
+            }
+          } else {
+            // Moving into home stretch - only check up to position 55
+            for (let i = startPos + 1; i < 56; i++) {
+              pathToCheck.push(i);
+            }
+          }
+        }
+        
+        // Path in the home stretch (positions 56-59)
+        if (startPos >= 56 && endPos >= 56) {
+          // Only add home stretch positions if we're actually moving within it
+          for (let i = startPos + 1; i < endPos; i++) {
+            pathToCheck.push(i);
+          }
+        }
       }
 
-      const isJumpingOverTeammate = pathToCheck.some(pos =>
+      const isJumpingOverTeammate = pathToCheck.length > 0 && pathToCheck.some(pos =>
         pawns.some(p => p.color === currentPlayer && p.position === pos)
       );
+
+      // Debug logging for jump detection
+      console.log(`Jump check: startPos=${startPos}, endPos=${endPos}, pathToCheck=[${pathToCheck.join(', ')}], hasTeammate=${isJumpingOverTeammate}`);
+       
+      // Special debug for 55->56 transition
+      if (startPos === 55 && endPos === 56) {
+        console.log(`Special case: 55->56 transition`);
+        console.log(`Main path positions (0-55): ${pathToCheck.filter(p => p >= 0 && p <= 55).join(', ')}`);
+        console.log(`Home stretch positions (56-59): ${pathToCheck.filter(p => p >= 56 && p <= 59).join(', ')}`);
+      }
+      
+      if (isJumpingOverTeammate) {
+        const teammatePositions = pathToCheck.filter(pos => 
+          pawns.some(p => p.color === currentPlayer && p.position === pos)
+        );
+        console.log(`Teammate found at positions: [${teammatePositions.join(', ')}]`);
+        console.log(`All current player pawns:`, pawns.filter(p => p.color === currentPlayer).map(p => `pos: ${p.position}`));
+      }
 
       if (isJumpingOverTeammate) {
         return { ...state, gameMessage: 'Kendi piyonunun üzerinden atlayamazsın!' };

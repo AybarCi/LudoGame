@@ -14,6 +14,8 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { DiamondService } from '../../services/DiamondService';
 import { AdService } from '../../services/AdService';
+import { useDispatch } from 'react-redux';
+import { showAlert } from '../../store/slices/alertSlice';
 
 const { width, height } = Dimensions.get('window');
 const isTablet = width > 768;
@@ -23,6 +25,7 @@ const DiamondRewardModal = ({ visible, onClose, rewardType = 'ad' }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [scaleAnim] = useState(new Animated.Value(0));
   const [diamondAnim] = useState(new Animated.Value(0));
+  const dispatch = useDispatch();
 
   useEffect(() => {
     if (visible) {
@@ -70,15 +73,24 @@ const DiamondRewardModal = ({ visible, onClose, rewardType = 'ad' }) => {
         Alert.alert(
           '🎉 Tebrikler!',
           '2 elmas kazandınız!',
-          [{ text: 'Tamam', onPress: onClose }]
+          [
+            {
+              text: 'Tamam',
+              onPress: onClose
+            }
+          ]
         );
       }
     } catch (error) {
       Alert.alert(
-        'Hata',
-        'Reklam gösterilirken bir hata oluştu.',
-        [{ text: 'Tamam' }]
-      );
+          'Hata',
+          'Reklam gösterilirken bir hata oluştu.',
+          [
+            {
+              text: 'Tamam'
+            }
+          ]
+        );
     } finally {
       setIsLoading(false);
     }
@@ -108,21 +120,35 @@ const DiamondRewardModal = ({ visible, onClose, rewardType = 'ad' }) => {
         Alert.alert(
           '🎉 Günlük Ödül!',
           `${result.amount} elmas kazandınız!`,
-          [{ text: 'Tamam', onPress: onClose }]
+          [
+            {
+              text: 'Tamam',
+              onPress: onClose
+            }
+          ]
         );
       } else {
         Alert.alert(
           'Bilgi',
           result.message,
-          [{ text: 'Tamam', onPress: onClose }]
+          [
+            {
+              text: 'Tamam',
+              onPress: onClose
+            }
+          ]
         );
       }
     } catch (error) {
       Alert.alert(
-        'Hata',
-        'Günlük ödül alınırken bir hata oluştu.',
-        [{ text: 'Tamam' }]
-      );
+          'Hata',
+          'Günlük ödül alınırken bir hata oluştu.',
+          [
+            {
+              text: 'Tamam'
+            }
+          ]
+        );
     } finally {
       setIsLoading(false);
     }
@@ -171,7 +197,7 @@ const DiamondRewardModal = ({ visible, onClose, rewardType = 'ad' }) => {
           ]}
         >
           <LinearGradient
-            colors={['#667eea', '#764ba2']}
+            colors={['#6E00B3', '#E61A8D']}
             style={styles.modalGradient}
           >
             {/* Elmas animasyonu */}
@@ -190,12 +216,12 @@ const DiamondRewardModal = ({ visible, onClose, rewardType = 'ad' }) => {
                 }
               ]}
             >
-              <Ionicons name="diamond" size={40} color="#FFD700" />
+              <Ionicons name="diamond" size={40} color="#00D9CC" />
               <Text style={styles.animationText}>+2</Text>
             </Animated.View>
 
             <View style={styles.currentDiamonds}>
-              <Ionicons name="diamond" size={24} color="#FFD700" />
+              <Ionicons name="diamond" size={24} color="#00D9CC" />
               <Text style={styles.diamondCount}>{diamonds}</Text>
             </View>
 
@@ -209,7 +235,7 @@ const DiamondRewardModal = ({ visible, onClose, rewardType = 'ad' }) => {
                 disabled={isLoading}
               >
                 <LinearGradient
-                  colors={['#4CAF50', '#45a049']}
+                  colors={['#00D9CC', '#00b3a6']}
                   style={styles.buttonGradient}
                 >
                   <Text style={styles.buttonText}>

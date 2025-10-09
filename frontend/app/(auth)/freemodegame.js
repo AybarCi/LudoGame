@@ -1,33 +1,46 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
-  TouchableOpacity,
   StyleSheet,
   Dimensions,
-  Modal,
+  TouchableOpacity,
+  StatusBar,
+  Animated,
   SafeAreaView,
-  StatusBar
+  Alert,
+  Platform
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  withSpring,
-  withSequence,
-  withTiming
-} from 'react-native-reanimated';
-import LottieView from 'lottie-react-native';
+import { useDispatch } from 'react-redux';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { store } from '../../store';
+import { initializeAuth } from '../../store/slices/authSlice';
 
 import FreeModeBoard from '../../components/modules/FreeModeBoard';
 import { useFreeModeEngine } from '../../hooks/useFreeModeEngine';
 import { AdService } from '../../services/AdService';
-import { EnergyService } from '../../services/EnergyService';
+import { showAlert } from '../../store/slices/alertSlice';
 
 const { width, height } = Dimensions.get('window');
 const isTablet = width > 768;
+
+// Ekran boyutuna göre container justifyContent ayarla
+const getContainerJustifyContent = () => {
+  const minDimension = Math.min(width, height);
+  // Büyük ekranlarda içeriği ortala, küçük ekranlarda yukarıdan başla
+  return minDimension > 800 ? 'center' : 'flex-start';
+};
+
+// Android status bar yüksekliğini hesapla
+const getStatusBarHeight = () => {
+  if (Platform.OS === 'android') {
+    return StatusBar.currentHeight || 0;
+  }
+  return 0;
+};
 
 const FreeModeGame = () => {
   const router = useRouter();
@@ -52,13 +65,10 @@ const FreeModeGame = () => {
   const { state, dispatch, getPossibleMoves } = useFreeModeEngine('local', playersInfo);
   
   // Animation values
-  const diceRotation = useSharedValue(0);
-  const diceScale = useSharedValue(1);
-  const messageOpacity = useSharedValue(1);
-  
-  // Modal states
-  const [showResetModal, setShowResetModal] = useState(false);
-  const [showBackModal, setShowBackModal] = useState(false);
+  const diceRotation = useRef(new Animated.Value(0)).current;
+  const diceScale = useRef(new Animated.Value(1)).current;
+  const messageOpacity = useRef(new Animated.Value(1)).current;
+  const reduxDispatch = useDispatch();
 
   // Initialize game (energy check is done in freemode.js before navigation)
   useEffect(() => {
@@ -87,14 +97,29 @@ const FreeModeGame = () => {
     dispatch({ type: 'START_ROLLING' });
     
     // Animate dice
-    diceRotation.value = withSequence(
-      withTiming(360, { duration: 500 }),
-      withTiming(0, { duration: 0 })
-    );
-    diceScale.value = withSequence(
-      withSpring(1.3),
-      withSpring(1)
-    );
+    Animated.sequence([
+      Animated.timing(diceRotation, {
+        toValue: 360,
+        duration: 500,
+        useNativeDriver: true
+      }),
+      Animated.timing(diceRotation, {
+        toValue: 0,
+        duration: 0,
+        useNativeDriver: true
+      })
+    ]).start();
+    
+    Animated.sequence([
+      Animated.spring(diceScale, {
+        toValue: 1.3,
+        useNativeDriver: true
+      }),
+      Animated.spring(diceScale, {
+        toValue: 1,
+        useNativeDriver: true
+      })
+    ]).start();
     
     // Roll dice based on game phase
     setTimeout(() => {
@@ -113,59 +138,156 @@ const FreeModeGame = () => {
     dispatch({ type: 'MOVE_PAWN', payload: { pawnId } });
     
     // Animate message
-    messageOpacity.value = withSequence(
-      withTiming(0.5, { duration: 200 }),
-      withTiming(1, { duration: 200 })
-    );
+    Animated.sequence([
+      Animated.timing(messageOpacity, {
+        toValue: 0.5,
+        duration: 200,
+        useNativeDriver: true
+      }),
+      Animated.timing(messageOpacity, {
+        toValue: 1,
+        duration: 200,
+        useNativeDriver: true
+      })
+    ]).start();
   };
   
   // Handle game reset
   const handleReset = () => {
-    setShowResetModal(true);
+    // Use React Native's Alert API instead of Redux for confirmation dialogs with actions
+    Alert.alert(
+      'Oyunu Sıfırla',
+      'Oyunu sıfırlamak istediğinize emin misiniz?',
+      [
+        {
+          text: 'İptal',
+          style: 'cancel'
+        },
+        {
+          text: 'Evet',
+          onPress: () => dispatch({ type: 'RESET_GAME' })
+        }
+      ],
+      { cancelable: true }
+    );
   };
   
   // Handle back to menu
   const handleBackToMenu = () => {
-    setShowBackModal(true);
-  };
-  
-  // Confirm reset
-  const confirmReset = () => {
-    dispatch({ type: 'RESET_GAME' });
-    setShowResetModal(false);
+    // Use React Native's Alert API instead of Redux for confirmation dialogs with actions
+    Alert.alert(
+      'Menüye Dön',
+      'Oyundan çıkmak istediğinize emin misiniz?',
+      [
+        {
+          text: 'İptal',
+          style: 'cancel'
+        },
+        {
+          text: 'Evet',
+          onPress: confirmBackToMenu
+        }
+      ],
+      { cancelable: true }
+    );
   };
   
   // Confirm back to menu
-  const confirmBackToMenu = () => {
+  const confirmBackToMenu = async () => {
     try {
-      setShowBackModal(false);
-      router.replace('/');
+      // Önce auth state'ini kontrol et
+      const currentState = store.getState();
+      console.log('confirmBackToMenu: Current auth state:', {
+        isAuthenticated: currentState.auth.isAuthenticated,
+        hasToken: !!currentState.auth.token,
+        hasUser: !!currentState.auth.user
+      });
+      
+      // Eğer authenticated değilsek, token yenilemeyi dene
+      if (!currentState.auth.isAuthenticated) {
+        console.log('confirmBackToMenu: Not authenticated, attempting to refresh token...');
+        const refreshToken = await AsyncStorage.getItem('refreshToken');
+        if (refreshToken) {
+          // Token yenileme thunk'unu çalıştır
+          const result = await dispatch(initializeAuth());
+          console.log('confirmBackToMenu: Token refresh result:', result);
+          
+          // Yeniden kontrol et
+          const newState = store.getState();
+          if (!newState.auth.isAuthenticated) {
+            console.log('confirmBackToMenu: Token refresh failed, redirecting to login');
+            router.replace('/login');
+            return;
+          }
+        } else {
+          console.log('confirmBackToMenu: No refresh token, redirecting to login');
+          router.replace('/login');
+          return;
+        }
+      }
+      
+      // Auth başarılıysa home'a git
+      console.log('confirmBackToMenu: Authentication successful, navigating to home');
+      router.replace('/home');
     } catch (error) {
-      console.error('Navigation error:', error);
-      // Fallback navigation
-      router.push('/');
+      console.error('confirmBackToMenu: Navigation error:', error);
+      // Fallback navigation - en azından login'e git
+      router.replace('/login');
     }
   };
   
   // Animated styles
-  const diceAnimatedStyle = useAnimatedStyle(() => {
-    return {
-      transform: [
-        { rotate: `${diceRotation.value}deg` },
-        { scale: diceScale.value }
-      ]
-    };
-  });
-  
-  const messageAnimatedStyle = useAnimatedStyle(() => {
-    return {
-      opacity: messageOpacity.value
-    };
-  });
+  const diceAnimatedStyle = {
+    transform: [
+      { rotate: diceRotation.interpolate({
+        inputRange: [0, 360],
+        outputRange: ['0deg', '360deg']
+      })},
+      { scale: diceScale }
+    ]
+  };
   
   // Get current player info
   const currentPlayerName = state.playersInfo[state.currentPlayer]?.nickname || state.currentPlayer;
   const currentPlayerColor = state.currentPlayer;
+
+  // Show winner alert when winner is determined
+  React.useEffect(() => {
+    if (state.winner) {
+      // Use React Native's Alert API for winner notification with actions
+      Alert.alert(
+        '🎉 Tebrikler! 🎉',
+        `${state.playersInfo[state.winner]?.nickname || state.winner} oyunu kazandı!`,
+        [
+          {
+            text: 'Tekrar Oyna',
+            onPress: async () => {
+              try {
+                await AdService.showInterstitialAd();
+                dispatch({ type: 'RESET_GAME' });
+              } catch (error) {
+                console.error('Ad failed, proceeding anyway:', error);
+                dispatch({ type: 'RESET_GAME' });
+              }
+            }
+          },
+          {
+            text: 'Ana Menü',
+            onPress: async () => {
+              try {
+                await AdService.showInterstitialAd();
+                router.replace('/(auth)/home');
+              } catch (error) {
+                console.error('Ad failed, proceeding anyway:', error);
+                router.push('/(auth)/home');
+              }
+            }
+          }
+        ],
+        { cancelable: false }
+      );
+    }
+  }, [state.winner]);
   
   // Player colors for UI
   const playerColorMap = {
@@ -222,211 +344,112 @@ const FreeModeGame = () => {
           </View>
         )}
         
-        {/* Game Board */}
-        <View style={styles.boardContainer}>
-          <FreeModeBoard
-            pawns={state.pawns}
-            onPawnPress={handlePawnPress}
-            currentPlayer={state.currentPlayer}
-            possibleMoves={possibleMoves}
-            playersInfo={state.playersInfo}
-          />
-        </View>
-        
-        {/* Game Controls */}
-        <View style={styles.controlsContainer}>
-          {/* Current Player Info */}
-          <View style={styles.playerInfo}>
-            <LinearGradient
-              colors={playerColorMap[currentPlayerColor]}
-              style={styles.playerIndicator}
-            >
-              <Text style={styles.playerName}>{currentPlayerName}</Text>
-              <Text style={styles.playerLabel}>Sıradaki Oyuncu</Text>
-            </LinearGradient>
-          </View>
-          
-          {/* Dice Section */}
-          <View style={styles.diceSection}>
-            <Animated.View style={[styles.diceContainer, diceAnimatedStyle]}>
-              <TouchableOpacity
-                onPress={handleDiceRoll}
-                disabled={state.diceValue !== null || state.winner || state.isRolling}
-                style={[
-                  styles.diceButton,
-                  {
-                    opacity: (!state.diceValue && !state.winner && !state.isRolling) ? 1 : 0.6
-                  }
-                ]}
-              >
-                <LinearGradient
-                  colors={['#FFD700', '#FFA000']}
-                  style={styles.diceGradient}
-                >
-                  <Text style={styles.diceText}>
-                    {state.diceValue || '🎲'}
-                  </Text>
-                </LinearGradient>
-              </TouchableOpacity>
-            </Animated.View>
-            
-            <Text style={styles.diceLabel}>
-              {!state.diceValue && !state.winner && !state.isRolling ? 'Zar At!' : 
-               state.diceValue && possibleMoves.length > 0 ? `${possibleMoves.length} hamle mümkün - Piyon seçin!` : 
-               state.diceValue && possibleMoves.length === 0 ? 'Hamle yok - Bekle...' : 'Bekle...'}
-            </Text>
-          </View>
-          
-
-        </View>
-        
-        {/* Reset Confirmation Modal */}
-        <Modal
-          visible={showResetModal}
-          transparent={true}
-          animationType="fade"
-          onRequestClose={() => setShowResetModal(false)}
-        >
-          <View style={styles.modalOverlay}>
-            <View style={styles.modalContainer}>
-              <LinearGradient
-                colors={['#FF6B6B', '#FF8E53']}
-                style={styles.modalGradient}
-              >
-                <Ionicons name="refresh-circle" size={60} color="#FFF" style={styles.modalIcon} />
-                <Text style={styles.modalTitle}>Oyunu Sıfırla</Text>
-                <Text style={styles.modalMessage}>
-                  Oyunu yeniden başlatmak istediğinizden emin misiniz?
-                </Text>
-                
-                <View style={styles.modalButtons}>
-                  <TouchableOpacity
-                    onPress={() => setShowResetModal(false)}
-                    style={[styles.modalButton, styles.modalButtonSecondary]}
-                  >
-                    <Text style={[styles.modalButtonText, styles.modalButtonTextSecondary]}>
-                      İptal
-                    </Text>
-                  </TouchableOpacity>
-                  
-                  <TouchableOpacity
-                    onPress={confirmReset}
-                    style={styles.modalButton}
-                  >
-                    <Text style={styles.modalButtonText}>Sıfırla</Text>
-                  </TouchableOpacity>
-                </View>
-              </LinearGradient>
-            </View>
-          </View>
-        </Modal>
-        
-        {/* Back to Menu Confirmation Modal */}
-        <Modal
-          visible={showBackModal}
-          transparent={true}
-          animationType="fade"
-          onRequestClose={() => setShowBackModal(false)}
-        >
-          <View style={styles.modalOverlay}>
-            <View style={styles.modalContainer}>
-              <LinearGradient
-                colors={['#4ECDC4', '#44A08D']}
-                style={styles.modalGradient}
-              >
-                <Ionicons name="home-outline" size={60} color="#FFF" style={styles.modalIcon} />
-                <Text style={styles.modalTitle}>Ana Menüye Dön</Text>
-                <Text style={styles.modalMessage}>
-                  Oyunu bırakıp ana menüye dönmek istediğinizden emin misiniz?
-                </Text>
-                
-                <View style={styles.modalButtons}>
-                  <TouchableOpacity
-                    onPress={() => setShowBackModal(false)}
-                    style={[styles.modalButton, styles.modalButtonSecondary]}
-                  >
-                    <Text style={[styles.modalButtonText, styles.modalButtonTextSecondary]}>
-                      İptal
-                    </Text>
-                  </TouchableOpacity>
-                  
-                  <TouchableOpacity
-                    onPress={confirmBackToMenu}
-                    style={styles.modalButton}
-                  >
-                    <Text style={styles.modalButtonText}>Ana Menü</Text>
-                  </TouchableOpacity>
-                </View>
-              </LinearGradient>
-            </View>
-          </View>
-        </Modal>
-        
-
-        
-        {/* Winner Modal */}
-        {state.winner && (
-          <View style={styles.winnerOverlay}>
-            <LinearGradient
-              colors={['rgba(0,0,0,0.8)', 'rgba(0,0,0,0.9)']}
-              style={styles.winnerBackground}
-            >
-              <View style={styles.winnerModal}>
-                <LinearGradient
-                  colors={playerColorMap[state.winner]}
-                  style={styles.winnerGradient}
-                >
-                  <Text style={styles.winnerTitle}>🎉 Tebrikler! 🎉</Text>
-                  <Text style={styles.winnerName}>
-                    {state.playersInfo[state.winner]?.nickname || state.winner}
-                  </Text>
-                  <Text style={styles.winnerSubtitle}>Oyunu Kazandı!</Text>
-                  
-                  <LottieView
-                    source={require("../../assets/animations/firstwinner.json")}
-                    style={styles.lottieWinner}
-                    autoPlay
-                    loop={false}
-                  />
-                  
-                  <View style={styles.winnerButtons}>
-                    <TouchableOpacity
-                      onPress={async () => {
-                        try {
-                          await AdService.showInterstitialAd();
-                          dispatch({ type: 'RESET_GAME' });
-                        } catch (error) {
-                          console.error('Ad failed, proceeding anyway:', error);
-                          dispatch({ type: 'RESET_GAME' });
-                        }
-                      }}
-                      style={styles.winnerButton}
-                    >
-                      <Text style={styles.winnerButtonText}>Tekrar Oyna</Text>
-                    </TouchableOpacity>
-                    
-                    <TouchableOpacity
-                      onPress={async () => {
-                        try {
-                          await AdService.showInterstitialAd();
-                          router.replace('/(auth)/home');
-                        } catch (error) {
-                          console.error('Ad failed, proceeding anyway:', error);
-                          router.push('/(auth)/home');
-                        }
-                      }}
-                      style={[styles.winnerButton, styles.winnerButtonSecondary]}
-                    >
-                      <Text style={[styles.winnerButtonText, styles.winnerButtonTextSecondary]}>
-                        Ana Menü
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-                </LinearGradient>
-              </View>
-            </LinearGradient>
+        {/* Game Board - Only show during playing phase */}
+        {state.gamePhase === 'playing' && (
+          <View style={styles.boardContainer}>
+            <FreeModeBoard
+              pawns={state.pawns}
+              onPawnPress={handlePawnPress}
+              currentPlayer={state.currentPlayer}
+              possibleMoves={possibleMoves}
+              playersInfo={state.playersInfo}
+            />
           </View>
         )}
+        
+        {/* Pre-game Controls - Only show during pre-game */}
+        {state.gamePhase === 'pre-game' && (
+          <View style={styles.preGameControls}>
+            <View style={styles.playerInfo}>
+              <LinearGradient
+                colors={playerColorMap[currentPlayerColor]}
+                style={styles.playerIndicator}
+              >
+                <Text style={styles.playerName}>{currentPlayerName}</Text>
+                <Text style={styles.playerLabel}>Sıradaki Oyuncu</Text>
+              </LinearGradient>
+            </View>
+            
+            <View style={styles.diceSection}>
+              <Animated.View style={[styles.diceContainer, diceAnimatedStyle]}>
+                <TouchableOpacity
+                  onPress={handleDiceRoll}
+                  disabled={state.diceValue !== null || state.isRolling}
+                  style={[
+                    styles.diceButton,
+                    {
+                      opacity: (!state.diceValue && !state.isRolling) ? 1 : 0.6
+                    }
+                  ]}
+                >
+                  <LinearGradient
+                    colors={['#FFD700', '#FFA000']}
+                    style={styles.diceGradient}
+                  >
+                    <Text style={styles.diceText}>
+                      {state.diceValue || '🎲'}
+                    </Text>
+                  </LinearGradient>
+                </TouchableOpacity>
+              </Animated.View>
+              
+              <Text style={styles.diceLabel}>
+                {!state.diceValue && !state.isRolling ? 'Sıralama için zar at!' : 'Bekle...'}
+              </Text>
+            </View>
+          </View>
+        )}
+
+        {/* Game Controls - Only show during playing phase */}
+        {state.gamePhase === 'playing' && (
+          <View style={styles.controlsContainer}>
+            {/* Current Player Info */}
+            <View style={styles.playerInfo}>
+              <LinearGradient
+                colors={playerColorMap[currentPlayerColor]}
+                style={styles.playerIndicator}
+              >
+                <Text style={styles.playerName}>{currentPlayerName}</Text>
+                <Text style={styles.playerLabel}>Sıradaki Oyuncu</Text>
+              </LinearGradient>
+            </View>
+            
+            {/* Dice Section */}
+            <View style={styles.diceSection}>
+              <Animated.View style={[styles.diceContainer, diceAnimatedStyle]}>
+                <TouchableOpacity
+                  onPress={handleDiceRoll}
+                  disabled={state.diceValue !== null || state.winner || state.isRolling}
+                  style={[
+                    styles.diceButton,
+                    {
+                      opacity: (!state.diceValue && !state.winner && !state.isRolling) ? 1 : 0.6
+                    }
+                  ]}
+                >
+                  <LinearGradient
+                    colors={['#FFD700', '#FFA000']}
+                    style={styles.diceGradient}
+                  >
+                    <Text style={styles.diceText}>
+                      {state.diceValue || '🎲'}
+                    </Text>
+                  </LinearGradient>
+                </TouchableOpacity>
+              </Animated.View>
+              
+              <Text style={styles.diceLabel}>
+                {!state.diceValue && !state.winner && !state.isRolling ? 'Zar At!' : 
+                 state.diceValue && possibleMoves.length > 0 ? `${possibleMoves.length} hamle mümkün - Piyon seçin!` : 
+                 state.diceValue && possibleMoves.length === 0 ? 'Hamle yok - Bekle...' : 'Bekle...'}
+              </Text>
+            </View>
+
+          </View>
+        )}
+        
+
+        
       </LinearGradient>
     </SafeAreaView>
   );
@@ -435,7 +458,9 @@ const FreeModeGame = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#1a1a2e'
+    backgroundColor: '#1a1a2e',
+    paddingTop: Platform.OS === 'android' ? getStatusBarHeight() : 0, // Android'de status bar yüksekliği kadar padding
+    justifyContent: getContainerJustifyContent(), // Ekran boyutuna göre ortala veya üstten başla
   },
   gradient: {
     flex: 1
@@ -444,9 +469,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 15,
-    paddingTop: isTablet ? 20 : 10
+    paddingHorizontal: 10,
+    paddingVertical: isTablet ? 8 : 6, // Header'ı biraz daha büyült
+    paddingTop: isTablet ? 8 : 6,
   },
   backButton: {
     padding: 10,
@@ -454,7 +479,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.1)'
   },
   headerTitle: {
-    fontSize: isTablet ? 28 : 24,
+    fontSize: isTablet ? 24 : 20, // Daha küçük font
     fontWeight: 'bold',
     color: '#FFF',
     textAlign: 'center'
@@ -480,10 +505,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'center',
     flexWrap: 'wrap',
-    gap: 8
+    gap: 4 // Izgara görünümünü düzelt
   },
   turnOrderItem: {
-    minWidth: isTablet ? 100 : 80
+    minWidth: isTablet ? 90 : 70 // Izgara görünümünü düzelt
   },
   turnOrderGradient: {
     paddingVertical: 8,
@@ -505,18 +530,31 @@ const styles = StyleSheet.create({
     textAlign: 'center'
   },
   boardContainer: {
-    flex: 1,
+    flex: 1.3, // Board'a DAHA AZ alan ver
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 10,
-    paddingBottom: 30
+    paddingHorizontal: 2,
+    paddingBottom: 5,
+    marginBottom: -45, // Board'ı BİR TIK DAHA YUKARI taşı
+    minHeight: isTablet ? 460 : 320,
+  },
+  preGameControls: {
+    flex: 1.2, // DAHA DAHA FAZLA alan kaplasın
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingBottom: 5,
+    marginTop: -35, // BİR TIK DAHA YUKARI kaydır
   },
   controlsContainer: {
+    flex: 0.8,
+    justifyContent: 'space-between',
     paddingHorizontal: 20,
-    paddingBottom: 10
+    paddingBottom: 5, // DAHA DA YUKARI taşı
+    marginTop: -15, // Yukarı kaydır
   },
   playerInfo: {
-    marginBottom: 15
+    marginBottom: 2 // DAHA DA YUKARI KAYDIR
   },
   playerIndicator: {
     paddingVertical: 12,
@@ -538,7 +576,7 @@ const styles = StyleSheet.create({
   },
   diceSection: {
     alignItems: 'center',
-    marginBottom: 20
+    marginVertical: 2 // DAHA DA YUKARI KAYDIR
   },
   diceContainer: {
     marginBottom: 10
@@ -596,141 +634,8 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     opacity: 0.9
   },
-  winnerOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    justifyContent: 'center',
-    alignItems: 'center'
-  },
-  winnerBackground: {
-    flex: 1,
-    width: '100%',
-    justifyContent: 'center',
-    alignItems: 'center'
-  },
-  winnerModal: {
-    width: isTablet ? '50%' : '80%',
-    borderRadius: 20,
-    overflow: 'hidden',
-    elevation: 20
-  },
-  winnerGradient: {
-    paddingVertical: 30,
-    paddingHorizontal: 20,
-    alignItems: 'center'
-  },
-  winnerTitle: {
-    fontSize: isTablet ? 28 : 24,
-    fontWeight: 'bold',
-    color: '#FFF',
-    marginBottom: 10
-  },
-  winnerName: {
-    fontSize: isTablet ? 24 : 20,
-    fontWeight: 'bold',
-    color: '#FFF',
-    marginBottom: 5
-  },
-  winnerSubtitle: {
-    fontSize: isTablet ? 18 : 16,
-    color: '#FFF',
-    marginBottom: 10,
-    opacity: 0.9
-  },
-  lottieWinner: {
-    width: isTablet ? 200 : 150,
-    height: isTablet ? 200 : 150,
-    marginVertical: 10
-  },
-  winnerButtons: {
-    flexDirection: isTablet ? 'row' : 'column',
-    gap: 10
-  },
-  winnerButton: {
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderRadius: 10,
-    minWidth: isTablet ? 120 : 100
-  },
-  winnerButtonSecondary: {
-    backgroundColor: 'rgba(255,255,255,0.1)'
-  },
-  winnerButtonText: {
-    color: '#FFF',
-    fontSize: isTablet ? 16 : 14,
-    fontWeight: '600',
-    textAlign: 'center'
-  },
-  winnerButtonTextSecondary: {
-    opacity: 0.8
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.7)',
-    justifyContent: 'center',
-    alignItems: 'center'
-  },
-  modalContainer: {
-    width: isTablet ? '40%' : '85%',
-    borderRadius: 20,
-    overflow: 'hidden',
-    elevation: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.3,
-    shadowRadius: 20
-  },
-  modalGradient: {
-    paddingVertical: 30,
-    paddingHorizontal: 25,
-    alignItems: 'center'
-  },
-  modalIcon: {
-    marginBottom: 15
-  },
-  modalTitle: {
-    fontSize: isTablet ? 24 : 20,
-    fontWeight: 'bold',
-    color: '#FFF',
-    marginBottom: 10,
-    textAlign: 'center'
-  },
-  modalMessage: {
-    fontSize: isTablet ? 16 : 14,
-    color: '#FFF',
-    textAlign: 'center',
-    marginBottom: 25,
-    opacity: 0.9,
-    lineHeight: isTablet ? 24 : 20
-  },
-  modalButtons: {
-    flexDirection: 'row',
-    gap: 15
-  },
-  modalButton: {
-    backgroundColor: 'rgba(255,255,255,0.3)',
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderRadius: 12,
-    minWidth: isTablet ? 100 : 80,
-    elevation: 3
-  },
-  modalButtonSecondary: {
-    backgroundColor: 'rgba(255,255,255,0.1)'
-  },
-  modalButtonText: {
-    color: '#FFF',
-    fontSize: isTablet ? 16 : 14,
-    fontWeight: '600',
-    textAlign: 'center'
-  },
-  modalButtonTextSecondary: {
-    opacity: 0.8
-  }
+
+
 });
 
 export default FreeModeGame;

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   ImageBackground,
   SafeAreaView,
@@ -7,23 +7,74 @@ import {
   Modal,
   Animated,
   View,
-  TouchableOpacity
+  TouchableOpacity,
+  Dimensions,
+  StatusBar,
+  Platform
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { useAuth } from '../../store/AuthProvider';
+import { useSelector, useDispatch } from 'react-redux';
+import { setUser } from '../../store/slices/authSlice';
 import { useSocket } from '../../store/SocketProvider';
 import GameBoard from '../../components/modules/GameBoard';
 import Dice from '../../components/shared/Dice';
 import { useGameEngine } from '../../hooks/useGameEngine';
 import { COLORS } from '../../constants/game';
-import LottieView from 'lottie-react-native';
+import LottieView from '../../components/shared/LottieWrapper';
 import { DiamondService } from '../../services/DiamondService';
 import { AdService } from '../../services/AdService';
 import { EnergyService } from '../../services/EnergyService';
 
+const { width, height } = Dimensions.get('window');
+
+// Responsive board sizing
+const getBoardSize = () => {
+  const screenWidth = width;
+  const screenHeight = height;
+  const minDimension = Math.min(screenWidth, screenHeight);
+  
+  // Ekran boyutuna göre board boyutu - optimize edilmiş boyutlar
+  if (minDimension > 900) { // Büyük tablet/desktop
+    return Math.min(minDimension * 0.75, 700);
+  } else if (minDimension > 800) { // Tablet
+    return Math.min(minDimension * 0.72, 650);
+  } else if (minDimension > 600) { // Büyük telefon
+    return Math.min(minDimension * 0.85, 550);
+  } else { // Normal telefon
+    return Math.min(minDimension * 0.9, 450);
+  }
+};
+
+// Ekran boyutuna göre container justifyContent ayarla
+const getContainerJustifyContent = () => {
+  const minDimension = Math.min(width, height);
+  // Büyük ekranlarda içeriği ortala, küçük ekranlarda yukarıdan başla
+  return minDimension > 800 ? 'center' : 'flex-start';
+};
+
+// Android status bar yüksekliğini hesapla
+const getStatusBarHeight = () => {
+  if (Platform.OS === 'android') {
+    return StatusBar.currentHeight || 0;
+  }
+  return 0;
+};
+
 const GameScreen = () => {
-  const { session, user, updateScore } = useAuth();
+  const reduxDispatch = useDispatch();
+  const session = useSelector(state => state.auth.session);
+  const user = useSelector(state => state.auth.user);
+  
+  // Extract actual user object if it's wrapped in success property
+  const actualUser = user?.success && user?.user ? user.user : user;
+ 
+  const updateScore = useCallback((points) => {
+    if (actualUser) {
+      const updatedUser = { ...actualUser, score: (actualUser.score || 0) + points };
+      reduxDispatch(setUser({ user: updatedUser, token: session, session: session }));
+    }
+  }, [actualUser, session, reduxDispatch]);
   const { gameId, mode, playersInfo: playersInfoString } = useLocalSearchParams();
   const { socket } = useSocket();
   const router = useRouter();
@@ -60,7 +111,7 @@ const GameScreen = () => {
     if (gamePhase === 'game-over' && winner && playersInfo[winner]) {
       const winnerInfo = playersInfo[winner];
       // Ensure the winner is a real player with a user_id, not an AI
-      if (winnerInfo.user_id && winnerInfo.user_id === user.id) {
+      if (winnerInfo.user_id && winnerInfo.user_id === actualUser.id) {
         console.log(`Awarding 10 points and 1 diamond to ${winnerInfo.nickname} (ID: ${winnerInfo.user_id})`);
         updateScore(10);
         // Award 1 diamond for winning against AI
@@ -141,7 +192,7 @@ const GameScreen = () => {
       </View>
 
       <GameBoard
-        style={styles.gameBoard}
+        style={[styles.gameBoard, { width: getBoardSize(), height: getBoardSize() }]}
         pawns={pawns}
         onPawnPress={handlePawnPress}
         currentPlayer={currentPlayer}
@@ -215,7 +266,7 @@ const GameScreen = () => {
           <View style={styles.modalView}>
             <Text style={styles.winnerText}>Kazanan</Text>
             <Text style={styles.winnerName}>{winner && playersInfo ? playersInfo[winner]?.nickname : ''}</Text>
-            {winner && playersInfo && playersInfo[winner]?.user_id && playersInfo[winner].user_id === user.id && (
+            {winner && playersInfo && playersInfo[winner]?.user_id && playersInfo[winner].user_id === actualUser.id && (
               <Text style={styles.pointsWonText}>+10 Puan!</Text>
             )}
             <LottieView
@@ -262,7 +313,8 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: 'transparent',
     padding: 10,
-    justifyContent: 'space-around',
+    paddingTop: Platform.OS === 'android' ? getStatusBarHeight() + 10 : 10, // Android'de status bar yüksekliği kadar padding
+    justifyContent: getContainerJustifyContent(), // Ekran boyutuna göre ortala veya üstten başla
     alignItems: 'center',
   },
   header: {
@@ -289,8 +341,9 @@ const styles = StyleSheet.create({
   gameBoard: {
     width: '95%',
     aspectRatio: 1,
-    maxWidth: 400,
-    maxHeight: 400,
+    maxWidth: getBoardSize(),
+    maxHeight: getBoardSize(),
+    alignSelf: 'center', // Center the board
   },
   controlsContainer: {
     width: '95%',

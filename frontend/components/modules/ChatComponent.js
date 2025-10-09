@@ -9,7 +9,8 @@ import {
   Animated,
   Dimensions,
   KeyboardAvoidingView,
-  Platform
+  Platform,
+  Keyboard
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -35,6 +36,12 @@ const ChatComponent = ({
       duration: 300,
       useNativeDriver: true,
     }).start();
+    
+    // Klavyeyi kapatma işlemi
+    if (!isVisible) {
+      Keyboard.dismiss();
+      setInputText(''); // Input'u temizle
+    }
   }, [isVisible]);
 
   useEffect(() => {
@@ -140,6 +147,9 @@ const ChatComponent = ({
           </View>
         ) : (
           messages.map((message, index) => {
+            console.log('[ChatComponent] Message structure:', message);
+            console.log('[ChatComponent] currentUser:', currentUser);
+            console.log('[ChatComponent] Comparing:', message.userId, '===', currentUser?.id);
             const isOwnMessage = message.userId === currentUser?.id;
             return (
               <View 

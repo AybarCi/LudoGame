@@ -7,20 +7,22 @@ import {
   ImageBackground,
   Animated,
   Dimensions,
-  Modal,
-  Image
+  Image,
+  Modal
 } from 'react-native';
 import { Text } from '@rneui/themed';
 import { useRouter } from 'expo-router';
-import { useAuth } from '../../store/AuthProvider';
+import { useSelector } from 'react-redux';
+import { setDiamonds, addDiamonds, spendDiamonds } from '../../store/slices/diamondSlice';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { DiamondService } from '../../services/DiamondService';
-import CustomModal from '../../components/shared/CustomModal';
+import { useDispatch } from 'react-redux';
+import { showAlert } from '../../store/slices/alertSlice';
 import Svg, { Circle, Path, Text as SvgText, Line, Rect } from 'react-native-svg';
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3001';
+const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://192.168.1.135:3001';
 
 const { width, height } = Dimensions.get('window');
 
@@ -286,14 +288,17 @@ const renderBrandLogo = (logoType) => {
 
 const ShopScreen = () => {
   const router = useRouter();
-  const { user } = useAuth();
+  const user = useSelector(state => state.auth.user);
+  
+  // Extract actual user object if it's wrapped in success property
+  const actualUser = user?.success && user?.user ? user.user : user;
   const [selectedCategory, setSelectedCategory] = useState('teams');
   const [purchaseModal, setPurchaseModal] = useState({ visible: false, item: null });
   const [ownedPawns, setOwnedPawns] = useState(['default']); // Varsayılan piyon her zaman sahip olunan
   const [selectedPawn, setSelectedPawn] = useState('default');
   const [loading, setLoading] = useState(true);
-  const [diamonds, setDiamonds] = useState(0);
-  const [customModal, setCustomModal] = useState({ visible: false, title: '', message: '', type: 'info', buttons: [] });
+  const diamonds = useSelector(state => state.diamonds?.count ?? 0);
+  const dispatch = useDispatch();
   
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(30)).current;
@@ -317,8 +322,9 @@ const ShopScreen = () => {
   }, []);
 
   const loadDiamonds = async () => {
+    // Sadece ilk yüklemede AsyncStorage'dan okuyup Redux store'una yaz
     const currentDiamonds = await DiamondService.getDiamonds();
-    setDiamonds(currentDiamonds);
+    dispatch(setDiamonds(currentDiamonds));
   };
 
   // Token yenileme fonksiyonu
@@ -369,7 +375,13 @@ const ShopScreen = () => {
       }
     };
 
-    let response = await fetch(url, requestOptions);
+    let response;
+    try {
+      response = await fetch(url, requestOptions);
+    } catch (networkError) {
+      console.error('[SHOP DEBUG] Network error:', networkError);
+      throw new Error('Network request failed');
+    }
 
     // 401 veya 403 hatası alırsak token yenilemeyi dene
     if (response.status === 401 || response.status === 403) {
@@ -380,8 +392,7 @@ const ShopScreen = () => {
       } catch (refreshError) {
         console.error('Token refresh failed:', refreshError);
         // Refresh token da geçersizse çıkış yap
-        setCustomModal({
-          visible: true,
+        dispatch(showAlert({
           title: 'Oturum Süresi Doldu',
           message: 'Oturumunuzun süresi dolmuş. Lütfen tekrar giriş yapın.',
           type: 'warning',
@@ -389,7 +400,6 @@ const ShopScreen = () => {
             {
               text: 'Tamam',
               onPress: async () => {
-                setCustomModal({ visible: false });
                 await AsyncStorage.removeItem('accessToken');
                 await AsyncStorage.removeItem('refreshToken');
                 await AsyncStorage.removeItem('user');
@@ -397,7 +407,7 @@ const ShopScreen = () => {
               }
             }
           ]
-        });
+        }));
         throw new Error('Authentication failed');
       }
     }
@@ -430,8 +440,23 @@ const ShopScreen = () => {
       console.log('[SHOP DEBUG] Response status:', response.status);
       console.log('[SHOP DEBUG] Response headers:', response.headers);
       if (response.ok) {
-        const data = await response.json();
-        console.log('[SHOP DEBUG] Received owned pawns data from server:', data);
+        let data;
+        try {
+          data = await response.json();
+          console.log('[SHOP DEBUG] Received owned pawns data from server:', data);
+        } catch (jsonError) {
+          console.error('[SHOP DEBUG] JSON parse error:', jsonError);
+          const responseText = await response.text();
+          console.log('[SHOP DEBUG] Response text:', responseText);
+          return;
+        }
+        
+        if (!data || !data.ownedPawns || !Array.isArray(data.ownedPawns)) {
+          console.error('[SHOP DEBUG] Invalid response data structure:', data);
+          console.error('[SHOP DEBUG] Expected { ownedPawns: [] }, got:', data);
+          return;
+        }
+        
         const serverOwnedPawns = ['default', ...data.ownedPawns];
         setOwnedPawns(serverOwnedPawns);
         
@@ -527,33 +552,30 @@ const ShopScreen = () => {
           console.error('[PAWN SELECT DEBUG] Error saving selected pawn to AsyncStorage:', error);
         }
         
-        setCustomModal({
-          visible: true,
+        dispatch(showAlert({
           title: 'Başarılı!',
           message: 'Piyon seçildi!',
           type: 'success',
           buttons: []
-        });
+        }));
       } else {
         const errorData = await response.text();
         console.log('[PAWN SELECT DEBUG] Error response:', errorData);
-        setCustomModal({
-          visible: true,
+        dispatch(showAlert({
           title: 'Hata',
           message: `Piyon seçimi başarısız: ${errorData}`,
           type: 'error',
           buttons: []
-        });
+        }));
       }
     } catch (error) {
       console.error('[PAWN SELECT DEBUG] Error selecting pawn:', error);
-      setCustomModal({
-        visible: true,
+      dispatch(showAlert({
         title: 'Hata',
         message: 'Piyon seçimi sırasında bir hata oluştu.',
         type: 'error',
         buttons: []
-      });
+      }));
     }
   };
 
@@ -563,26 +585,24 @@ const ShopScreen = () => {
     try {
       const token = await AsyncStorage.getItem('accessToken');
       if (!token) {
-        setCustomModal({
-          visible: true,
+        dispatch(showAlert({
           title: 'Hata',
           message: 'Oturum açmanız gerekiyor.',
           type: 'error',
           buttons: []
-        });
+        }));
         return;
       }
 
       // Elmas ile satın alma kontrolü
       if (item.currency === 'diamonds') {
         if (diamonds < item.price) {
-          setCustomModal({
-            visible: true,
+          dispatch(showAlert({
             title: 'Yetersiz Elmas',
             message: 'Bu ürünü satın almak için yeterli elmasınız yok.',
             type: 'warning',
             buttons: []
-          });
+          }));
           setPurchaseModal({ visible: false, item: null });
           return;
         }
@@ -627,21 +647,19 @@ const ShopScreen = () => {
             console.error('[SHOP DEBUG] Error saving owned pawns to AsyncStorage:', error);
           }
           
-          setCustomModal({
-            visible: true,
+          dispatch(showAlert({
             title: 'Başarılı!',
             message: `${item.name} satın alındı!`,
             type: 'success',
             buttons: []
-          });
+          }));
         } else {
-          setCustomModal({
-            visible: true,
-            title: 'Hata',
-            message: 'Satın alma işlemi başarısız oldu.',
-            type: 'error',
-            buttons: []
-          });
+          dispatch(showAlert({
+          title: 'Hata',
+          message: 'Satın alma işlemi başarısız oldu.',
+          type: 'error',
+          buttons: []
+        }));
         }
         setPurchaseModal({ visible: false, item: null });
         return;
@@ -662,7 +680,24 @@ const ShopScreen = () => {
       console.log('[SHOP DEBUG] Purchase response status:', response.status);
       console.log('[SHOP DEBUG] Purchase response headers:', Object.fromEntries(response.headers.entries()));
       
-      const data = await response.json();
+      let data;
+      try {
+        data = await response.json();
+        console.log('[SHOP DEBUG] Purchase response data:', data);
+      } catch (jsonError) {
+        console.error('[SHOP DEBUG] Purchase response JSON parse error:', jsonError);
+        const responseText = await response.text();
+        console.log('[SHOP DEBUG] Purchase response text:', responseText);
+        
+        dispatch(showAlert({
+          title: 'Hata',
+          message: 'Sunucudan geçersiz yanıt alındı.',
+          type: 'error',
+          buttons: []
+        }));
+        setPurchaseModal({ visible: false, item: null });
+        return;
+      }
 
       if (response.ok) {
         const newOwnedPawns = [...ownedPawns, item.id];
@@ -676,13 +711,12 @@ const ShopScreen = () => {
           console.error('[SHOP DEBUG] Error saving owned pawns to AsyncStorage after purchase:', error);
         }
         
-        setCustomModal({
-          visible: true,
+        dispatch(showAlert({
           title: 'Başarılı!',
           message: `${item.name} satın alındı!`,
           type: 'success',
           buttons: []
-        });
+        }));
         
         // Kullanıcının puanını güncelle (eğer puan ile satın aldıysa)
         if (item.currency === 'points' && data.newScore !== undefined) {
@@ -690,40 +724,36 @@ const ShopScreen = () => {
         }
       } else {
         if (data.error === 'Insufficient points') {
-          setCustomModal({
-            visible: true,
+          dispatch(showAlert({
             title: 'Yetersiz Puan',
             message: 'Bu ürünü satın almak için yeterli puanınız yok.',
             type: 'warning',
             buttons: []
-          });
+          }));
         } else if (data.error === 'Pawn already owned') {
-          setCustomModal({
-            visible: true,
+          dispatch(showAlert({
             title: 'Zaten Sahipsiniz',
             message: 'Bu piyona zaten sahipsiniz.',
             type: 'info',
             buttons: []
-          });
+          }));
         } else {
-          setCustomModal({
-            visible: true,
+          dispatch(showAlert({
             title: 'Hata',
             message: data.error || 'Satın alma işlemi başarısız.',
             type: 'error',
             buttons: []
-          });
+          }));
         }
       }
     } catch (error) {
       console.error('Purchase error:', error);
-      setCustomModal({
-        visible: true,
+      dispatch(showAlert({
         title: 'Hata',
         message: 'Satın alma işlemi sırasında bir hata oluştu.',
         type: 'error',
         buttons: []
-      });
+      }));
     }
     
     setPurchaseModal({ visible: false, item: null });
@@ -871,26 +901,31 @@ const ShopScreen = () => {
   };
 
   return (
-    <ImageBackground 
-      source={require('../../assets/images/wood-background.png')}
-      style={styles.container}
-      resizeMode="cover"
-    >
+    <View style={styles.container}>
       <LinearGradient
-        colors={['rgba(0,0,0,0.3)', 'rgba(0,0,0,0.6)', 'rgba(0,0,0,0.4)']}
+        colors={['#1a0033', '#330066', '#4d0099']}
         style={styles.gradient}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
       >
-        <TouchableOpacity 
-          style={styles.backButton}
-          onPress={() => router.back()}
-        >
-          <Ionicons name="arrow-back" size={24} color="white" />
-        </TouchableOpacity>
-        
-        {/* Elmas Gösterimi */}
-        <View style={styles.diamondDisplay}>
-          <Ionicons name="diamond" size={20} color="#9C27B0" />
-          <Text style={styles.diamondText}>{diamonds}</Text>
+        {/* Header */}
+        <View style={styles.header}>
+          <TouchableOpacity 
+            style={styles.backButton}
+            onPress={() => router.back()}
+          >
+            <Ionicons name="arrow-back" size={24} color="white" />
+          </TouchableOpacity>
+          
+          <View style={styles.headerTitleContainer}>
+            <Text style={styles.headerTitle}>Piyon Mağazası</Text>
+          </View>
+
+          {/* Elmas Gösterimi */}
+          <View style={styles.diamondDisplay}>
+            <Ionicons name="diamond" size={20} color="#00D9CC" />
+            <Text style={styles.diamondText}>{diamonds}</Text>
+          </View>
         </View>
 
         {/* Elmas Kazanma Butonu */}
@@ -899,9 +934,9 @@ const ShopScreen = () => {
             style={styles.earnDiamondsButton}
             onPress={() => router.push('/(auth)/earndiamonds')}
           >
-            <Ionicons name="diamond" size={20} color="#FFFFFF" />
+            <Ionicons name="diamond" size={20} color="#FFD700" />
             <Text style={styles.earnDiamondsText}>Elmas Kazan</Text>
-            <Ionicons name="chevron-forward" size={16} color="#FFFFFF" />
+            <Ionicons name="chevron-forward" size={16} color="#FFD700" />
           </TouchableOpacity>
         </View>
 
@@ -916,6 +951,7 @@ const ShopScreen = () => {
           <ScrollView 
             style={styles.scrollView}
             showsVerticalScrollIndicator={false}
+            contentContainerStyle={styles.scrollViewContent}
           >
             <View style={styles.pawnGrid}>
               {PAWN_CATEGORIES[selectedCategory].items.map(renderPawnItem)}
@@ -940,12 +976,12 @@ const ShopScreen = () => {
                   <View style={styles.modalPriceContainer}>
                     {purchaseModal.item.currency === 'diamonds' ? (
                       <>
-                        <Ionicons name="diamond" size={24} color="#9C27B0" />
+                        <Ionicons name="diamond" size={24} color="#FFD700" />
                         <Text style={styles.modalPrice}>{purchaseModal.item.price} Elmas</Text>
                       </>
                     ) : purchaseModal.item.currency === 'points' ? (
                       <>
-                        <Ionicons name="trophy" size={24} color="#FFD700" />
+                        <Ionicons name="trophy" size={24} color="#E61A8D" />
                         <Text style={styles.modalPrice}>{purchaseModal.item.price} Puan</Text>
                       </>
                     ) : (
@@ -981,17 +1017,8 @@ const ShopScreen = () => {
           </View>
         </Modal>
 
-        {/* Custom Modal */}
-        <CustomModal
-          visible={customModal.visible}
-          title={customModal.title}
-          message={customModal.message}
-          type={customModal.type}
-          buttons={customModal.buttons}
-          onClose={() => setCustomModal({ visible: false, title: '', message: '', type: 'info', buttons: [] })}
-        />
       </LinearGradient>
-    </ImageBackground>
+    </View>
   );
 };
 
@@ -1002,174 +1029,222 @@ const styles = StyleSheet.create({
   gradient: {
     flex: 1,
   },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingTop: 50,
+    paddingBottom: 20,
+  },
   backButton: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
     alignItems: 'center',
     justifyContent: 'center',
-    position: 'absolute',
-    top: 50,
-    left: 20,
-    zIndex: 1,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  headerTitleContainer: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  headerTitle: {
+    color: '#FFD700',
+    fontSize: 24,
+    fontFamily: 'Poppins_700Bold',
+    textShadowColor: 'rgba(255, 215, 0, 0.5)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 4,
   },
   diamondDisplay: {
-    position: 'absolute',
-    top: 50,
-    right: 20,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+    backgroundColor: 'rgba(0, 217, 204, 0.2)',
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 20,
-    zIndex: 1,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 217, 204, 0.4)',
   },
   diamondText: {
-    color: 'white',
+    color: '#00D9CC',
     fontSize: 16,
     fontFamily: 'Poppins_600SemiBold',
     marginLeft: 5,
   },
   categoryTabs: {
     flexDirection: 'row',
-    paddingHorizontal: 20,
+    paddingHorizontal: 15,
     paddingTop: 10,
     marginBottom: 20,
   },
   categoryTab: {
     flex: 1,
     alignItems: 'center',
-    paddingVertical: 15,
+    paddingVertical: 12,
     marginHorizontal: 5,
-    borderRadius: 15,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
   },
   activeCategoryTab: {
-    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+    backgroundColor: 'rgba(255, 215, 0, 0.2)',
+    borderColor: 'rgba(255, 215, 0, 0.4)',
+    shadowColor: '#FFD700',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 5,
   },
   categoryIcon: {
-    fontSize: 24,
-    marginBottom: 5,
+    fontSize: 20,
+    marginBottom: 4,
   },
   categoryText: {
     color: 'rgba(255, 255, 255, 0.7)',
-    fontSize: 12,
+    fontSize: 11,
     fontFamily: 'Poppins_500Medium',
   },
   activeCategoryText: {
-    color: 'white',
+    color: '#FFD700',
+    fontFamily: 'Poppins_600SemiBold',
   },
   earnDiamondsContainer: {
     paddingHorizontal: 20,
-    paddingTop: 100,
-    marginBottom: 5,
+    paddingTop: 10,
+    marginBottom: 15,
   },
   earnDiamondsButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(156, 39, 176, 0.25)',
-    borderWidth: 2,
-    borderColor: '#9C27B0',
-    borderRadius: 15,
+    backgroundColor: 'rgba(255, 215, 0, 0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 215, 0, 0.4)',
+    borderRadius: 20,
     paddingVertical: 12,
     paddingHorizontal: 20,
-    shadowColor: '#9C27B0',
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
+    shadowColor: '#FFD700',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.4,
+    shadowRadius: 10,
     elevation: 8,
   },
   earnDiamondsText: {
-    color: '#FFFFFF',
+    color: '#FFD700',
     fontSize: 16,
     fontFamily: 'Poppins_700Bold',
     marginHorizontal: 8,
-    textShadowColor: 'rgba(156, 39, 176, 0.5)',
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 2,
   },
   content: {
     flex: 1,
-    paddingHorizontal: 20,
+    paddingHorizontal: 15,
   },
   scrollView: {
     flex: 1,
+  },
+  scrollViewContent: {
+    paddingBottom: 30,
   },
   pawnGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'space-between',
-    paddingBottom: 20,
   },
   pawnItem: {
-    width: (width - 60) / 2,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    borderRadius: 15,
+    width: (width - 45) / 2,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    borderRadius: 20,
     padding: 15,
     marginBottom: 15,
     alignItems: 'center',
-    borderWidth: 2,
-    borderColor: 'transparent',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 5,
   },
   ownedPawnItem: {
-    borderColor: '#4CAF50',
-    backgroundColor: 'rgba(76, 175, 80, 0.2)',
+    borderColor: '#FFD700',
+    backgroundColor: 'rgba(255, 215, 0, 0.1)',
+    shadowColor: '#FFD700',
+    shadowOpacity: 0.4,
   },
   selectedPawnItem: {
     borderColor: '#FFD700',
-    backgroundColor: 'rgba(255, 215, 0, 0.2)',
-    borderWidth: 3,
+    backgroundColor: 'rgba(255, 215, 0, 0.15)',
+    borderWidth: 2,
+    shadowColor: '#FFD700',
+    shadowOpacity: 0.6,
   },
   unaffordablePawnItem: {
-    opacity: 0.5,
+    opacity: 0.4,
   },
   pawnEmojiContainer: {
     position: 'relative',
-    marginBottom: 10,
+    marginBottom: 12,
   },
   pawnEmoji: {
-    fontSize: 40,
+    fontSize: 45,
+    textShadowColor: 'rgba(0, 0, 0, 0.5)',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 3,
   },
   brandLogoContainer: {
-    width: 50,
-    height: 50,
-    backgroundColor: 'rgba(255, 255, 255, 0.9)',
-    borderRadius: 25,
+    width: 55,
+    height: 55,
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    borderRadius: 28,
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 5,
+    padding: 6,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
   },
   brandLogo: {
-    width: 40,
-    height: 40,
+    width: 45,
+    height: 45,
   },
   ownedBadge: {
     position: 'absolute',
-    top: -5,
-    right: -5,
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: '#4CAF50',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  selectedBadge: {
-    position: 'absolute',
-    top: -5,
-    left: -5,
-    width: 20,
-    height: 20,
-    borderRadius: 10,
+    top: -8,
+    right: -8,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
     backgroundColor: '#FFD700',
     alignItems: 'center',
     justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 3,
+    elevation: 4,
+  },
+  selectedBadge: {
+    position: 'absolute',
+    top: -8,
+    left: -8,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#FFD700',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 3,
+    elevation: 4,
   },
   pawnName: {
     color: 'white',
@@ -1177,54 +1252,72 @@ const styles = StyleSheet.create({
     fontFamily: 'Poppins_600SemiBold',
     textAlign: 'center',
     marginBottom: 8,
+    textShadowColor: 'rgba(0, 0, 0, 0.5)',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 2,
   },
   priceContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 10,
+    marginBottom: 12,
   },
   priceText: {
-    color: 'white',
+    color: '#FFD700',
     fontSize: 16,
     fontFamily: 'Poppins_700Bold',
     marginLeft: 5,
+    textShadowColor: 'rgba(0, 0, 0, 0.5)',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 2,
   },
   unaffordablePrice: {
     color: '#FF6B6B',
   },
   buyButton: {
-    backgroundColor: '#4CAF50',
+    backgroundColor: 'rgba(255, 215, 0, 0.2)',
+    paddingVertical: 10,
     paddingHorizontal: 20,
-    paddingVertical: 8,
     borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 215, 0, 0.4)',
+    shadowColor: '#FFD700',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 5,
   },
   disabledBuyButton: {
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderColor: 'rgba(255, 255, 255, 0.2)',
   },
   buyButtonText: {
-    color: 'white',
-    fontSize: 12,
+    color: '#FFD700',
+    fontSize: 13,
     fontFamily: 'Poppins_600SemiBold',
   },
   disabledBuyButtonText: {
-    color: 'rgba(255, 255, 255, 0.5)',
+    color: 'rgba(255, 255, 255, 0.4)',
   },
   ownedButton: {
-    backgroundColor: 'rgba(76, 175, 80, 0.3)',
+    backgroundColor: 'rgba(255, 215, 0, 0.1)',
     paddingHorizontal: 20,
     paddingVertical: 8,
     borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 215, 0, 0.3)',
   },
   ownedButtonText: {
-    color: '#4CAF50',
+    color: '#FFD700',
     fontSize: 12,
     fontFamily: 'Poppins_600SemiBold',
   },
   selectButton: {
-    backgroundColor: '#2196F3',
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
     paddingHorizontal: 20,
     paddingVertical: 8,
     borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
   },
   selectButtonText: {
     color: 'white',
@@ -1232,34 +1325,46 @@ const styles = StyleSheet.create({
     fontFamily: 'Poppins_600SemiBold',
   },
   selectedButton: {
-    backgroundColor: '#FFD700',
+    backgroundColor: 'rgba(255, 215, 0, 0.25)',
+    borderColor: 'rgba(255, 215, 0, 0.5)',
   },
   selectedButtonText: {
-    color: '#333',
+    color: '#FFD700',
   },
   // Modal Styles
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    backgroundColor: 'rgba(0, 0, 0, 0.8)',
     alignItems: 'center',
     justifyContent: 'center',
   },
   modalContent: {
-    backgroundColor: 'white',
-    borderRadius: 20,
-    padding: 30,
+    backgroundColor: '#2a2a3e',
+    borderRadius: 25,
+    padding: 25,
     alignItems: 'center',
-    width: width * 0.8,
+    width: width * 0.85,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 215, 0, 0.3)',
+    shadowColor: '#FFD700',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.4,
+    shadowRadius: 15,
+    elevation: 10,
   },
   modalEmoji: {
-    fontSize: 60,
+    fontSize: 70,
     marginBottom: 15,
+    textShadowColor: 'rgba(0, 0, 0, 0.5)',
+    textShadowOffset: { width: 2, height: 2 },
+    textShadowRadius: 4,
   },
   modalTitle: {
-    fontSize: 20,
+    fontSize: 22,
     fontFamily: 'Poppins_700Bold',
-    color: '#333',
+    color: '#FFD700',
     marginBottom: 15,
+    textAlign: 'center',
   },
   modalPriceContainer: {
     flexDirection: 'row',
@@ -1267,17 +1372,18 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   modalPrice: {
-    fontSize: 18,
+    fontSize: 20,
     fontFamily: 'Poppins_600SemiBold',
-    color: '#333',
+    color: '#FFD700',
     marginLeft: 8,
   },
   modalDescription: {
     fontSize: 16,
-    color: '#666',
+    color: 'rgba(255, 255, 255, 0.8)',
     textAlign: 'center',
     marginBottom: 25,
     fontFamily: 'Poppins_400Regular',
+    lineHeight: 22,
   },
   modalButtons: {
     flexDirection: 'row',
@@ -1285,29 +1391,33 @@ const styles = StyleSheet.create({
   },
   modalCancelButton: {
     flex: 1,
-    backgroundColor: '#f0f0f0',
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
     paddingVertical: 15,
-    borderRadius: 10,
+    borderRadius: 15,
     marginRight: 10,
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
   },
   modalConfirmButton: {
     flex: 1,
-    backgroundColor: '#4CAF50',
+    backgroundColor: 'rgba(255, 215, 0, 0.2)',
     paddingVertical: 15,
-    borderRadius: 10,
+    borderRadius: 15,
     marginLeft: 10,
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 215, 0, 0.4)',
   },
   modalCancelText: {
-    color: '#666',
+    color: 'rgba(255, 255, 255, 0.7)',
     fontSize: 16,
     fontFamily: 'Poppins_600SemiBold',
   },
   modalConfirmText: {
-    color: 'white',
+    color: '#FFD700',
     fontSize: 16,
-    fontFamily: 'Poppins_600SemiBold',
+    fontFamily: 'Poppins_700Bold',
   },
 });
 

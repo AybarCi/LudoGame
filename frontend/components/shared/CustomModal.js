@@ -23,13 +23,13 @@ const CustomModal = ({
   const getIconAndColor = () => {
     switch (type) {
       case 'success':
-        return { icon: 'checkmark-circle', color: '#4CAF50' };
+        return { icon: 'checkmark-circle', color: '#00D9CC' };
       case 'error':
-        return { icon: 'close-circle', color: '#F44336' };
+        return { icon: 'close-circle', color: '#E61A8D' };
       case 'warning':
-        return { icon: 'warning', color: '#FF9800' };
+        return { icon: 'warning', color: '#E61A8D' };
       default:
-        return { icon: 'information-circle', color: '#2196F3' };
+        return { icon: 'information-circle', color: '#00D9CC' };
     }
   };
 
@@ -153,7 +153,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   primaryButton: {
-    backgroundColor: '#4CAF50',
+    backgroundColor: '#6E00B3',
   },
   secondaryButton: {
     backgroundColor: '#E0E0E0',

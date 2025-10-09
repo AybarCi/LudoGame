@@ -19,6 +19,37 @@ if (isRealDevice) {
   }
 }
 
+// Mock reklam servisi (geliştirme ortamı için)
+const MockAdService = {
+  showMockRewardedAd: async () => {
+    return new Promise(async (resolve) => {
+      console.log('🎬 Mock Rewarded Ad: Reklam simülasyonu başlatıldı');
+      
+      // 3 saniyelik reklam simülasyonu
+      await new Promise(r => setTimeout(r, 1000));
+      console.log('✅ Mock Ad: Reklam yüklendi');
+      
+      console.log('⏳ Mock Ad: Kullanıcı reklamı izliyor (3 saniye)...');
+      await new Promise(r => setTimeout(r, 3000));
+      
+      console.log('🎉 Mock Ad: Reklam başarıyla izlendi!');
+      console.log('💎 Mock Ad: Ödül kazanıldı (1 elmas)');
+      resolve({ userDidWatchAd: true });
+    });
+  },
+  
+  showMockInterstitialAd: async () => {
+    return new Promise(async (resolve) => {
+      console.log('🎬 Mock Interstitial Ad: Geçiş reklamı simülasyonu');
+      await new Promise(r => setTimeout(r, 1000));
+      console.log('📺 Mock Interstitial: Reklam gösterildi');
+      await new Promise(r => setTimeout(r, 2000));
+      console.log('✅ Mock Interstitial: Reklam tamamlandı');
+      resolve();
+    });
+  }
+};
+
 // Test reklam ID'leri (Google tarafından sağlanan)
 const INTERSTITIAL_AD_ID = __DEV__ 
   ? 'ca-app-pub-3940256099942544/1033173712' // Test ID
@@ -55,7 +86,13 @@ class AdService {
       try {
         // Web ortamında ve simülatörde AdMob çalışmaz
         if (!isRealDevice || !AdMobInterstitial) {
-          console.log('AdService: Non-real device or AdMob not available, skipping interstitial ad');
+          console.log('AdService: Non-real device or AdMob not available, using mock interstitial ad');
+          
+          // Geliştirme ortamında mock reklam göster
+          if (__DEV__) {
+            await MockAdService.showMockInterstitialAd();
+          }
+          
           resolve();
           return;
         }
@@ -81,22 +118,53 @@ class AdService {
       try {
         // Web ortamında ve simülatörde AdMob çalışmaz
         if (!isRealDevice || !AdMobRewarded) {
-          console.log('AdService: Non-real device or AdMob not available, skipping rewarded ad');
-          resolve({ userDidWatchAd: false });
+          console.log('AdService: Non-real device or AdMob not available, using mock rewarded ad');
+          
+          // Geliştirme ortamında mock reklam göster
+          if (__DEV__) {
+            const result = await MockAdService.showMockRewardedAd();
+            resolve(result);
+          } else {
+            resolve({ userDidWatchAd: false });
+          }
           return;
         }
         
-        // Reklamı yükle
+        // Reklam izleme olaylarını dinle
+        let userDidWatchAd = false;
+        
+        // Reklam ödülü verildiğinde
+        AdMobRewarded.addEventListener('rewardedVideoDidRewardUser', (reward) => {
+          console.log('User was rewarded with:', reward);
+          userDidWatchAd = true;
+        });
+        
+        // Reklam tamamlandığında
+        AdMobRewarded.addEventListener('rewardedVideoDidClose', () => {
+          console.log('Rewarded ad closed, user watched:', userDidWatchAd);
+          // Event listener'ları temizle
+          AdMobRewarded.removeAllListeners();
+          resolve({ userDidWatchAd });
+        });
+        
+        // Reklam yüklenemediğinde
+        AdMobRewarded.addEventListener('rewardedVideoDidFailToLoad', (error) => {
+          console.log('Rewarded ad failed to load:', error);
+          AdMobRewarded.removeAllListeners();
+          resolve({ userDidWatchAd: false });
+        });
+        
+        // Reklamı yükle ve göster
         await AdMobRewarded.setAdUnitID(REWARDED_AD_ID);
         await AdMobRewarded.requestAdAsync({ servePersonalizedAds: true });
+        await AdMobRewarded.showAdAsync();
         
-        // Reklam yüklendiğinde göster
-        const result = await AdMobRewarded.showAdAsync();
-        console.log('Rewarded ad shown successfully');
-        resolve({ userDidWatchAd: true });
       } catch (error) {
         console.error('Failed to show rewarded ad:', error);
-        // Reklam gösterilemezse false döndür
+        // Hata durumunda event listener'ları temizle
+        if (AdMobRewarded) {
+          AdMobRewarded.removeAllListeners();
+        }
         resolve({ userDidWatchAd: false });
       }
     });

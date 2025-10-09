@@ -7,12 +7,14 @@ import {
   TouchableOpacity,
   Modal,
   ScrollView,
-  Dimensions
+  Dimensions,
+  Alert
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { DiamondService } from '../../services/DiamondService';
-import CustomModal from './CustomModal';
+import { useDispatch } from 'react-redux';
+import { showAlert } from '../../store/slices/alertSlice';
 
 const { width, height } = Dimensions.get('window');
 const isTablet = width > 768;
@@ -20,7 +22,7 @@ const isTablet = width > 768;
 const ShopModal = ({ visible, onClose }) => {
   const [diamonds, setDiamonds] = useState(0);
   const [loading, setLoading] = useState(false);
-  const [customModal, setCustomModal] = useState({ visible: false, title: '', message: '', type: 'info', buttons: [] });
+  const dispatch = useDispatch();
 
   useEffect(() => {
     if (visible) {
@@ -91,72 +93,61 @@ const ShopModal = ({ visible, onClose }) => {
     try {
       if (item.type === 'diamonds') {
         // Gerçek uygulamada burada ödeme işlemi yapılacak
-        setCustomModal({
-          visible: true,
-          title: 'Satın Alma',
-          message: `${item.amount} elmas satın almak için ${item.price} ödeme yapılacak.\n\nBu demo sürümünde ödeme simüle edilecek.`,
-          type: 'info',
-          buttons: [
+        Alert.alert(
+          'Satın Alma',
+          `${item.amount} elmas satın almak için ${item.price} ödeme yapılacak.\n\nBu demo sürümünde ödeme simüle edilecek.`,
+          [
             {
               text: 'İptal',
               style: 'cancel',
-              onPress: () => setCustomModal({ visible: false, title: '', message: '', type: 'info', buttons: [] })
+              onPress: () => {}
             },
             {
               text: 'Satın Al',
               style: 'default',
               onPress: async () => {
-                setCustomModal({ visible: false, title: '', message: '', type: 'info', buttons: [] });
                 // Demo için elmasları ekle
                 await DiamondService.addDiamonds(item.amount);
                 await loadDiamonds();
-                setCustomModal({
-                  visible: true,
+                dispatch(showAlert({
                   title: 'Başarılı!',
                   message: `${item.amount} elmas hesabınıza eklendi!`,
-                  type: 'success',
-                  buttons: []
-                });
+                  type: 'success'
+                }));
               }
             }
           ]
-        });
+        );
       } else {
-        setCustomModal({
-          visible: true,
-          title: 'Satın Alma',
-          message: `${item.title} özelliği ${item.price} karşılığında satın alınacak.\n\nBu demo sürümünde ödeme simüle edilecek.`,
-          type: 'info',
-          buttons: [
+        Alert.alert(
+          'Satın Alma',
+          `${item.title} özelliği ${item.price} karşılığında satın alınacak.\n\nBu demo sürümünde ödeme simüle edilecek.`,
+          [
             {
               text: 'İptal',
               style: 'cancel',
-              onPress: () => setCustomModal({ visible: false, title: '', message: '', type: 'info', buttons: [] })
+              onPress: () => {}
             },
             {
               text: 'Satın Al',
               style: 'default',
               onPress: () => {
-                setCustomModal({
-                  visible: true,
+                dispatch(showAlert({
                   title: 'Başarılı!',
                   message: `${item.title} özelliği aktifleştirildi!`,
-                  type: 'success',
-                  buttons: []
-                });
+                  type: 'success'
+                }));
               }
             }
           ]
-        });
+        );
       }
     } catch (error) {
-      setCustomModal({
-        visible: true,
-        title: 'Hata',
-        message: 'Satın alma işlemi başarısız oldu.',
-        type: 'error',
-        buttons: []
-      });
+      dispatch(showAlert({
+          title: 'Hata',
+          message: 'Satın alma işlemi başarısız oldu.',
+          type: 'error'
+        }));
     } finally {
       setLoading(false);
     }
@@ -218,7 +209,7 @@ const ShopModal = ({ visible, onClose }) => {
       <View style={styles.modalOverlay}>
         <View style={styles.modalContainer}>
           <LinearGradient
-            colors={['#667eea', '#764ba2']}
+            colors={['#6E00B3', '#E61A8D']}
             style={styles.modalGradient}
           >
             {/* Header */}
@@ -230,7 +221,7 @@ const ShopModal = ({ visible, onClose }) => {
               
               <View style={styles.headerRight}>
                 <View style={styles.diamondDisplay}>
-                  <Ionicons name="diamond" size={16} color="#9C27B0" />
+                  <Ionicons name="diamond" size={16} color="#00D9CC" />
                   <Text style={styles.diamondCount}>{diamonds}</Text>
                 </View>
                 
@@ -260,15 +251,6 @@ const ShopModal = ({ visible, onClose }) => {
         </View>
       </View>
       
-      {/* Custom Modal */}
-      <CustomModal
-        visible={customModal.visible}
-        title={customModal.title}
-        message={customModal.message}
-        type={customModal.type}
-        buttons={customModal.buttons}
-        onClose={() => setCustomModal({ visible: false, title: '', message: '', type: 'info', buttons: [] })}
-      />
     </Modal>
   );
 };
@@ -347,7 +329,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: -8,
     right: 10,
-    backgroundColor: '#FF6B35',
+    backgroundColor: '#E61A8D',
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 10,

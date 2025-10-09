@@ -42,7 +42,7 @@ const DIAMOND_PACKAGES = {
   }
 };
 
-const API_BASE_URL = `${process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3001'}/api`;
+const API_BASE_URL = `${process.env.EXPO_PUBLIC_API_URL || 'http://192.168.1.135:3001'}/api`;
 
 export const PurchaseService = {
   // In-App Purchase'ı başlat

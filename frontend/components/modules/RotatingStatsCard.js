@@ -252,7 +252,7 @@ const RotatingStatsCard = ({ stats }) => {
               <View style={styles.iconContainer}>
                 <Ionicons 
                   name={currentStat.icon} 
-                  size={28} 
+                  size={32} 
                   color={currentStat.iconColor || '#FFD700'} 
                 />
               </View>
@@ -329,9 +329,11 @@ const styles = StyleSheet.create({
   },
   iconContainer: {
     marginBottom: 8,
-    padding: 8,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    padding: 12,
+    borderRadius: 25,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
   },
   value: {
     fontSize: 24,

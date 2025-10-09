@@ -237,7 +237,8 @@ const GameBoard = ({ pawns, onPawnPress, currentPlayer, diceValue, playersInfo, 
   const boardLayout = generateBoardLayout(safePawns, safeCurrentPlayer, safeDiceValue);
 
   return (
-    <View style={[styles.board, style]}>
+    <View style={[styles.boardContainer, style]}>
+      <View style={styles.board}>
       {boardLayout.map((cell, index) => {
         const backgroundColor =
           cell.type === 'base' ? TRANSPARENT_COLORS[cell.color] : // Use transparent colors for bases
@@ -330,6 +331,7 @@ const GameBoard = ({ pawns, onPawnPress, currentPlayer, diceValue, playersInfo, 
           {playersInfo.blue && <Text style={[styles.nickname, styles.nicknameBlue]}>{playersInfo.blue.nickname}</Text>}
         </>
       )}
+      </View>
     </View>
   );
 };
@@ -341,6 +343,11 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: 'black',
     opacity: 0.6,
+  },
+  boardContainer: {
+    width: '100%',
+    height: '100%',
+    aspectRatio: 1, // Kare oranını koru
   },
   board: {
     width: '100%',

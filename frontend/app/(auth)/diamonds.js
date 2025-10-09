@@ -6,12 +6,13 @@ import {
   TouchableOpacity,
   ScrollView,
   ActivityIndicator,
-  Dimensions,
-  Modal
+  Dimensions
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
+import { useDispatch } from 'react-redux';
+import { showAlert } from '../../store/slices/alertSlice';
 import { DiamondService } from '../../services/DiamondService';
 import { PurchaseService } from '../../services/PurchaseService';
 
@@ -23,12 +24,10 @@ export default function DiamondsScreen() {
   const [purchaseLoading, setPurchaseLoading] = useState(false);
   const [diamondPackages, setDiamondPackages] = useState([]);
   const [products, setProducts] = useState([]);
-  const [modalVisible, setModalVisible] = useState(false);
-  const [modalConfig, setModalConfig] = useState({ title: '', message: '', buttons: [] });
+  const dispatch = useDispatch();
 
-  const showModal = (title, message, buttons = null) => {
-    setModalConfig({ title, message, buttons });
-    setModalVisible(true);
+  const showModal = (title, message) => {
+    dispatch(showAlert({ title, message, type: 'info' }));
   };
 
   useEffect(() => {
@@ -97,10 +96,10 @@ export default function DiamondsScreen() {
         disabled={purchaseLoading}
       >
         <LinearGradient
-          colors={['#4A90E2', '#357ABD']}
+          colors={['#6E00B3', '#4A0080']}
           style={styles.packageGradient}
         >
-          <Ionicons name="diamond" size={32} color="#FFD700" />
+          <Ionicons name="diamond" size={32} color="#00D9CC" />
           <Text style={styles.packageTitle}>{packageInfo.title}</Text>
           <Text style={styles.packageDiamonds}>{packageInfo.diamonds} Elmas</Text>
           <Text style={styles.packagePrice}>{price}</Text>
@@ -119,7 +118,7 @@ export default function DiamondsScreen() {
   }
 
   return (
-    <LinearGradient colors={['#1a1a2e', '#16213e']} style={styles.container}>
+    <LinearGradient colors={['#6E00B3', '#4A0080']} style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollContent}>
         {/* Header */}
         <View style={styles.header}>
@@ -131,7 +130,7 @@ export default function DiamondsScreen() {
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Elmas Satın Al</Text>
           <View style={styles.diamondHeader}>
-            <Ionicons name="diamond" size={20} color="#FFD700" />
+            <Ionicons name="diamond" size={20} color="#00D9CC" />
             <Text style={styles.diamondCount}>{diamonds}</Text>
           </View>
         </View>
@@ -179,35 +178,6 @@ export default function DiamondsScreen() {
           <Text style={styles.loadingText}>İşlem yapılıyor...</Text>
         </View>
       )}
-
-      {/* Modal */}
-      <Modal
-        animationType="fade"
-        transparent={true}
-        visible={modalVisible}
-        onRequestClose={() => setModalVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContainer}>
-            <Text style={styles.modalTitle}>{modalConfig.title}</Text>
-            <Text style={styles.modalMessage}>{modalConfig.message}</Text>
-            
-            <View style={styles.modalButtonContainer}>
-              <TouchableOpacity
-                style={styles.modalButton}
-                onPress={() => setModalVisible(false)}
-              >
-                <LinearGradient
-                  colors={['#4A90E2', '#357ABD']}
-                  style={[styles.modalButtonGradient, styles.modalButtonPrimary]}
-                >
-                  <Text style={[styles.modalButtonText, styles.modalButtonTextPrimary]}>Tamam</Text>
-                </LinearGradient>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
     </LinearGradient>
   );
 }
@@ -223,10 +193,10 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#1a1a2e',
+    backgroundColor: '#6E00B3',
   },
   loadingText: {
-    color: 'white',
+    color: '#00D9CC',
     marginTop: 10,
     fontSize: 16,
   },
@@ -242,7 +212,7 @@ const styles = StyleSheet.create({
     padding: 8,
   },
   headerTitle: {
-    color: 'white',
+    color: '#00D9CC',
     fontSize: 20,
     fontWeight: 'bold',
   },
@@ -251,7 +221,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   diamondCount: {
-    color: 'white',
+    color: '#00D9CC',
     fontSize: 16,
     fontWeight: 'bold',
     marginLeft: 5,
@@ -260,7 +230,7 @@ const styles = StyleSheet.create({
     margin: 20,
   },
   sectionTitle: {
-    color: 'white',
+    color: '#00D9CC',
     fontSize: 18,
     fontWeight: 'bold',
     marginBottom: 15,
@@ -288,7 +258,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   packageDiamonds: {
-    color: '#FFD700',
+    color: '#00D9CC',
     fontSize: 16,
     fontWeight: 'bold',
     marginTop: 4,
@@ -301,13 +271,19 @@ const styles = StyleSheet.create({
   restoreButton: {
     margin: 20,
     padding: 15,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    backgroundColor: '#E61A8D',
     borderRadius: 12,
     alignItems: 'center',
+    shadowColor: '#E61A8D',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
   },
   restoreButtonText: {
     color: 'white',
     fontSize: 16,
+    fontWeight: 'bold',
   },
   loadingOverlay: {
     position: 'absolute',
@@ -318,76 +294,5 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 0, 0, 0.7)',
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  modalContainer: {
-    backgroundColor: '#1e1e2e',
-    borderRadius: 20,
-    padding: 25,
-    margin: 20,
-    maxWidth: 320,
-    width: '85%',
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
-    shadowOpacity: 0.3,
-    shadowRadius: 6,
-    elevation: 8,
-    borderWidth: 1,
-    borderColor: 'rgba(74, 144, 226, 0.3)',
-  },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#FFD700',
-    textAlign: 'center',
-    marginBottom: 15,
-  },
-  modalMessage: {
-    fontSize: 16,
-    color: '#E0E0E0',
-    textAlign: 'center',
-    marginBottom: 25,
-    lineHeight: 24,
-  },
-  modalButtonContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    gap: 10,
-  },
-  modalButton: {
-     borderRadius: 12,
-     flex: 1,
-     marginHorizontal: 5,
-     overflow: 'hidden',
-   },
-   modalButtonGradient: {
-     paddingVertical: 14,
-     paddingHorizontal: 25,
-     borderRadius: 12,
-   },
-   modalButtonPrimary: {
-   },
-   modalButtonSecondary: {
-     borderWidth: 1,
-     borderColor: '#666',
-   },
-  modalButtonText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    textAlign: 'center',
-  },
-  modalButtonTextPrimary: {
-    color: 'white',
-  },
-  modalButtonTextSecondary: {
-    color: '#ccc',
   },
 });

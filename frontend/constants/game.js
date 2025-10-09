@@ -50,3 +50,5 @@ export const PATH_MAP = {
     path: Array.from({ length: 56 }, (_, i) => (27 + i) % 56),
   },
 };
+
+export const API_BASE_URL = 'http://192.168.1.21:3001'; // Local network IP

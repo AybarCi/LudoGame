@@ -1,75 +1,66 @@
+import React from 'react';
 import { AuthProvider, useAuth } from '../store/AuthProvider';
+import ReduxAuthProvider from '../store/ReduxAuthProvider';
 import { SocketProvider, useSocket } from '../store/SocketProvider';
-import { Stack, SplashScreen, useRouter, useSegments } from 'expo-router';
+import { Provider, useSelector } from 'react-redux';
+import { store } from '../store';
+import { AuthListener } from '../store/AuthListener';
+import SimpleAlertListener from '../components/shared/SimpleAlertListener';
+import { Stack } from 'expo-router';
 import { ActivityIndicator, ImageBackground, StyleSheet } from 'react-native';
 import { useFonts, Poppins_400Regular, Poppins_600SemiBold, Poppins_700Bold } from '@expo-google-fonts/poppins';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { AdService } from '../services/AdService';
+import CustomSplashScreen from '../components/SplashScreen';
 
 
-// Prevent the splash screen from auto-hiding before asset loading is complete.
-SplashScreen.preventAutoHideAsync();
+// Custom splash screen kullanıyoruz, expo splash screen'i devre dışı bırak
 
-function InitialLayout() {
+const InitialLayout = React.memo(function InitialLayout() {
+  // TÜM hook'ları en başta çağır - React hooks kuralları KESİNLİKLE zorunlu
   const [fontsLoaded, fontError] = useFonts({
     Poppins_400Regular,
     Poppins_600SemiBold,
     Poppins_700Bold,
   });
+  const [isReady, setIsReady] = useState(false);
 
-  const { session, loading, user } = useAuth();
-  const { connect } = useSocket();
-  const router = useRouter();
-  const segments = useSegments();
+  const authState = useSelector(state => state?.auth || { isLoading: false, user: null });
+  const loading = authState.isLoading;
+  const user = authState.user;
+  
+  // useSocket hook'unu güvenli şekilde kullan
+  const socketContext = useSocket();
+  const connect = socketContext?.connect;
 
-  // Socket bağlantısını otomatik olarak başlat
+  // Socket bağlantısını otomatik olarak başlat - HER ZAMAN çağrılır
   useEffect(() => {
-    if (user && connect) {
-      connect(user);
+    if (user && connect && typeof connect === 'function') {
+      // Extract actual user object if it's wrapped in success property
+      const actualUser = user.success && user.user ? user.user : user;
+      try {
+        connect(actualUser);
+      } catch (error) {
+        console.error('[InitialLayout] Socket bağlantısı başlatılamadı:', error);
+      }
     }
   }, [user, connect]);
 
+  // Font ve hazırlık effect'i - HER ZAMAN çağrılır
   useEffect(() => {
     if (fontError) throw fontError;
 
     if (fontsLoaded) {
-      SplashScreen.hideAsync();
+      // Fontlar yüklendiğinde hazır durumuna geç
+      setIsReady(true);
       // AdService'i initialize et
       AdService.initialize();
     }
   }, [fontsLoaded, fontError]);
 
-  useEffect(() => {
-    if (!fontsLoaded || loading) return;
-
-    // Add a small delay to ensure the layout is fully mounted
-    const timer = setTimeout(() => {
-      const inAuthGroup = segments[0] === '(auth)';
-
-      if (session && !inAuthGroup) {
-        router.replace('/(auth)/home');
-      } else if (!session && inAuthGroup) {
-        router.replace('/login');
-      } else if (!session && !inAuthGroup) {
-        if (segments[0] !== 'login') {
-          router.replace('/login');
-        }
-      }
-    }, 100);
-
-    return () => clearTimeout(timer);
-  }, [session, loading, fontsLoaded, segments, router]);
-
-  if (!fontsLoaded || loading) {
-    return (
-      <ImageBackground 
-        source={require('../assets/images/wood-background.png')} 
-        style={styles.loadingContainer}
-        resizeMode="cover"
-      >
-        <ActivityIndicator size="large" color="#ffffff" />
-      </ImageBackground>
-    );
+  // Conditional return SADECE tüm hook'lar çağrıldıktan sonra
+  if (!fontsLoaded || !isReady) {
+    return null;
   }
 
   return (
@@ -82,29 +73,35 @@ function InitialLayout() {
       <Stack.Screen name="(auth)" />
     </Stack>
   );
-}
+});
 
 const styles = StyleSheet.create({
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: '#1a1a2e',
   },
 });
 
-function RootLayoutNav() {
+const AppContent = React.memo(function AppContent() {
   return (
-    <AuthProvider>
-      <InitialLayout />
-    </AuthProvider>
+    <SocketProvider>
+      <AuthListener>
+        <InitialLayout />
+        <SimpleAlertListener />
+      </AuthListener>
+    </SocketProvider>
   );
-}
+});
 
 export default function RootLayout() {
   return (
-    <SocketProvider>
-      <RootLayoutNav />
-    </SocketProvider>
+    <Provider store={store}>
+      <ReduxAuthProvider>
+        <AppContent />
+      </ReduxAuthProvider>
+    </Provider>
   );
 }
 

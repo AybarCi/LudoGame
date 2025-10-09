@@ -3,7 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
 import { DiamondService } from '../services/DiamondService';
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3001';
+const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://192.168.1.135:3001';
 
 const AuthContext = createContext({});
 
@@ -215,7 +215,7 @@ export function AuthProvider({ children }) {
             // Root Layout'un mount edilmesini beklemek için setTimeout kullan
             setTimeout(() => {
                 router.replace('/login');
-            }, 100);
+            }, 300);
         } catch (error) {
             console.error('Sign out error:', error);
         } finally {

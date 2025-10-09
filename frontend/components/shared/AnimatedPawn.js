@@ -116,8 +116,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   pawnWrapper: {
-    width: '80%',
-    height: '80%',
+    width: '85%', // Piyonları biraz daha büyük
+    height: '85%', // Piyonları biraz daha büyük
     justifyContent: 'center',
     alignItems: 'center',
     borderRadius: 50,
@@ -149,7 +149,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   emojiText: {
-    fontSize: 16,
+    fontSize: 18, // Piyon emojilerini biraz daha büyük
     textAlign: 'center',
   },
   teamContainer: {
@@ -171,7 +171,7 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(0, 0, 0, 0.2)',
   },
   teamText: {
-    fontSize: 14,
+    fontSize: 14, // iPhone için uygun boyut
     fontWeight: 'bold',
     textAlign: 'center',
   },

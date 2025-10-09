@@ -1,343 +1,401 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, StyleSheet, Alert, ActivityIndicator, ImageBackground, Animated, Dimensions, TouchableOpacity } from 'react-native';
-import { Input, Button, Text } from '@rneui/themed';
-import { useAuth } from '../store/AuthProvider';
+import {
+  View,
+  ActivityIndicator,
+  Animated,
+  TouchableOpacity,
+  TextInput,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  ImageBackground,
+  Image
+} from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Text } from '@rneui/themed';
+import { useDispatch, useSelector } from 'react-redux';
+import { useRouter } from 'expo-router';
+import { 
+  sendVerificationCode, 
+  signInWithPhone, 
+  registerWithPhone,
+  setPhoneNumber, 
+  decrementTimer,
+  verifyCode
+} from '../store/slices/authSlice';
+import { showAlert } from '../store/slices/alertSlice';
+import VerificationModal from '../components/VerificationModal';
+import { loginStyles as styles } from './login.styles';
 
-const { width, height } = Dimensions.get('window');
+const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://192.168.1.135:3001';
 
-const LoginScreen = () => {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+// Preload background image to prevent loading delay
+const logoImage = require('../assets/images/logo.png');
+
+export default function LoginScreen() {
+  const dispatch = useDispatch();
+  const router = useRouter();
+  const {
+    user,
+    session,
+    timer
+  } = useSelector((state) => state.auth);
+  
+  const [phoneNumber, setPhoneNumberState] = useState('');
   const [nickname, setNickname] = useState('');
-  const [isRegistering, setIsRegistering] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
-  const { signIn, signUp, loading } = useAuth();
+  const [verificationCode, setVerificationCode] = useState('');
+  const [showNicknameScreen, setShowNicknameScreen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [showVerificationModalLocal, setShowVerificationModalLocal] = useState(false);
   
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(30)).current;
   const scaleAnim = useRef(new Animated.Value(0.9)).current;
 
   useEffect(() => {
-    Animated.parallel([
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 800,
-        useNativeDriver: true,
-      }),
-      Animated.timing(slideAnim, {
-        toValue: 0,
-        duration: 600,
-        useNativeDriver: true,
-      }),
-      Animated.spring(scaleAnim, {
-        toValue: 1,
-        tension: 50,
-        friction: 8,
-        useNativeDriver: true,
-      }),
-    ]).start();
+    // Start animations immediately
+    setTimeout(() => {
+      Animated.parallel([
+        Animated.timing(fadeAnim, {
+          toValue: 1,
+          duration: 800,
+          useNativeDriver: true,
+        }),
+        Animated.timing(slideAnim, {
+          toValue: 0,
+          duration: 600,
+          useNativeDriver: true,
+        }),
+        Animated.spring(scaleAnim, {
+          toValue: 1,
+          tension: 50,
+          friction: 8,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    }, 300);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(() => {
+    let interval;
+    if (timer > 0) {
+      interval = setInterval(() => {
+        dispatch(decrementTimer());
+      }, 1000);
+    }
+    return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [timer]);
+
+
+
+  const handlePhoneNumberChange = (text) => {
+    // Sadece rakamları al
+    const cleaned = text.replace(/\D/g, '');
+    
+    // Backend'in beklediği format: 5xx xxx xx xx
+    let formatted = cleaned;
+    if (cleaned.length > 0) {
+      if (cleaned.length <= 3) {
+        formatted = cleaned;
+      } else if (cleaned.length <= 6) {
+        formatted = `${cleaned.slice(0, 3)} ${cleaned.slice(3)}`;
+      } else if (cleaned.length <= 8) {
+        formatted = `${cleaned.slice(0, 3)} ${cleaned.slice(3, 6)} ${cleaned.slice(6)}`;
+      } else if (cleaned.length <= 10) {
+        formatted = `${cleaned.slice(0, 3)} ${cleaned.slice(3, 6)} ${cleaned.slice(6, 8)} ${cleaned.slice(8, 10)}`;
+      }
+    }
+    
+    setPhoneNumberState(formatted);
+  };
+
+  const validatePhoneNumber = () => {
+    const cleaned = phoneNumber.replace(/\D/g, '');
+    return cleaned.length === 10 && cleaned.startsWith('5');
+  };
+
+  const getCleanPhoneNumber = (phone) => {
+    // Backend'e gönderilecek temiz telefon numarası (boşluksuz)
+    return phone.replace(/\D/g, '');
+  };
+
   async function handleSignIn() {
-    if (!email || !password) {
-      Alert.alert('Giriş Hatası', 'Lütfen e-posta ve şifre alanlarını doldurun.');
+    console.log('=== LOGIN BUTONUNA BASILDI ===');
+    console.log('API_URL:', API_URL);
+    
+    if (!validatePhoneNumber()) {
+      dispatch(showAlert({ message: 'Lütfen geçerli bir telefon numarası girin. (5xx xxx xx xx)', type: 'error' }));
       return;
     }
     
-    if (!email.includes('@')) {
-      Alert.alert('Giriş Hatası', 'Lütfen geçerli bir e-posta adresi girin.');
-      return;
-    }
+    const cleanPhoneNumber = getCleanPhoneNumber(phoneNumber);
+    console.log('Gönderilecek telefon numarası:', cleanPhoneNumber);
+    console.log('Request endpoint:', `${API_URL}/api/send-sms-code`);
+    console.log('Request body:', JSON.stringify({ phoneNumber: cleanPhoneNumber }));
     
-    const { error } = await signIn(email, password);
-    if (error) {
-      Alert.alert('Giriş Hatası', error.message);
+    dispatch(setPhoneNumber(cleanPhoneNumber));
+    
+    try {
+      const result = await dispatch(sendVerificationCode(cleanPhoneNumber));
+      console.log('Response result:', result);
+      
+      if (sendVerificationCode.fulfilled.match(result)) {
+        console.log('✅ SMS kodu başarıyla gönderildi');
+        setShowVerificationModalLocal(true);
+      } else if (sendVerificationCode.rejected.match(result)) {
+        console.log('❌ SMS kodu gönderilemedi:', result.payload);
+        dispatch(showAlert({ message: result.payload, type: 'error' }));
+      }
+    } catch (error) {
+      console.log('🚨 Exception during SMS send:', error);
+      console.log('Error name:', error.name);
+      console.log('Error message:', error.message);
+      console.log('Error stack:', error.stack);
     }
   }
 
-  async function handleSignUp() {
-    if (!email || !password || !nickname) {
-      Alert.alert('Kayıt Hatası', 'Lütfen tüm alanları doldurun.');
+  async function handleResendCode() {
+    if (timer > 0) return;
+    
+    // Clear the verification code input
+    setVerificationCode('');
+    
+    const cleanPhoneNumber = getCleanPhoneNumber(phoneNumber);
+    const result = await dispatch(sendVerificationCode(cleanPhoneNumber));
+    
+    if (sendVerificationCode.fulfilled.match(result)) {
+      dispatch(showAlert({ 
+        message: 'Telefonunuza doğrulama kodu gönderildi. (Demo: Kod konsolda)', 
+        type: 'success' 
+      }));
+    } else if (sendVerificationCode.rejected.match(result)) {
+      dispatch(showAlert({ message: result.payload, type: 'error' }));
+    }
+  }
+
+  async function handleVerifyCode(code) {
+    if (!code || code.length !== 6) {
+      dispatch(showAlert({ message: 'Lütfen 6 haneli doğrulama kodunu girin.', type: 'error' }));
+      return;
+    }
+
+    setLoading(true);
+    setVerificationCode(code); // Store the verification code for registration
+
+    try {
+      const cleanPhoneNumber = getCleanPhoneNumber(phoneNumber);
+      
+      // First verify the code
+      const verifyResult = await dispatch(verifyCode({ phoneNumber: cleanPhoneNumber, code: code }));
+      
+      if (verifyCode.rejected.match(verifyResult)) {
+        dispatch(showAlert({ message: verifyResult.payload || 'Doğrulama kodu hatalı', type: 'error' }));
+        setLoading(false);
+        return;
+      }
+      
+      // Code verified successfully, check if user exists
+      if (verifyResult.payload.userExists) {
+        // User exists, check if they have a nickname
+        const userData = verifyResult.payload.user;
+        
+        // Close the modal
+        setShowVerificationModalLocal(false);
+        
+        if (!userData.nickname || userData.nickname.trim() === '') {
+          // User exists but doesn't have a nickname, show nickname screen
+          setShowNicknameScreen(true);
+        } else {
+          // User has nickname, generate tokens and login
+          const result = await dispatch(signInWithPhone({ phoneNumber: cleanPhoneNumber, code: code }));
+          
+          if (signInWithPhone.fulfilled.match(result)) {
+            // Login successful, go to home
+            // Navigate to home screen
+            router.push('/(auth)/home');
+          } else {
+            dispatch(showAlert({ message: result.payload || 'Giriş başarısız', type: 'error' }));
+          }
+        }
+      } else {
+        // User doesn't exist, show nickname screen to register
+        setShowVerificationModalLocal(false);
+        setShowNicknameScreen(true);
+      }
+    } catch (error) {
+      console.error('Verification error:', error);
+      dispatch(showAlert({ message: 'Doğrulama sırasında hata oluştu', type: 'error' }));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleNicknameSubmit() {
+    if (!nickname.trim()) {
+      dispatch(showAlert({ message: 'Lütfen bir rumuz girin.', type: 'error' }));
       return;
     }
     
-    if (!email.includes('@')) {
-      Alert.alert('Kayıt Hatası', 'Lütfen geçerli bir e-posta adresi girin.');
+    if (nickname.length < 3) {
+      dispatch(showAlert({ message: 'Rumuz en az 3 karakter olmalıdır.', type: 'error' }));
       return;
     }
     
-    if (password.length < 6) {
-      Alert.alert('Kayıt Hatası', 'Şifre en az 6 karakter olmalıdır.');
-      return;
-    }
+    setLoading(true);
     
-    const { error } = await signUp(email, password, nickname);
-    if (error) {
-      Alert.alert('Kayıt Hatası', error.message);
-    } else {
-      Alert.alert('Başarılı', 'Kayıt başarılı! Lütfen giriş yapın.');
-      setIsRegistering(false);
+    try {
+      const cleanPhoneNumber = getCleanPhoneNumber(phoneNumber);
+      
+      // Register the user with phone, verification code, and nickname
+      const result = await dispatch(registerWithPhone({ 
+        phoneNumber: cleanPhoneNumber, 
+        code: verificationCode, // Store the verification code from previous step
+        nickname: nickname.trim() 
+      }));
+
+      if (registerWithPhone.fulfilled.match(result)) {
+        // Registration successful
+        setShowNicknameScreen(false);
+        // Navigate to home screen
+        router.push('/(auth)/home');
+      } else {
+        dispatch(showAlert({ message: result.payload || 'Kayıt başarısız', type: 'error' }));
+      }
+      
+    } catch (error) {
+      console.error('Registration error:', error);
+      dispatch(showAlert({ message: 'Kayıt sırasında hata oluştu', type: 'error' }));
+    } finally {
+      setLoading(false);
     }
   }
 
   return (
-    <ImageBackground 
-      source={require('../assets/images/wood-background.png')}
-      style={styles.container}
-      resizeMode="cover"
-    >
+    <View style={styles.container}>
       <LinearGradient
-        colors={['rgba(0,0,0,0.4)', 'rgba(0,0,0,0.7)', 'rgba(0,0,0,0.5)']}
-        style={styles.gradient}
+        colors={['#6E00B3', '#E61A8D', '#00D9CC']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={styles.backgroundGradient}
       >
-        <Animated.View 
-          style={[
-            styles.formContainer,
-            {
-              opacity: fadeAnim,
-              transform: [
-                { translateY: slideAnim },
-                { scale: scaleAnim }
-              ]
-            }
-          ]}
+        <KeyboardAvoidingView 
+          style={styles.keyboardAvoidingView}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
         >
-          <View style={styles.headerContainer}>
-            <View style={styles.logoContainer}>
-              <Ionicons name="game-controller" size={60} color="#FFD700" />
-              <View style={styles.iconGlow} />
-            </View>
-            <Text style={styles.title}>
-              {isRegistering ? 'Hesap Oluştur' : 'Hoş Geldin!'}
-            </Text>
-            <Text style={styles.subtitle}>
-              {isRegistering ? 'Ludo Turco ailesine katıl' : 'Oyuna devam etmek için giriş yap'}
-            </Text>
-          </View>
-
-          <View style={styles.inputsContainer}>
-            <View style={styles.inputWrapper}>
-              <Input
-                placeholder='E-posta adresin'
-                leftIcon={{ type: 'ionicon', name: 'mail-outline', color: '#FFD700', size: 20 }}
-                onChangeText={setEmail}
-                value={email}
-                inputContainerStyle={styles.inputContainer}
-                inputStyle={styles.inputText}
-                placeholderTextColor="rgba(255,255,255,0.7)"
-                autoCapitalize="none"
-                keyboardType="email-address"
-              />
-            </View>
-
-            <View style={styles.inputWrapper}>
-              <Input
-                placeholder='Şifren'
-                leftIcon={{ type: 'ionicon', name: 'lock-closed-outline', color: '#FFD700', size: 20 }}
-                rightIcon={
-                  <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
-                    <Ionicons 
-                      name={showPassword ? 'eye-outline' : 'eye-off-outline'} 
-                      size={20} 
-                      color="rgba(255,255,255,0.7)" 
-                    />
-                  </TouchableOpacity>
+          <ScrollView 
+            contentContainerStyle={styles.scrollContainer}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+            bounces={false}
+          >
+            <Animated.View
+              style={[
+                styles.formContainer,
+                {
+                  opacity: fadeAnim,
+                  transform: [
+                    { translateY: slideAnim },
+                    { scale: scaleAnim }
+                  ]
                 }
-                onChangeText={setPassword}
-                value={password}
-                secureTextEntry={!showPassword}
-                inputContainerStyle={styles.inputContainer}
-                inputStyle={styles.inputText}
-                placeholderTextColor="rgba(255,255,255,0.7)"
-                autoCapitalize="none"
-              />
+              ]}
+            >
+            <View style={styles.headerContainer}>
+              {/* Logo */}
+              <Animated.View style={[styles.logoContainer, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
+                <Image source={logoImage} style={styles.logoImage} resizeMode="contain" />
+              </Animated.View>
+              <Text style={styles.subtitle}>
+                {showNicknameScreen 
+                  ? 'Oyun içinde görünecek rumuzunu belirle' 
+                  : 'Telefon numaranla giriş yap'
+                }
+              </Text>
             </View>
 
-            {isRegistering && (
-              <Animated.View style={styles.inputWrapper}>
-                <Input
-                  placeholder='Rumuzun (oyunda görünecek isim)'
-                  leftIcon={{ type: 'ionicon', name: 'person-outline', color: '#FFD700', size: 20 }}
-                  onChangeText={setNickname}
-                  value={nickname}
-                  inputContainerStyle={styles.inputContainer}
-                  inputStyle={styles.inputText}
-                  placeholderTextColor="rgba(255,255,255,0.7)"
-                  autoCapitalize="none"
-                />
-              </Animated.View>
-            )}
-          </View>
+            <View style={styles.inputsContainer}>
+              {showNicknameScreen ? (
+                <View style={styles.inputWrapper}>
+                  <TextInput
+                    style={styles.textInput}
+                    placeholder="Rumuz (3-20 karakter)"
+                    placeholderTextColor="rgba(255, 255, 255, 0.6)"
+                    value={nickname}
+                    onChangeText={setNickname}
+                    maxLength={20}
+                    autoFocus
+                  />
+                </View>
+              ) : (
+                <View style={styles.inputWrapper}>
+                  <View style={styles.phoneInputContainer}>
+                    <View style={styles.countryCode}>
+                      <Text style={styles.countryCodeText}>+90</Text>
+                    </View>
+                    <TextInput
+                      style={styles.phoneInput}
+                      placeholder="Telefon Numarası"
+                      placeholderTextColor="rgba(255, 255, 255, 0.6)"
+                      value={phoneNumber}
+                      onChangeText={handlePhoneNumberChange}
+                      keyboardType="phone-pad"
+                      maxLength={14}
+                    />
+                  </View>
+                </View>
+              )}
+            </View>
 
-          <View style={styles.buttonsContainer}>
-            {loading ? (
-              <View style={styles.loadingContainer}>
-                <ActivityIndicator size="large" color="#FFD700" />
-                <Text style={styles.loadingText}>
-                  {isRegistering ? 'Hesap oluşturuluyor...' : 'Giriş yapılıyor...'}
-                </Text>
-              </View>
-            ) : (
-              <>
-                <Button 
-                  title={isRegistering ? '🎮 Hesap Oluştur' : '🎮 Oyuna Başla'}
-                  buttonStyle={styles.primaryButton}
-                  titleStyle={styles.primaryButtonText}
-                  onPress={isRegistering ? handleSignUp : handleSignIn}
-                />
-                
-                <TouchableOpacity 
-                  style={styles.switchButton}
-                  onPress={() => setIsRegistering(!isRegistering)}
-                >
-                  <Text style={styles.switchText}>
-                    {isRegistering ? 'Zaten hesabın var mı? ' : 'Hesabın yok mu? '}
-                    <Text style={styles.switchTextBold}>
-                      {isRegistering ? 'Giriş Yap' : 'Hesap Oluştur'}
-                    </Text>
+            <View style={styles.buttonsContainer}>
+              {loading ? (
+                <View style={styles.loadingContainer}>
+                  <ActivityIndicator size="large" color="#00D9CC" />
+                  <Text style={styles.loadingText}>
+                    {showNicknameScreen
+                      ? 'Rumuz kaydediliyor...'
+                      : 'Doğrulama kodu gönderiliyor...'
+                    }
                   </Text>
-                </TouchableOpacity>
-              </>
-            )}
-          </View>
-        </Animated.View>
+                </View>
+              ) : (
+                <>
+                  {showNicknameScreen ? (
+                    <TouchableOpacity style={styles.primaryButton} onPress={handleNicknameSubmit}>
+                      <Text style={styles.primaryButtonText}>
+                        ✅ Rumuzumu Kaydet
+                      </Text>
+                    </TouchableOpacity>
+                  ) : (
+                    <TouchableOpacity style={styles.primaryButton} onPress={handleSignIn}>
+                      <Text style={styles.primaryButtonText}>
+                        📱 Giriş Yap
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+                </>
+              )}
+            </View>
+          </Animated.View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+      
+      <VerificationModal
+        visible={showVerificationModalLocal}
+        onClose={() => {
+          setShowVerificationModalLocal(false);
+          setVerificationCode(''); // Clear verification code when modal closes
+        }}
+        onVerify={handleVerifyCode}
+        phoneNumber={phoneNumber}
+        timer={timer}
+        onResend={handleResendCode}
+        loading={loading}
+      />
+      
       </LinearGradient>
-    </ImageBackground>
-  );
+    </View>);
 };
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  gradient: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  formContainer: {
-    width: width * 0.9,
-    maxWidth: 400,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    borderRadius: 25,
-    padding: 30,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.3,
-    shadowRadius: 20,
-    elevation: 15,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.2)',
-  },
-  headerContainer: {
-    alignItems: 'center',
-    marginBottom: 30,
-  },
-  logoContainer: {
-    position: 'relative',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 20,
-  },
-  iconGlow: {
-    position: 'absolute',
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: 'rgba(255, 215, 0, 0.2)',
-    shadowColor: '#FFD700',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.8,
-    shadowRadius: 15,
-    elevation: 8,
-  },
-  title: {
-    fontSize: 28,
-    color: '#FFD700',
-    fontFamily: 'Poppins_700Bold',
-    textShadowColor: 'rgba(0, 0, 0, 0.8)',
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 10,
-    marginBottom: 8,
-    textAlign: 'center',
-  },
-  subtitle: {
-    fontSize: 16,
-    color: 'rgba(255, 255, 255, 0.8)',
-    fontFamily: 'Poppins_400Regular',
-    textAlign: 'center',
-    lineHeight: 22,
-  },
-  inputsContainer: {
-    marginBottom: 25,
-  },
-  inputWrapper: {
-    marginBottom: 15,
-  },
-  inputContainer: {
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
-    borderRadius: 15,
-    borderBottomWidth: 0,
-    paddingHorizontal: 15,
-    paddingVertical: 5,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 215, 0, 0.3)',
-  },
-  inputText: {
-    color: 'white',
-    fontSize: 16,
-    fontFamily: 'Poppins_400Regular',
-  },
-  buttonsContainer: {
-    alignItems: 'center',
-  },
-  loadingContainer: {
-    alignItems: 'center',
-    paddingVertical: 20,
-  },
-  loadingText: {
-    color: 'rgba(255, 255, 255, 0.8)',
-    marginTop: 10,
-    fontSize: 16,
-    fontFamily: 'Poppins_400Regular',
-  },
-  primaryButton: {
-    backgroundColor: '#FF6B35',
-    borderRadius: 20,
-    paddingVertical: 15,
-    paddingHorizontal: 40,
-    width: '100%',
-    shadowColor: '#FF6B35',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.4,
-    shadowRadius: 10,
-    elevation: 8,
-    borderWidth: 2,
-    borderColor: 'rgba(255, 255, 255, 0.3)',
-  },
-  primaryButtonText: {
-    color: '#FFFFFF',
-    fontSize: 18,
-    fontFamily: 'Poppins_700Bold',
-    textAlign: 'center',
-  },
-  switchButton: {
-    marginTop: 20,
-    paddingVertical: 10,
-  },
-  switchText: {
-    color: 'rgba(255, 255, 255, 0.8)',
-    fontSize: 16,
-    fontFamily: 'Poppins_400Regular',
-    textAlign: 'center',
-  },
-  switchTextBold: {
-    color: '#FFD700',
-    fontFamily: 'Poppins_600SemiBold',
-    textDecorationLine: 'underline',
-  },
-});
-
-export default LoginScreen;

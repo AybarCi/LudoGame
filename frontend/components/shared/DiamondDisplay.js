@@ -11,23 +11,23 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { DiamondService } from '../../services/DiamondService';
+import { useSelector } from 'react-redux';
 
 const { width } = Dimensions.get('window');
 const isTablet = width > 768;
 
 const DiamondDisplay = ({ onPress, onDiamondPress, showAnimation = false, refreshTrigger }) => {
-  const [diamonds, setDiamonds] = useState(0);
+  const diamonds = useSelector(state => state.diamonds?.count ?? 0);
   const [animatedValue] = useState(new Animated.Value(1));
 
   useEffect(() => {
-    loadDiamonds();
+    // Sadece ilk yüklemede AsyncStorage'dan okuyup Redux store'una yaz
+    const loadInitialDiamonds = async () => {
+      const currentDiamonds = await DiamondService.getDiamonds();
+      // Burada Redux store'unun güncellenmesi gerekiyorsa parent component'te yapılmalı
+    };
+    loadInitialDiamonds();
   }, []);
-
-  useEffect(() => {
-    if (refreshTrigger) {
-      loadDiamonds();
-    }
-  }, [refreshTrigger]);
 
   useEffect(() => {
     if (showAnimation) {
@@ -47,10 +47,7 @@ const DiamondDisplay = ({ onPress, onDiamondPress, showAnimation = false, refres
     }
   }, [showAnimation]);
 
-  const loadDiamonds = async () => {
-    const currentDiamonds = await DiamondService.getDiamonds();
-    setDiamonds(currentDiamonds);
-  };
+
 
   const formatDiamondCount = (count) => {
     if (count >= 1000000) {

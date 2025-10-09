@@ -1,5 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, Text } from 'react-native';
+import { View, StyleSheet, Text, Dimensions } from 'react-native';
+
+const { width: screenWidth } = Dimensions.get('window');
+const isTablet = screenWidth >= 768; // Tablet için minimum genişlik
 import {
   COLORS,
   PATH_MAP,
@@ -237,7 +240,8 @@ const FreeameBoard = ({ pawns, onPawnPress, currentPlayer, diceValue, playersInf
   const boardLayout = generateBoardLayout(safePawns, safeCurrentPlayer, safeDiceValue);
 
   return (
-    <View style={[styles.board, style]}>
+    <View style={[styles.boardContainer, style]}>
+      <View style={styles.board}>
       {boardLayout.map((cell, index) => {
         const backgroundColor =
           cell.type === 'base' ? TRANSPARENT_COLORS[cell.color] : // Use transparent colors for bases
@@ -330,6 +334,7 @@ const FreeameBoard = ({ pawns, onPawnPress, currentPlayer, diceValue, playersInf
           {playersInfo.blue && <Text style={[styles.nickname, styles.nicknameBlue]}>{playersInfo.blue.nickname}</Text>}
         </>
       )}
+      </View>
     </View>
   );
 };
@@ -342,12 +347,20 @@ const styles = StyleSheet.create({
     color: 'black',
     opacity: 0.6,
   },
-  board: {
+  boardContainer: {
     width: '100%',
     height: '100%',
+    aspectRatio: 1, // Kare oranını koru
+    maxWidth: isTablet ? 520 : 280, // Dış çerçeveyi DAHA DA küçült
+    maxHeight: isTablet ? 520 : 280, // Dış çerçeveyi DAHA DA küçült
+  },
+  board: {
+    width: '130%', // BİR TIK DAHA BÜYÜK
+    height: '130%', // BİR TIK DAHA BÜYÜK
     flexDirection: 'row',
     flexWrap: 'wrap',
     position: 'relative',
+    transform: [{ translateX: '-12%' }, { translateY: '-35%' }], // BİR TIK DAHA SAĞA
   },
   cell: {
     width: `${100 / GRID_SIZE}%`,

@@ -1,8 +1,10 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { store } from '../store';
+import { setDiamonds, addDiamonds, spendDiamonds } from '../store/slices/diamondSlice';
 
 const DIAMONDS_KEY = 'user_diamonds';
 const DAILY_REWARD_KEY = 'daily_reward_last_claim';
-const API_BASE_URL = `${process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3001'}/api`;
+const API_BASE_URL = `${process.env.EXPO_PUBLIC_API_URL || 'http://192.168.1.135:3001'}/api`;
 
 export const DiamondService = {
   // API'den access token al
@@ -86,7 +88,9 @@ export const DiamondService = {
       const token = await this.getAccessToken();
       if (!token) {
         // Token yoksa AsyncStorage'dan oku
-        return await this.getDiamondsFromStorage();
+        const diamonds = await this.getDiamondsFromStorage();
+        store.dispatch(setDiamonds(diamonds));
+        return diamonds;
       }
 
       const response = await this.makeAuthenticatedRequest(`${API_BASE_URL}/user/diamonds`);
@@ -95,15 +99,21 @@ export const DiamondService = {
         const data = await response.json();
         // Sunucudan gelen veriyi AsyncStorage'a kaydet
         await AsyncStorage.setItem(DIAMONDS_KEY, data.diamonds.toString());
+        // Redux store'u da güncelle
+        store.dispatch(setDiamonds(data.diamonds));
         return data.diamonds;
       } else {
         // API hatası durumunda AsyncStorage'dan oku
-        return await this.getDiamondsFromStorage();
+        const diamonds = await this.getDiamondsFromStorage();
+        store.dispatch(setDiamonds(diamonds));
+        return diamonds;
       }
     } catch (error) {
       console.error('Error syncing diamonds from server:', error);
       // Hata durumunda AsyncStorage'dan oku
-      return await this.getDiamondsFromStorage();
+      const diamonds = await this.getDiamondsFromStorage();
+      store.dispatch(setDiamonds(diamonds));
+      return diamonds;
     }
   },
 
@@ -138,6 +148,8 @@ export const DiamondService = {
           const data = await response.json();
           // Sunucudan gelen güncel veriyi AsyncStorage'a kaydet
           await AsyncStorage.setItem(DIAMONDS_KEY, data.diamonds.toString());
+          // Redux store'u da güncelle
+          store.dispatch(setDiamonds(data.diamonds));
           return data.diamonds;
         }
       }
@@ -146,6 +158,8 @@ export const DiamondService = {
       const currentDiamonds = await this.getDiamondsFromStorage();
       const newDiamonds = currentDiamonds + amount;
       await AsyncStorage.setItem(DIAMONDS_KEY, newDiamonds.toString());
+      // Redux store'u da güncelle
+      store.dispatch(addDiamonds(amount));
       return newDiamonds;
     } catch (error) {
       console.error('Error adding diamonds:', error);
@@ -153,6 +167,8 @@ export const DiamondService = {
       const currentDiamonds = await this.getDiamondsFromStorage();
       const newDiamonds = currentDiamonds + amount;
       await AsyncStorage.setItem(DIAMONDS_KEY, newDiamonds.toString());
+      // Redux store'u da güncelle
+      store.dispatch(addDiamonds(amount));
       return newDiamonds;
     }
   },
@@ -172,6 +188,8 @@ export const DiamondService = {
           const data = await response.json();
           // Sunucudan gelen güncel veriyi AsyncStorage'a kaydet
           await AsyncStorage.setItem(DIAMONDS_KEY, data.diamonds.toString());
+          // Redux store'u da güncelle
+          store.dispatch(setDiamonds(data.diamonds));
           return true;
         } else {
           // Hata durumunda JSON parse etmeye çalışmadan önce content-type kontrol et
@@ -193,6 +211,8 @@ export const DiamondService = {
       if (currentDiamonds >= amount) {
         const newDiamonds = currentDiamonds - amount;
         await AsyncStorage.setItem(DIAMONDS_KEY, newDiamonds.toString());
+        // Redux store'u da güncelle
+        store.dispatch(spendDiamonds(amount));
         return true;
       }
       return false;

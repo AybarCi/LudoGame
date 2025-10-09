@@ -249,11 +249,12 @@ const OnlineGameBoard = ({ players = [], gameState = {}, onPawnPress, currentPla
   };
 
   return (
-    <ImageBackground 
-      source={require('../../assets/images/wood-background.png')}
-      style={[styles.board, style]}
-      resizeMode="cover"
-    >
+    <View style={[styles.boardContainer, style]}>
+      <ImageBackground 
+        source={require('../../assets/images/wood-background.png')}
+        style={styles.board}
+        resizeMode="cover"
+      >
       {boardLayout.map((cell, index) => {
         const backgroundColor =
           cell.type === 'base' ? TRANSPARENT_COLORS[cell.color] : // Use transparent colors for bases
@@ -371,7 +372,8 @@ const OnlineGameBoard = ({ players = [], gameState = {}, onPawnPress, currentPla
           {playersInfo.blue && <Text style={[styles.nickname, styles.nicknameBlue]}>{playersInfo.blue.nickname}</Text>}
         </>
       )}
-    </ImageBackground>
+      </ImageBackground>
+    </View>
   );
 };
 
@@ -395,12 +397,9 @@ const styles = StyleSheet.create({
     borderRadius: 2,
     paddingHorizontal: 2,
   },
-  board: {
+  boardContainer: {
     width: '100%',
     height: '100%',
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    position: 'relative',
     borderRadius: 20,
     overflow: 'hidden',
     shadowColor: '#000',
@@ -408,7 +407,14 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 10,
-
+    aspectRatio: 1, // Kare oranını koru
+  },
+  board: {
+    width: '100%',
+    height: '100%',
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    position: 'relative',
   },
   cell: {
     width: `${100 / GRID_SIZE}%`,

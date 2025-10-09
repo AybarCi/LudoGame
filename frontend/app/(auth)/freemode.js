@@ -7,18 +7,18 @@ import {
   Dimensions,
   TouchableOpacity,
   ScrollView,
-  Alert,
   TextInput,
   Modal,
 } from 'react-native';
-import { Text, Button } from '@rneui/themed';
+import { Text } from '@rneui/themed';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import { useAuth } from '../../store/AuthProvider';
+import { useSelector, useDispatch } from 'react-redux';
 import { EnergyService } from '../../services/EnergyService';
+import { showAlert } from '../../store/slices/alertSlice';
 
-const { width, height } = Dimensions.get('window');
+const { width } = Dimensions.get('window');
 const isTablet = width > 768;
 
 const colors = [
@@ -30,7 +30,7 @@ const colors = [
 
 const FreeModeScreen = () => {
   const router = useRouter();
-  const { user } = useAuth();
+  const dispatch = useDispatch();
   const [selectedPlayers, setSelectedPlayers] = useState([]);
   const [playerCount, setPlayerCount] = useState(2);
   const [playerNames, setPlayerNames] = useState({});
@@ -52,7 +52,7 @@ const FreeModeScreen = () => {
         useNativeDriver: true,
       }),
     ]).start();
-  }, []);
+  }, [fadeAnim, slideAnim]);
 
   const handlePlayerCountChange = (count) => {
     setPlayerCount(count);
@@ -84,13 +84,6 @@ const FreeModeScreen = () => {
     }
   };
 
-  const updatePlayerName = (colorValue, name) => {
-    setPlayerNames(prev => ({
-      ...prev,
-      [colorValue]: name || `Oyuncu ${selectedPlayers.indexOf(colorValue) + 1}`
-    }));
-  };
-
   const updateTempPlayerName = (colorValue, name) => {
     setTempPlayerNames(prev => ({
       ...prev,
@@ -105,7 +98,7 @@ const FreeModeScreen = () => {
     );
     
     if (hasEmptyNames) {
-      Alert.alert('Hata', 'Lütfen tüm oyuncular için isim girin.');
+      showAlertMessage('Hata', 'Lütfen tüm oyuncular için isim girin.');
       return;
     }
 
@@ -120,39 +113,46 @@ const FreeModeScreen = () => {
     setTempPlayerNames({});
   };
 
+  const showAlertMessage = (title, message, type = 'error') => {
+    dispatch(showAlert({ title, message, type }));
+  };
+
   const handleStartGame = async () => {
     if (selectedPlayers.length !== playerCount) {
-      Alert.alert('Hata', 'Lütfen tüm oyuncular için renk seçin.');
+      showAlertMessage('Hata', 'Lütfen tüm oyuncular için renk seçin.');
       return;
     }
 
     // Check if names are set (should be set via modal)
     if (Object.keys(playerNames).length === 0) {
-      Alert.alert('Hata', 'Lütfen oyuncu isimlerini girin.');
+      showAlertMessage('Hata', 'Lütfen oyuncu isimlerini girin.');
       return;
     }
 
-    // Check energy before starting game
-    const hasEnergy = await EnergyService.hasEnoughEnergy();
-    if (!hasEnergy) {
-      router.push('/(auth)/energy');
-      return;
+    try {
+      // Check energy before starting game
+      const hasEnergy = await EnergyService.hasEnoughEnergy();
+      if (!hasEnergy) {
+        router.push('/(auth)/energy');
+        return;
+      }
+
+      // Free mode - no energy required
+      // Navigate to free mode game with selected parameters
+      const gameParams = {
+        playerCount: playerCount.toString(),
+        playerColors: JSON.stringify(selectedPlayers),
+        playerNames: JSON.stringify(playerNames)
+      };
+      
+      router.push({
+        pathname: '/(auth)/freemodegame',
+        params: gameParams
+      });
+    } catch (_error) {
+      console.error('Error starting game:', _error);
+      showAlertMessage('Hata', 'Oyun başlatılırken bir hata oluştu.');
     }
-
-    // Use energy
-    await EnergyService.useEnergy();
-
-    // Navigate to free mode game with selected parameters
-    const gameParams = {
-      playerCount: playerCount.toString(),
-      playerColors: JSON.stringify(selectedPlayers),
-      playerNames: JSON.stringify(playerNames)
-    };
-    
-    router.push({
-      pathname: '/(auth)/freemodegame',
-      params: gameParams
-    });
   };
 
   const goBack = () => {

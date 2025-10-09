@@ -1,12 +1,11 @@
-import React, { useState, useMemo, useEffect } from 'react';
-import { useAuth } from '../../store/AuthProvider';
-import { BackHandler, Dimensions } from 'react-native';
+import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
+import { useSelector, useDispatch } from 'react-redux';
+import { BackHandler, Dimensions, Alert, StatusBar, Platform } from 'react-native';
 import {
   ImageBackground,
   SafeAreaView,
   Text,
   StyleSheet,
-  Modal,
   Animated,
   View,
   TouchableOpacity,
@@ -14,13 +13,14 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, useRouter, useNavigation } from 'expo-router';
+import { showAlert } from '../../store/slices/alertSlice';
 import OnlineGameBoard from '../../components/modules/OnlineGameBoard';
 import Dice from '../../components/shared/Dice';
 import ChatComponent from '../../components/modules/ChatComponent';
 
 import { useSocket } from '../../store/SocketProvider';
 import { COLORS } from '../../constants/game';
-import LottieView from 'lottie-react-native';
+import LottieView from '../../components/shared/LottieWrapper';
 import { Ionicons } from '@expo/vector-icons';
 import { DiamondService } from '../../services/DiamondService';
 import { AdService } from '../../services/AdService';
@@ -28,8 +28,44 @@ import { EnergyService } from '../../services/EnergyService';
 
 const { width, height } = Dimensions.get('window');
 
+// Responsive board sizing
+const getBoardSize = () => {
+  const screenWidth = width;
+  const screenHeight = height;
+  const minDimension = Math.min(screenWidth, screenHeight);
+  
+  // Ekran boyutuna göre board boyutu - optimize edilmiş boyutlar
+  if (minDimension > 900) { // Büyük tablet/desktop
+    return Math.min(minDimension * 0.75, 700);
+  } else if (minDimension > 800) { // Tablet
+    return Math.min(minDimension * 0.72, 650);
+  } else if (minDimension > 600) { // Büyük telefon
+    return Math.min(minDimension * 0.85, 550);
+  } else { // Normal telefon
+    return Math.min(minDimension * 0.9, 450);
+  }
+};
+
+// Ekran boyutuna göre container justifyContent ayarla
+const getContainerJustifyContent = () => {
+  const minDimension = Math.min(width, height);
+  // Büyük ekranlarda içeriği ortala, küçük ekranlarda yukarıdan başla
+  return minDimension > 800 ? 'center' : 'flex-start';
+};
+
+// Android status bar yüksekliğini hesapla
+const getStatusBarHeight = () => {
+  if (Platform.OS === 'android') {
+    return StatusBar.currentHeight || 0;
+  }
+  return 0;
+};
+
 const OnlineGameScreen = () => {
-  const { user } = useAuth();
+  const user = useSelector(state => state.auth.user);
+  
+  // Extract actual user object if it's wrapped in success property
+  const actualUser = user?.success && user?.user ? user.user : user;
   const { roomId } = useLocalSearchParams();
   const router = useRouter();
   const navigation = useNavigation();
@@ -41,8 +77,17 @@ const OnlineGameScreen = () => {
   const [chatWarning, setChatWarning] = useState('');
   const [chatBlocked, setChatBlocked] = useState(false);
   const [chatBlockDuration, setChatBlockDuration] = useState(0);
-  const [showLeaveModal, setShowLeaveModal] = useState(false);
   const [energyChecked, setEnergyChecked] = useState(false);
+  // Room closed durumunu state olarak takip et - erken return yerine
+  const [isRoomClosed, setIsRoomClosed] = useState(false);
+  const [roomClosedReason, setRoomClosedReason] = useState('');
+  const dispatch = useDispatch();
+  
+  // Component mount durumu için ref
+  const isMountedRef = useRef(true);
+  
+  // Geri sayım için animasyon değeri - Component seviyesinde tanımlanmalı
+  const countdownScale = useRef(new Animated.Value(1)).current;
 
   const handleProfanityWarning = (data) => {
     setChatWarning(data.message);
@@ -57,6 +102,7 @@ const OnlineGameScreen = () => {
     socket, 
     room, 
     roomClosed, 
+    setRoomClosed,
     gameState, 
     players, 
     currentTurn, 
@@ -74,7 +120,67 @@ const OnlineGameScreen = () => {
   }); 
 
   // Current user tanımlaması
-  const currentUser = user;
+  const currentUser = actualUser;
+
+  // Güvenli navigation helper fonksiyonu
+  const safeNavigateToHome = useCallback(() => {
+    console.log('[safeNavigateToHome] Ana sayfaya yönlendirme deneniyor...');
+    
+    // Component hala mounted mı kontrol et
+    if (!isMountedRef.current) {
+      console.log('[safeNavigateToHome] Component unmounted, navigation iptal edildi');
+      return;
+    }
+    
+    // Navigation'ı dene - önce navigation.navigate, sonra router.replace
+    try {
+      // Önce navigation.navigate ile dene (daha güvenli)
+      if (navigation && navigation.navigate) {
+        navigation.navigate('home');
+        console.log('[safeNavigateToHome] Navigation.navigate başarılı');
+      } else if (router && router.replace) {
+        // Navigation yoksa router.replace ile dene
+        router.replace('/home');
+        console.log('[safeNavigateToHome] Router.replace başarılı');
+      } else {
+        // Fallback: Try to use global navigation if available
+        console.warn('[safeNavigateToHome] Neither navigation.navigate nor router.replace available');
+        
+        // Try using the global router object as last resort
+        if (typeof globalThis !== 'undefined' && globalThis.router) {
+          globalThis.router.replace('/home');
+          console.log('[safeNavigateToHome] Global router.replace başarılı');
+        } else {
+          throw new Error('No navigation method available');
+        }
+      }
+    } catch (error) {
+      console.error('[safeNavigateToHome] Navigation hatası:', error);
+      
+      // Navigation hatası varsa kullanıcıyı uyar
+      dispatch(showAlert({
+        type: 'error',
+        title: 'Gezinme Hatası',
+        message: 'Ana sayfaya dönülemedi. Lütfen manuel olarak ana sayfaya dönün.'
+      }));
+      
+      // Ekstra güvenlik: Hata durumunda navigation state'ini temizle
+      try {
+        if (navigation && navigation.reset) {
+          navigation.reset({
+            index: 0,
+            routes: [{ name: 'home' }],
+          });
+          console.log('[safeNavigateToHome] Navigation reset başarılı');
+        } else if (navigation && navigation.popToTop) {
+          navigation.popToTop();
+          console.log('[safeNavigateToHome] Navigation popToTop başarılı');
+        }
+      } catch (resetError) {
+        console.error('[safeNavigateToHome] Reset navigation da başarısız:', resetError);
+      }
+    }
+  }, [router, navigation, dispatch]);
 
   // Multiplayer board burada açıldığı için navigation yapılmıyor.
   // useEffect(() => {
@@ -143,7 +249,7 @@ const OnlineGameScreen = () => {
   useEffect(() => {
     if (room && players && players.length > 0) {
       const firstPlayer = players[0];
-      const amICreator = firstPlayer && (firstPlayer.id === user?.id || firstPlayer.id === socket?.id);
+      const amICreator = firstPlayer && (firstPlayer.id === actualUser?.id || firstPlayer.id === socket?.id);
       setIsCreator(amICreator);
       
       console.log('[COUNTDOWN DEBUG]', {
@@ -153,78 +259,94 @@ const OnlineGameScreen = () => {
         timeLeft
       });
     }
-  }, [room, players, user?.id, socket?.id, gamePhase, timeLeft]);
+  }, [room, players, actualUser?.id, socket?.id, gamePhase, timeLeft]);
 
   // Award diamond for winning online game
   useEffect(() => {
     if (gamePhase === 'finished' && winner && playersInfo && playersInfo[winner]) {
       const winnerInfo = playersInfo[winner];
       // Check if the current user is the winner
-      if (winnerInfo.id === user?.id || winnerInfo.id === socket?.id) {
+      if (winnerInfo.id === actualUser?.id || winnerInfo.id === socket?.id) {
         console.log(`Awarding 1 diamond to ${winnerInfo.nickname} for winning online game`);
         // Award 1 diamond for winning online game
         DiamondService.awardGameWin();
       }
     }
-  }, [gamePhase, winner, playersInfo, user?.id, socket?.id]);
+  }, [gamePhase, winner, playersInfo, actualUser?.id, socket?.id]);
+
+  // Geri sayım animasyonu - Component seviyesinde
+  useEffect(() => {
+    if (timeLeft > 0 && timeLeft <= 10) {
+      Animated.sequence([
+        Animated.timing(countdownScale, {
+          toValue: 1.2,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+        Animated.timing(countdownScale, {
+          toValue: 1,
+          duration: 300,
+          useNativeDriver: true,
+        })
+      ]).start();
+    }
+  }, [timeLeft, countdownScale]);
 
   const gamePhase = room?.phase || room?.gameState?.phase || gameState?.phase || 'loading';
   const message = gameState?.message || '';
 
   const myColor = useMemo(() => {
-    if (!players || !user) return null;
+    if (!players || !actualUser) return null;
     // Check for both user.id (for authenticated users) and socket.id (for guests/fallback)
-    const myPlayer = players.find((p) => p.id === user.id || p.id === socket.id);
+    const myPlayer = players.find((p) => p.id === actualUser.id || p.id === socket.id);
     return myPlayer?.color;
-  }, [players, user, socket.id]);
+  }, [players, actualUser, socket.id]);
 
   const isMyTurn = useMemo(() => {
   if (!gameState || !myColor) return false;
-  const result = gameState.currentPlayer === myColor;
-  console.log('[DEBUG][IS_MY_TURN]', {
-    userId: user?.id,
-    socketId: socket?.id,
-    myColor,
-    currentPlayer: gameState.currentPlayer,
-    players: players?.map(p => ({id: p.id, color: p.color, nickname: p.nickname})),
-    result
-  });
-  return result;
-}, [gameState, myColor, user?.id, socket?.id, players]);
+  return gameState.currentPlayer === myColor;
+}, [gameState, myColor]);
+
+  // Yapay zeka modunu kontrol et (sadece botlar varsa true)
+  const isAIMode = useMemo(() => {
+    if (!players || players.length === 0) return false;
+    return players.every(player => player.isBot === true);
+  }, [players]);
   
   const [showTurnPopup, setShowTurnPopup] = useState(false);
   const [popupAnim] = useState(new Animated.Value(0));
-
-  useEffect(() => {
-    console.log('--- DEBUG: Centralized State Update ---');
-    console.log('Is My Turn:', isMyTurn);
-    console.log('My Color:', myColor);
-    console.log('Game Phase:', gamePhase);
-    console.log('room?.phase:', room?.phase);
-    console.log('room?.gameState?.phase:', room?.gameState?.phase);
-    console.log('gameState?.phase:', gameState?.phase);
-    console.log('Current Player:', gameState?.currentPlayer);
-    console.log('Socket ID:', socket?.id);
-    console.log('Players Count:', players?.length);
-    console.log('Players:', players?.map(p => ({ id: p.id, color: p.color, nickname: p.nickname, isBot: p.isBot })));
-    console.log('Will show GameBoard:', (gamePhase === 'pre-game' || gamePhase === 'playing' || gamePhase === 'finished'));
-    console.log('Will show WaitingOverlay:', (gamePhase === 'waiting' || (players && players.length < 4)));
-    console.log('---------------------------------');
-  }, [isMyTurn, myColor, gamePhase, room?.phase, room?.gameState?.phase, gameState?.phase, gameState?.currentPlayer, socket?.id, players]);
 
   // Zar atma butonu aktiflik mantığı
 // Pre-game (sıralama turu) boyunca Zar At herkes için aktif
 // Sadece oyun (playing) fazında, sıra kimdeyse onda aktif
 const canRollDice = useMemo(() => {
   if (gamePhase === 'pre-game') {
-    if (!myColor) return false;
-    const playerHasRolled = gameState?.turnOrderRolls?.some(r => r.color === myColor);
+    if (!myColor) {
+      return false;
+    }
+    
+    // Ensure turnOrderRolls is an array before checking
+    const turnOrderRolls = gameState?.turnOrderRolls || [];
+    
+    // Check if player has already rolled - handle both array and object formats
+    let playerHasRolled = false;
+    if (Array.isArray(turnOrderRolls)) {
+      playerHasRolled = turnOrderRolls.some(r => r.color === myColor);
+    } else if (typeof turnOrderRolls === 'object') {
+      // Handle case where turnOrderRolls might be an object from backend
+      playerHasRolled = turnOrderRolls.hasOwnProperty(myColor);
+    }
+    
     return !playerHasRolled;
   }
 
   if (gamePhase === 'playing') {
-    if (!isMyTurn) return false;
-    return gameState?.diceValue === null || gameState?.diceValue === undefined;
+    if (!isMyTurn) {
+      return false;
+    }
+    
+    const diceAvailable = gameState?.diceValue === null || gameState?.diceValue === undefined;
+    return diceAvailable;
   }
 
   return false;
@@ -245,14 +367,19 @@ useEffect(() => {
 }, [gameState?.currentPlayer, gamePhase]);
 
   // Chat mesajları için unread sayısını takip et
+  const prevMessageCountRef = useRef(0);
+  
   useEffect(() => {
     if (!isChatVisible && chatMessages && chatMessages.length > 0) {
-      // Chat kapalıyken yeni mesaj gelirse unread sayısını artır
-      const lastMessage = chatMessages[chatMessages.length - 1];
-      if (lastMessage && lastMessage.userId !== currentUser?.id) {
-        setUnreadMessageCount(prev => prev + 1);
+      // Sadece yeni mesaj geldiğinde unread sayısını artır
+      if (chatMessages.length > prevMessageCountRef.current) {
+        const lastMessage = chatMessages[chatMessages.length - 1];
+        if (lastMessage && lastMessage.userId !== actualUser?.id) {
+          setUnreadMessageCount(prev => prev + 1);
+        }
       }
     }
+    prevMessageCountRef.current = chatMessages?.length || 0;
   }, [chatMessages, isChatVisible, currentUser]);
 
   // Chat açıldığında unread sayısını sıfırla
@@ -261,6 +388,222 @@ useEffect(() => {
       setUnreadMessageCount(0);
     }
   }, [isChatVisible]);
+
+  // Socket bağlantı durumunu izle ve bağlantı koparsa kullanıcıyı bilgilendir
+  useEffect(() => {
+    if (!socket || !isMountedRef.current) return;
+
+    const handleDisconnect = () => {
+      console.log('[onlineGame] Socket bağlantısı kesildi, güvenli çıkış yapılıyor');
+      // Navigation'ı güvenli bir şekilde yap - mounting tamamlandıktan sonra
+      setTimeout(() => {
+        safeNavigateToHome();
+      }, 500); // Daha uzun gecikme ile navigation'ı dene
+    };
+
+    // Socket bağlantısı kesilirse - sadece aktif bağlantı durumunda
+    if (socket.disconnected && socket.connected !== undefined) {
+      handleDisconnect();
+    }
+
+    // Socket olaylarını dinle
+    socket.on('disconnect', handleDisconnect);
+
+    return () => {
+      socket.off('disconnect', handleDisconnect);
+    };
+  }, [socket, router]);
+
+  // Socket yeniden bağlanma olaylarını yönet
+  useEffect(() => {
+    if (!socket) return;
+
+    let reconnectTimeout;
+    let alertShown = false;
+
+    // Handle successful dice rolls
+    const handleRollSuccess = (data) => {
+      console.log('[Roll Success] Dice roll successful:', data);
+      // Visual feedback removed for cleaner gameplay
+    };
+
+    const handleRoomClosed = (data) => {
+      console.log('[Room Closed] Oda kapatıldı:', data);
+      setRoomClosed({ isClosed: true, reason: data.reason });
+    };
+
+    const handlePlayerLeft = (data) => {
+      console.log('[Player Left] Oyuncu ayrıldı:', data);
+      
+      // Eğer kalan insan oyuncu sayısı 0 ise oyunu sonlandır
+      if (data.remainingHumanPlayers === 0) {
+        setRoomClosed({ isClosed: true, reason: 'Tüm oyuncular ayrıldı' });
+      } else {
+        // Sadece bilgilendirme mesajı göster
+        dispatch(showAlert({
+          type: 'info',
+          title: 'Oyuncu Ayrıldı',
+          message: `${data.playerNickname} oyundan ayrıldı. Geriye kalan insan oyuncular: ${data.remainingHumanPlayers}`
+        }));
+      }
+    };
+
+    const handleDisconnect = (reason) => {
+      console.log(`[Socket Disconnect] Bağlantı kesildi: ${reason}`);
+      
+      // Otomatik yeniden bağlanma için timeout
+      if (reason === 'ping timeout' || reason === 'transport close' || reason === 'transport error') {
+        reconnectTimeout = setTimeout(() => {
+          if (socket && !socket.connected) {
+            console.log('[Socket] Otomatik yeniden bağlanma deneniyor...');
+            socket.connect();
+          }
+        }, 2000);
+      }
+
+      // Sadece kritik bağlantı hatalarını göster
+      if (!alertShown) {
+        alertShown = true;
+        
+        if (reason === 'io server disconnect') {
+          // Sunucu tarafından kesilen bağlantılar sessizce yeniden bağlanır
+          console.log('Sunucu bağlantısı kesildi, sessizce yeniden bağlanılıyor...');
+        }
+      }
+    };
+
+    const handleConnectError = (error) => {
+      console.error(`[Socket Connect Error] Bağlantı hatası: ${error.message}`);
+      
+      // Bağlantı hataları sessizce loglanır, kullanıcıya gösterilmez
+      if (error.message.includes('xhr poll error')) {
+        console.log('Ağ bağlantısı yok, otomatik yeniden denenecek');
+      } else if (error.message.includes('timeout')) {
+        console.log('Bağlantı zaman aşımı, otomatik yeniden denenecek');
+      } else {
+        console.log('Bağlantı hatası, otomatik yeniden denenecek');
+      }
+    };
+
+    const handleConnect = () => {
+      console.log('[Socket Connect] Bağlantı kuruldu');
+      alertShown = false; // Bağlantı kurulduğunda alert flag'ini sıfırla
+      
+      // Bağlantı kurulduğunda odaya tekrar katılmayı dene
+      if (room?.id) {
+        const currentPhase = room?.phase || room?.gameState?.phase || gameState?.phase;
+        if (currentPhase !== 'waiting') {
+          console.log('[Socket] Bağlantı kuruldu, odaya tekrar katılmayı deneyin');
+        }
+      }
+    };
+
+    const handleReconnect = (attemptNumber) => {
+      console.log(`[Socket] Yeniden bağlandı (deneme: ${attemptNumber})`);
+      alertShown = false;
+    };
+
+    const handleReconnectAttempt = (attemptNumber) => {
+      console.log(`[Socket] Yeniden bağlanma denemesi: ${attemptNumber}`);
+    };
+
+    const handleReconnectFailed = () => {
+      console.error('[Socket] Tüm yeniden bağlanma denemeleri başarısız');
+      // Kullanıcıya gösterilmeyecek, sadece loglanacak
+    };
+
+    const handleError = (error) => {
+      console.error('[Socket Error] Server error received:', error);
+      
+      if (error && error.type) {
+        switch (error.type) {
+          case 'ROOM_NOT_FOUND':
+            dispatch(showAlert({
+              type: 'error',
+              title: 'Oda Bulunamadı',
+              message: error.message || 'Oda bulunamadı. Lütfen tekrar katılmayı deneyin.'
+            }));
+            break;
+          case 'PLAYER_NOT_FOUND':
+            dispatch(showAlert({
+              type: 'error',
+              title: 'Oyuncu Bulunamadı',
+              message: error.message || 'Oyuncu bilgisi bulunamadı.'
+            }));
+            break;
+          case 'WRONG_PHASE':
+            dispatch(showAlert({
+              type: 'warning',
+              title: 'Yanlış Oyun Aşaması',
+              message: error.message || 'Bu işlem şu anda yapılamaz.'
+            }));
+            break;
+          case 'NOT_YOUR_TURN':
+            dispatch(showAlert({
+              type: 'warning',
+              title: 'Sıra Sizde Değil',
+              message: error.message || 'Şu anda sıra sizde değil.'
+            }));
+            break;
+          case 'ALREADY_ROLLED':
+            dispatch(showAlert({
+              type: 'warning',
+              title: 'Zar Atıldı',
+              message: error.message || 'Bu turda zaten zar attınız.'
+            }));
+            break;
+          case 'DICE_ROLL_ERROR':
+            dispatch(showAlert({
+              type: 'error',
+              title: 'Zar Atma Hatası',
+              message: error.message || 'Zar atılırken bir hata oluştu. Lütfen tekrar deneyin.'
+            }));
+            break;
+          case 'INVALID_REQUEST':
+            dispatch(showAlert({
+              type: 'error',
+              title: 'Geçersiz İstek',
+              message: error.message || 'Geçersiz istek. Lütfen tekrar deneyin.'
+            }));
+            break;
+          default:
+            dispatch(showAlert({
+              type: 'error',
+              title: 'Sunucu Hatası',
+              message: error.message || 'Beklenmeyen bir hata oluştu.'
+            }));
+        }
+      }
+    };
+
+    socket.on('disconnect', handleDisconnect);
+    socket.on('connect_error', handleConnectError);
+    socket.on('connect', handleConnect);
+    socket.on('reconnect', handleReconnect);
+    socket.on('reconnect_attempt', handleReconnectAttempt);
+    socket.on('reconnect_failed', handleReconnectFailed);
+    socket.on('error', handleError);
+    socket.on('roll_success', handleRollSuccess);
+    socket.on('room_closed', handleRoomClosed);
+    socket.on('player_left', handlePlayerLeft);
+
+    return () => {
+      socket.off('disconnect', handleDisconnect);
+      socket.off('connect_error', handleConnectError);
+      socket.off('connect', handleConnect);
+      socket.off('reconnect', handleReconnect);
+      socket.off('reconnect_attempt', handleReconnectAttempt);
+      socket.off('reconnect_failed', handleReconnectFailed);
+      socket.off('error', handleError);
+      socket.off('roll_success', handleRollSuccess);
+      socket.off('room_closed', handleRoomClosed);
+      socket.off('player_left', handlePlayerLeft);
+      
+      if (reconnectTimeout) {
+        clearTimeout(reconnectTimeout);
+      }
+    };
+  }, [socket, dispatch, room, gameState]);
 
   const popupStyle = {
     opacity: popupAnim,
@@ -287,30 +630,63 @@ useEffect(() => {
     return players.find(p => p.color === gameState.currentPlayer);
   }, [gameState?.currentPlayer, players]);
 
-  const renderTurnOrderRolls = () => (
-    <View style={styles.turnOrderContainer}>
-      <Text style={styles.turnOrderTitle}>Sıralama için zar atın!</Text>
-      <View style={styles.turnOrderList}>
-        {gameState?.turnOrderRolls?.map((roll, index) => (
-          <View key={index} style={styles.turnOrderItem}>
-            <View style={styles.playerInfoRow}>
-              <View style={[styles.playerColorBox, { backgroundColor: COLORS[roll.color] }]} />
-              <Text style={styles.playerName}>{playersInfo[roll.color]?.nickname || '...'}</Text>
+  const renderTurnOrderRolls = () => {
+    // Handle both array and object formats
+    const turnOrderRolls = gameState?.turnOrderRolls || [];
+    let rollsArray = [];
+    
+    if (Array.isArray(turnOrderRolls)) {
+      rollsArray = turnOrderRolls;
+    } else if (typeof turnOrderRolls === 'object') {
+      // Convert object format to array format
+      rollsArray = Object.entries(turnOrderRolls).map(([color, rollData]) => ({
+        color,
+        roll: rollData.diceValue || rollData.roll || 0,
+        nickname: rollData.nickname || playersInfo[color]?.nickname || '...'
+      }));
+    }
+    
+    return (
+      <View style={styles.turnOrderContainer}>
+        <Text style={styles.turnOrderTitle}>Sıralama için zar atın!</Text>
+        <View style={styles.turnOrderList}>
+          {rollsArray.map((roll, index) => (
+            <View key={index} style={styles.turnOrderItem}>
+              <View style={styles.playerInfoRow}>
+                <View style={[styles.playerColorBox, { backgroundColor: COLORS[roll.color] }]} />
+                <Text style={styles.playerName}>{playersInfo[roll.color]?.nickname || '...'}</Text>
+              </View>
+              <Text style={styles.playerRoll}>{roll.roll}</Text>
             </View>
-            <Text style={styles.playerRoll}>{roll.roll}</Text>
-          </View>
-        ))}
+          ))}
+        </View>
       </View>
-    </View>
-  );
+    );
+  };
 
 
 
   useEffect(() => {
-    if (roomClosed.isClosed) {
+    if (roomClosed.isClosed && !hasNavigatedRef.current) {
       const timer = setTimeout(() => {
-        alert(roomClosed.reason || 'Oda kapatıldı');
-        router.replace('/(auth)/home');
+        // Eğer zaten navigation yapıldıysa tekrar yapma
+        if (hasNavigatedRef.current) {
+          console.log('[Navigation] Zaten navigation yapıldı, tekrar yapılmıyor');
+          return;
+        }
+        
+        // Navigation flag'ini işaretle
+        hasNavigatedRef.current = true;
+        console.log('[Navigation] Room closed navigation başlatılıyor');
+        
+        // Oda kapatıldığında doğrudan ana sayfaya yönlendir
+        try {
+          router.replace('/(auth)/home');
+        } catch (error) {
+          console.error('Navigation error:', error);
+          // Fallback navigation
+          router.push('/(auth)/home');
+        }
       }, 1000);
       return () => clearTimeout(timer);
     }
@@ -318,83 +694,132 @@ useEffect(() => {
 
   useEffect(() => {
     let unsubscribe;
+    let backHandlerSubscription;
     const onBack = () => true; 
 
     if (gamePhase === 'waiting' || gamePhase === 'pre-game') {
-      BackHandler.addEventListener('hardwareBackPress', onBack);
+      backHandlerSubscription = BackHandler.addEventListener('hardwareBackPress', onBack);
       unsubscribe = navigation.addListener('beforeRemove', e => e.preventDefault());
       navigation.setOptions?.({ gestureEnabled: false });
     } else {
-      BackHandler.removeEventListener('hardwareBackPress', onBack);
+      if (backHandlerSubscription) {
+        backHandlerSubscription.remove();
+      }
       if (unsubscribe) unsubscribe();
       navigation.setOptions?.({ gestureEnabled: true });
     }
 
     return () => {
-      BackHandler.removeEventListener('hardwareBackPress', onBack);
+      if (backHandlerSubscription) {
+        backHandlerSubscription.remove();
+      }
       if (unsubscribe) unsubscribe();
     };
   }, [gamePhase, navigation]);
 
-  if (roomClosed.isClosed) {
-    return (
-      <ImageBackground 
-        source={require('../../assets/images/wood-background.png')} 
-        style={[styles.background, { flex: 1, justifyContent: 'center', alignItems: 'center' }]}
-      >
-        <ActivityIndicator size="large" color="#FFFFFF" />
-        <Text style={styles.loadingText}>Oda kapatılıyor...</Text>
-      </ImageBackground>
-    );
-  }
+  // Room closed durumunu güncelle
+  useEffect(() => {
+    if (roomClosed.isClosed) {
+      setIsRoomClosed(true);
+      setRoomClosedReason(roomClosed.reason);
+    }
+  }, [roomClosed]);
+
+  // Navigation flag'ini takip et - çift navigation'ı önlemek için
+  const hasNavigatedRef = useRef(false);
 
   const renderWaitingOverlay = () => {
   const maxPlayers = 4;
   const currentPlayers = players || [];
   const missingPlayers = maxPlayers - currentPlayers.length;
+  
   return (
-    <View style={styles.overlay}>
-      <LottieView
-        source={require('../../assets/animations/loading-online-players.json')}
-        style={{ width: 200, height: 200, marginBottom: 10 }}
-        autoPlay
-        loop
-      />
-      <Text style={[styles.loadingText, {marginBottom: 10}]}>Bekleme Odası</Text>
-      <View style={{width: '90%', backgroundColor: 'rgba(0,0,0,0.4)', borderRadius: 12, padding: 12, marginBottom: 10}}>
-        {currentPlayers.length === 0 ? (
-          <Text style={{color: '#fff', fontSize: 16, textAlign: 'center'}}>Bağlantı kuruluyor, oyuncular yükleniyor...</Text>
-        ) : (
-          <>
-            {currentPlayers.map((player, idx) => (
-              <View key={player.id || player.color || idx} style={{flexDirection: 'row', alignItems: 'center', marginBottom: 6}}>
-                <View style={{width: 18, height: 18, backgroundColor: COLORS[player.color], borderRadius: 4, marginRight: 8, borderWidth: 1, borderColor: '#fff'}} />
-                <Text style={{color: '#fff', fontWeight: 'bold', fontSize: 16}}>{player.nickname || 'Oyuncu'}</Text>
-                
-              </View>
-            ))}
-            <Text style={{color: '#ccc', fontSize: 15, marginTop: 4}}>
-              {`${currentPlayers.length}/4 oyuncu, ${missingPlayers > 0 ? `${missingPlayers} oyuncu bekleniyor...` : 'Oyun başlamak üzere!'}`}
-            </Text>
-            {isCreator && missingPlayers > 0 && timeLeft > 0 && (
-               <Text style={{color: '#FFD700', fontSize: 14, marginTop: 8, textAlign: 'center', fontWeight: 'bold'}}>
-                 {`Oyun başlıyor: ${timeLeft} saniye`}
-               </Text>
-             )}
-             {isCreator && timeLeft === 0 && missingPlayers > 0 && (
-               <Text style={{color: '#FF6B6B', fontSize: 14, marginTop: 8, textAlign: 'center', fontWeight: 'bold'}}>
-                 Oyun başlıyor...
-               </Text>
-             )}
-          </>
+    <LinearGradient
+      colors={['#1a1a2e', '#16213e', '#0f3460']}
+      style={styles.overlay}
+    >
+      <View style={styles.waitingContainer}>
+        {/* Üst başlık */}
+        <Animated.View style={[styles.titleContainer, { transform: [{ scale: countdownScale }] }]}>
+          <Text style={styles.waitingTitle}>OYUN BAŞLIYOR</Text>
+          <View style={styles.titleUnderline} />
+        </Animated.View>
+        
+        {/* Geri sayım göstergesi */}
+        {timeLeft > 0 && (
+          <View style={styles.countdownContainer}>
+            <Animated.View style={[styles.countdownCircle, { transform: [{ scale: countdownScale }] }]}>
+              <Text style={styles.countdownNumber}>{timeLeft}</Text>
+            </Animated.View>
+            <Text style={styles.countdownText}>saniye</Text>
+          </View>
         )}
+        
+        {/* Oyuncular grid */}
+        <View style={styles.playersGrid}>
+          {[0, 1, 2, 3].map((index) => {
+            const player = currentPlayers[index];
+            const isOccupied = player !== undefined;
+            
+            return (
+              <View key={index} style={[
+                styles.playerSlot,
+                isOccupied && styles.playerSlotOccupied,
+                !isOccupied && styles.playerSlotEmpty
+              ]}>
+                {isOccupied ? (
+                  <>
+                    <View style={[
+                      styles.playerColorIndicator,
+                      { backgroundColor: COLORS[player.color] }
+                    ]} />
+                    <Text style={styles.playerName} numberOfLines={1}>
+                      {player.nickname || 'Oyuncu'}
+                    </Text>
+                    <Ionicons name="checkmark-circle" size={20} color="#4CAF50" style={styles.playerStatusIcon} />
+                  </>
+                ) : (
+                  <>
+                    <View style={styles.emptySlotIcon}>
+                      <Ionicons name="person-add" size={24} color="#666" />
+                    </View>
+                    <Text style={styles.emptySlotText}>Bekleniyor...</Text>
+                  </>
+                )}
+              </View>
+            );
+          })}
+        </View>
+        
+        {/* Durum mesajı */}
+        <View style={styles.statusMessageContainer}>
+          {currentPlayers.length === 0 ? (
+            <Text style={styles.statusText}>Bağlantı kuruluyor...</Text>
+          ) : missingPlayers > 0 ? (
+            <>
+              <Text style={styles.statusText}>
+                {missingPlayers} oyuncu daha bekleniyor...
+              </Text>
+              {isCreator && (
+                <Text style={styles.creatorText}>
+                  Oda kurucusu olarak oyunu başlatabilirsin
+                </Text>
+              )}
+            </>
+          ) : (
+            <Text style={styles.readyText}>Tüm oyuncular hazır!</Text>
+          )}
+        </View>
+        
+        {/* Alt animasyon */}
+        <LottieView
+          source={require('../../assets/animations/loading-online-players.json')}
+          style={styles.bottomAnimation}
+          autoPlay
+          loop
+        />
       </View>
-      <Text style={{color: '#fff', fontSize: 15, fontStyle: 'italic'}}>
-         {isCreator && missingPlayers > 0 
-           ? 'Oda kurucusu olarak 20 saniye sonra oyun başlayacak.' 
-           : 'Oyun, tüm oyuncular katıldığında otomatik başlayacak.'}
-       </Text>
-    </View>
+    </LinearGradient>
   );
 };
 
@@ -402,9 +827,9 @@ useEffect(() => {
 
   const renderPlayerInfo = () => {
     const getPlayerStatus = (playerColor) => {
-      if (gamePhase === 'finished') return winner === playerColor ? 'Kazandı!' : 'Kaybetti';
-      if (gameState?.currentPlayer === playerColor) return 'Sıra Sizde';
-      return 'Sıra Rakipte';
+      if (gamePhase === 'finished') return winner === playerColor ? "Kazandı!" : "Kaybetti";
+      if (gameState?.currentPlayer === playerColor) return "Sıra Sizde";
+      return "Sıra Rakipte";
     };
 
     return (
@@ -422,67 +847,73 @@ useEffect(() => {
 
   // Kazanan modalını kapatma ve ana menüye gitme fonksiyonu
   const handleWinnerModalClose = async () => {
+    // Eğer zaten navigation yapıldıysa tekrar yapma
+    if (hasNavigatedRef.current) {
+      console.log('[Navigation] Zaten navigation yapıldı, winner navigation atlanıyor');
+      return;
+    }
+    
+    // Navigation flag'ini işaretle
+    hasNavigatedRef.current = true;
+    console.log('[Navigation] Winner modal navigation başlatılıyor');
+    
     try {
       // Reklam göster
       await AdService.showInterstitialAd();
     } catch (error) {
       console.error('Reklam gösterme hatası:', error);
     } finally {
-      // Ana menüye git
-      router.replace('/(auth)/home');
+      // Ana menüye git - güvenli navigation
+      setTimeout(() => {
+        if (!isMounted) return;
+        try {
+          router.replace('/(auth)/home');
+        } catch (error) {
+          console.error('Navigation error in handleWinnerModalClose:', error);
+          try {
+            router.push('/(auth)/home');
+          } catch (pushError) {
+            console.error('Push navigation da başarısız:', pushError);
+          }
+        }
+      }, 100);
     }
   };
+
+  // Winner alert göster
+  const showWinnerAlert = useCallback(() => {
+    if (gamePhase === 'finished' && winner) {
+      const isWinner = isCurrentUserWinner();
+      
+      Alert.alert(
+        isWinner ? 'Tebrikler!' : 'Oyun Bitti',
+        winner && playersInfo && playersInfo[winner] ? 
+          `${playersInfo[winner].nickname} kazandı!${isWinner ? "\n+10 Puan!\n+1 💎" : "\nDaha iyi şanslar!"}` : 
+          'Oyun bitti!',
+        [
+          {
+            text: 'Ana Menü',
+            style: 'default',
+            onPress: handleWinnerModalClose
+          }
+        ]
+      );
+    }
+  }, [gamePhase, winner, playersInfo, dispatch, handleWinnerModalClose]);
 
   // Kazanan oyuncunun gerçek kullanıcı olup olmadığını kontrol et
   const isCurrentUserWinner = () => {
     if (!winner || !playersInfo || !playersInfo[winner]) return false;
     const winnerInfo = playersInfo[winner];
-    return winnerInfo.id === user?.id || winnerInfo.id === socket?.id;
+    return winnerInfo.id === actualUser?.id || winnerInfo.id === socket?.id;
   };
 
-  // --- OYUN BİTİŞ MODALİ ---
-  const renderWinnerModal = () => {
-    const isWinner = isCurrentUserWinner();
-    
-    return (
-      <Modal
-        animationType="slide"
-        transparent={true}
-        visible={gamePhase === 'finished' && !!winner}
-        onRequestClose={() => {}}
-      >
-        <View style={styles.centeredView}>
-          <View style={styles.modalView}>
-            <Text style={styles.winnerText}>
-              {isWinner ? 'Tebrikler!' : 'Oyun Bitti'}
-            </Text>
-            <Text style={styles.winnerName}>
-              {winner && playersInfo && playersInfo[winner] ? playersInfo[winner].nickname : ''}
-            </Text>
-            {isWinner ? (
-              <>
-                <Text style={styles.pointsWonText}>+10 Puan!</Text>
-                <Text style={styles.diamondWonText}>+1 💎</Text>
-              </>
-            ) : (
-              <Text style={styles.loseText}>Daha iyi şanslar!</Text>
-            )}
-            <LottieView
-              source={require("../../assets/animations/firstwinner.json")}
-              style={styles.lottieWinner}
-              autoPlay
-              loop={false}
-            />
-            <View style={styles.modalFooterButtons}>
-              <TouchableOpacity onPress={handleWinnerModalClose} style={styles.footerButton}>
-                <Text style={styles.footerButtonText}>Ana Menü</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
-    );
-  };
+  // Winner alert'ı otomatik göster - güvenli navigation
+  useEffect(() => {
+    if (gamePhase === 'finished' && winner) {
+      showWinnerAlert();
+    }
+  }, [gamePhase, winner, showWinnerAlert]);
 
 
 
@@ -508,31 +939,142 @@ useEffect(() => {
   };
 
   const handleLeaveGame = () => {
-    setShowLeaveModal(true);
-  };
-
-  const confirmLeaveGame = () => {
-    if (socket && room?.id) {
-      console.log(`[Game] Leaving room: ${room.id}`);
-      socket.emit('leave_room', { roomId: room.id });
-      router.replace('/(auth)/home');
-    }
-    setShowLeaveModal(false);
+    Alert.alert(
+      'Oyundan Ayrıl',
+      "Oyunu bırakıp ana menüye dönmek istediğinizden emin misiniz?",
+      [
+        {
+          text: 'İptal',
+          style: 'cancel'
+        },
+        {
+          text: 'Ayrıl',
+          style: 'destructive',
+          onPress: () => {
+            console.log('[Leave Game] Oyuncu oyundan ayrılmak istiyor.');
+            
+            // Eğer zaten navigation yapıldıysa tekrar yapma
+            if (hasNavigatedRef.current) {
+              console.log('[Navigation] Zaten navigation yapıldı, leave game atlanıyor');
+              return;
+            }
+            
+            // Navigation flag'ini işaretle
+            hasNavigatedRef.current = true;
+            console.log('[Navigation] Leave game navigation başlatılıyor');
+            
+            // Navigation'ı bir sonraki event loop cycle'a ertele
+            // Bu, Alert modal'ının tamamen kapanmasını sağlar
+            // setImmediate yerine setTimeout(0) kullan - daha güvenli
+            setTimeout(async () => {
+              try {
+                // First try to leave the room properly
+                if (socket && socket.connected && room?.id) {
+                  console.log(`[Leave Game] Leaving room: ${room.id}`);
+                  socket.emit('leave_room', { roomId: room.id });
+                  
+                  // Wait a bit for the server to process the leave
+                  await new Promise(resolve => setTimeout(resolve, 300));
+                } else {
+                  console.warn('[Leave Game] Socket not available or not connected, forcing navigation');
+                  
+                  // Try to reconnect if socket exists but not connected
+                  if (socket && !socket.connected) {
+                    console.log('[Leave Game] Attempting to reconnect socket...');
+                    socket.connect();
+                    await new Promise(resolve => setTimeout(resolve, 500));
+                    
+                    // Try to leave again after reconnection
+                    if (socket.connected && room?.id) {
+                      socket.emit('leave_room', { roomId: room.id });
+                      await new Promise(resolve => setTimeout(resolve, 300));
+                    }
+                  }
+                }
+                
+                // Navigation'ı bir sonraki tick'e ertele - bu çok önemli!
+                setTimeout(() => {
+                  if (isMountedRef.current) {
+                    safeNavigateToHome();
+                  } else {
+                    console.warn('[Leave Game] Component unmounted, skipping navigation');
+                  }
+                }, 300);
+                
+              } catch (error) {
+                console.error('[Leave Game] Error during leave process:', error);
+                // Navigation'ı bir sonraki tick'e ertele
+                setTimeout(() => {
+                  if (isMountedRef.current) {
+                    safeNavigateToHome();
+                  }
+                }, 300);
+              }
+            }, 0);
+          }
+        }
+      ]
+    );
   };
 
   const rollDiceForTurnOrder = () => {
     console.log('[ACTION] rollDiceForTurnOrder fonksiyonu çağrıldı.');
     console.log('[ACTION] Socket bağlantısı var mı?:', !!socket);
+    console.log('[ACTION] Socket connected?:', socket?.connected);
     console.log('[ACTION] Oda ID:', room?.id);
-    if (socket && room?.id) {
-      console.log(`[ACTION] Sunucuya 'roll_dice_turn_order' gönderiliyor. Oda: ${room.id}`);
-      socket.emit('roll_dice_turn_order', { roomId: room.id });
-    } else {
-      console.error('[HATA] Zar atılamadı. Socket veya Oda ID eksik.', {
-        socketMevcut: !!socket,
-        odaId: room?.id
-      });
+    console.log('[ACTION] myColor:', myColor);
+    console.log('[ACTION] canRollDice:', canRollDice);
+    console.log('[ACTION] gamePhase:', gamePhase);
+    console.log('[ACTION] turnOrderRolls:', gameState?.turnOrderRolls);
+    
+    if (!socket) {
+      console.error('[HATA] Zar atılamadı. Socket yok.');
+      dispatch(showAlert({
+        type: 'error',
+        title: 'Bağlantı Hatası',
+        message: 'Sunucuya bağlantı yok. Lütfen tekrar bağlanmayı deneyin.'
+      }));
+      return;
     }
+    
+    if (!socket.connected) {
+      console.error('[HATA] Zar atılamadı. Socket bağlantısı kopuk.');
+      dispatch(showAlert({
+        type: 'error',
+        title: 'Bağlantı Hatası',
+        message: 'Sunucu bağlantısı kesildi. Yeniden bağlanılıyor...'
+      }));
+      socket.connect();
+      return;
+    }
+    
+    if (!room?.id) {
+      console.error('[HATA] Zar atılamadı. Oda ID eksik.');
+      dispatch(showAlert({
+        type: 'error',
+        title: 'Oda Hatası',
+        message: 'Oda bilgisi bulunamadı. Lütfen tekrar odaya katılın.'
+      }));
+      return;
+    }
+    
+    if (!canRollDice) {
+      console.error('[HATA] Zar atılamadı. Zar atma koşulları uygun değil.');
+      dispatch(showAlert({
+        type: 'warning',
+        title: 'Zar Atılamaz',
+        message: 'Şu anda zar atamazsınız. Sıra sizde değil veya zaten attınız.'
+      }));
+      return;
+    }
+    
+    console.log(`[ACTION] Sunucuya 'roll_dice_turn_order' gönderiliyor. Oda: ${room.id}`);
+    socket.emit('roll_dice_turn_order', { roomId: room.id });
+    
+    // Disable dice button temporarily to prevent spam
+    setTimeout(() => {
+      console.log('[ACTION] Zar atma butonu tekrar aktif edildi.');
+    }, 1000);
   };
 
   const rollDiceRegular = () => {
@@ -557,43 +1099,59 @@ useEffect(() => {
       resizeMode="cover"
     >
       <SafeAreaView style={styles.container}>
-        {showTurnPopup && (
-          <Animated.View style={[styles.turnPopup, popupStyle]}>
-            <Text style={styles.turnPopupText}>Sıra Sende!</Text>
-          </Animated.View>
-        )}
+        {isRoomClosed ? (
+          <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+            <ActivityIndicator size="large" color="#FFFFFF" />
+            <Text style={styles.loadingText}>
+              {roomClosedReason?.includes('kurucusu') 
+                ? 'Oda kurucusu ayrıldı, oyun sona eriyor...' 
+                : roomClosedReason?.includes('insan')
+                ? 'Tüm oyuncular ayrıldı, oda kapatılıyor...'
+                : 'Oda kapatılıyor...'
+              }
+            </Text>
+          </View>
+        ) : (
+          <>
+            {showTurnPopup && (
+              <Animated.View style={[styles.turnPopup, popupStyle]}>
+                <Text style={styles.turnPopupText}>{"Sıra Sende!"}</Text>
+              </Animated.View>
+            )}
 
         <View style={styles.header}>
           <View style={styles.headerCenter}>
             <Text style={styles.turnText}>
               {gamePhase === 'pre-game'
-                ? 'Sıra Belirleme Turu'
+                ? "Sıra Belirleme Turu"
                 : `Sıra: ${playersInfo && gameState?.currentPlayer && (playersInfo[gameState.currentPlayer]?.nickname || '...')}`}
             </Text>
             <View style={[styles.turnColorBox, { backgroundColor: COLORS[gameState?.currentPlayer] || '#888' }]} />
           </View>
-          <TouchableOpacity 
-            style={styles.chatButton}
-            onPress={() => {
-              console.log('Chat button pressed, current state:', isChatVisible);
-              setIsChatVisible(!isChatVisible);
-            }}
-          >
-            <Ionicons name="chatbubble-outline" size={24} color="white" />
-            {unreadMessageCount > 0 && (
-              <View style={styles.chatBadge}>
-                <Text style={styles.chatBadgeText}>
-                  {unreadMessageCount > 99 ? '99+' : unreadMessageCount}
-                </Text>
-              </View>
-            )}
-          </TouchableOpacity>
+          {!isAIMode && (
+            <TouchableOpacity 
+              style={styles.chatButton}
+              onPress={() => {
+                console.log('Chat button pressed, current state:', isChatVisible);
+                setIsChatVisible(!isChatVisible);
+              }}
+            >
+              <Ionicons name="chatbubble-outline" size={24} color="white" />
+              {unreadMessageCount > 0 && (
+                <View style={styles.chatBadge}>
+                  <Text style={styles.chatBadgeText}>
+                    {unreadMessageCount > 99 ? '99+' : unreadMessageCount}
+                  </Text>
+                </View>
+              )}
+            </TouchableOpacity>
+          )}
         </View>
 
         {(gamePhase === 'waiting' || (gamePhase !== 'finished' && (!players || players.length < 4))) && renderWaitingOverlay()}
 
         {(gamePhase === 'pre-game' || gamePhase === 'playing' || gamePhase === 'finished') && (
-          <>
+          <View style={{ flex: 1, width: '100%', alignItems: 'center' }}>
             <OnlineGameBoard
               players={room.players}
               gameState={room.gameState}
@@ -622,11 +1180,29 @@ useEffect(() => {
               <View style={styles.diceAndButtonContainer}>
                 {/* The Dice itself, shown in 'playing' phase when there's a value, or in 'pre-game' phase when current player has rolled */}
                 {((gamePhase === 'playing' && gameState?.diceValue) || 
-                  (gamePhase === 'pre-game' && gameState?.turnOrderRolls && myColor && gameState.turnOrderRolls.find(roll => roll.color === myColor))) && 
+                  (gamePhase === 'pre-game' && gameState?.turnOrderRolls && myColor && (() => {
+                    const turnOrderRolls = gameState.turnOrderRolls;
+                    if (Array.isArray(turnOrderRolls)) {
+                      return turnOrderRolls.some(roll => roll.color === myColor);
+                    } else if (typeof turnOrderRolls === 'object') {
+                      return turnOrderRolls.hasOwnProperty(myColor);
+                    }
+                    return false;
+                  })())) && 
                   <Dice number={
                     gamePhase === 'playing' 
                       ? gameState?.diceValue 
-                      : gameState?.turnOrderRolls?.find(roll => roll.color === myColor)?.roll
+                      : (() => {
+                        const turnOrderRolls = gameState.turnOrderRolls;
+                        if (Array.isArray(turnOrderRolls)) {
+                          const roll = turnOrderRolls.find(roll => roll.color === myColor);
+                          return roll ? roll.roll : 0;
+                        } else if (typeof turnOrderRolls === 'object') {
+                          const rollData = turnOrderRolls[myColor];
+                          return rollData ? (rollData.diceValue || rollData.roll || 0) : 0;
+                        }
+                        return 0;
+                      })()
                   } />}
                 
                 {/* The Roll Dice button container */}
@@ -652,69 +1228,29 @@ useEffect(() => {
             </View>
 
             {/* Chat Component */}
-            <ChatComponent
-              isVisible={isChatVisible}
-              onToggle={() => {
-                console.log('Chat toggle pressed, current state:', isChatVisible);
-                setIsChatVisible(!isChatVisible);
-              }}
-              messages={chatMessages || []}
-              onSendMessage={sendMessage}
-              currentUser={{ id: user?.id, nickname: user?.nickname }}
-              warningMessage={chatWarning}
-              isBlocked={chatBlocked}
-              blockDuration={chatBlockDuration}
-              onProfanityWarning={handleProfanityWarning}
-              onMessageBlocked={handleMessageBlocked}
-            />
-            
-
+            {!isAIMode && (
+              <ChatComponent
+                isVisible={isChatVisible}
+                onToggle={() => {
+                  console.log('Chat toggle pressed, current state:', isChatVisible);
+                  setIsChatVisible(!isChatVisible);
+                }}
+                messages={chatMessages || []}
+                onSendMessage={sendMessage}
+                currentUser={{ id: actualUser?.id, nickname: actualUser?.nickname }}
+                warningMessage={chatWarning}
+                isBlocked={chatBlocked}
+                blockDuration={chatBlockDuration}
+                onProfanityWarning={handleProfanityWarning}
+                onMessageBlocked={handleMessageBlocked}
+              />
+            )}
+          </View>
+        )}
           </>
         )}
-
-        {renderWinnerModal()}
-        
-        {/* Leave Game Confirmation Modal */}
-        <Modal
-          visible={showLeaveModal}
-          transparent={true}
-          animationType="fade"
-          onRequestClose={() => setShowLeaveModal(false)}
-        >
-          <View style={styles.modalOverlay}>
-            <View style={styles.modalContainer}>
-              <LinearGradient
-                colors={['#FF6B6B', '#FF8E53']}
-                style={styles.modalGradient}
-              >
-                <Ionicons name="exit-outline" size={60} color="#FFF" style={styles.modalIcon} />
-                <Text style={styles.modalTitle}>Oyundan Ayrıl</Text>
-                <Text style={styles.modalMessage}>
-                  Oyunu bırakıp ana menüye dönmek istediğinizden emin misiniz?
-                </Text>
-                
-                <View style={styles.modalButtons}>
-                  <TouchableOpacity
-                    onPress={() => setShowLeaveModal(false)}
-                    style={[styles.modalButton, styles.modalButtonSecondary]}
-                  >
-                    <Text style={[styles.modalButtonText, styles.modalButtonTextSecondary]}>
-                      İptal
-                    </Text>
-                  </TouchableOpacity>
-                  
-                  <TouchableOpacity
-                    onPress={confirmLeaveGame}
-                    style={styles.modalButton}
-                  >
-                    <Text style={styles.modalButtonText}>Ayrıl</Text>
-                  </TouchableOpacity>
-                </View>
-              </LinearGradient>
-            </View>
-          </View>
-        </Modal>
-      </SafeAreaView>
+            
+        </SafeAreaView>
     </ImageBackground>
   );
 };
@@ -727,7 +1263,8 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: 'transparent',
     padding: 10,
-    justifyContent: 'space-around',
+    paddingTop: Platform.OS === 'android' ? getStatusBarHeight() + 10 : 10, // Android'de status bar yüksekliği kadar padding
+    justifyContent: getContainerJustifyContent(), // Ekran boyutuna göre ortala veya üstten başla
     alignItems: 'center',
   },
   header: {
@@ -785,8 +1322,9 @@ const styles = StyleSheet.create({
   gameBoard: {
     width: '95%',
     aspectRatio: 1,
-    maxWidth: 400,
-    maxHeight: 400,
+    maxWidth: getBoardSize(),
+    maxHeight: getBoardSize(),
+    alignSelf: 'center', // Center the board
   },
   controlsContainer: {
     width: '95%',
@@ -910,55 +1448,7 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
   },
-  centeredView: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.6)',
-  },
-  modalView: {
-    width: '90%',
-    maxWidth: 400,
-    margin: 20,
-    backgroundColor: 'rgba(12, 26, 62, 0.95)',
-    borderRadius: 20,
-    padding: 25,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 5,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.2)',
-  },
-  winnerText: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#66ff66',
-    marginBottom: 10,
-    textAlign: 'center',
-  },
-  winnerName: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#FFD700',
-    textShadowColor: 'rgba(0, 0, 0, 0.75)',
-    textShadowOffset: { width: -1, height: 1 },
-    textShadowRadius: 10,
-    marginBottom: 5,
-  },
-  lottieWinner: {
-    width: 200,
-    height: 200,
-    marginVertical: 10,
-  },
-  modalFooterButtons: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    marginTop: 20,
-    width: '100%',
-  },
+
   moveHistoryContainer: {
     width: '100%',
     backgroundColor: 'rgba(0,0,0,0.2)',
@@ -1077,71 +1567,164 @@ const styles = StyleSheet.create({
     marginTop: 5,
     marginBottom: 10,
   },
-  modalOverlay: {
+  // YENİ GEÇİŞ EKRANI STİLLERİ
+  waitingContainer: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
     justifyContent: 'center',
     alignItems: 'center',
+    paddingHorizontal: 20,
   },
-  modalContainer: {
-    width: '85%',
-    maxWidth: 350,
-    borderRadius: 20,
-    overflow: 'hidden',
-    elevation: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 5 },
-    shadowOpacity: 0.3,
+  titleContainer: {
+    marginBottom: 30,
+    alignItems: 'center',
+  },
+  waitingTitle: {
+    fontSize: 32,
+    fontWeight: 'bold',
+    color: '#FFD700',
+    textAlign: 'center',
+    letterSpacing: 3,
+    textShadowColor: 'rgba(255, 215, 0, 0.5)',
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 10,
+  },
+  titleUnderline: {
+    width: 100,
+    height: 3,
+    backgroundColor: '#FFD700',
+    borderRadius: 2,
+    marginTop: 10,
+    shadowColor: '#FFD700',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.8,
     shadowRadius: 10,
   },
-  modalGradient: {
-    padding: 30,
+  countdownContainer: {
     alignItems: 'center',
+    marginBottom: 30,
   },
-  modalIcon: {
+  countdownCircle: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: 'rgba(255, 215, 0, 0.1)',
+    borderWidth: 4,
+    borderColor: '#FFD700',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#FFD700',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.6,
+    shadowRadius: 15,
+  },
+  countdownNumber: {
+    fontSize: 48,
+    fontWeight: 'bold',
+    color: '#FFD700',
+    textShadowColor: 'rgba(255, 215, 0, 0.8)',
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 8,
+  },
+  countdownText: {
+    fontSize: 16,
+    color: '#ccc',
+    marginTop: 10,
+    textAlign: 'center',
+  },
+  playersGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    width: '100%',
+    maxWidth: 400,
+    marginBottom: 30,
+  },
+  playerSlot: {
+    width: 90,
+    height: 90,
+    borderRadius: 15,
+    margin: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderStyle: 'dashed',
+    borderColor: '#444',
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+  },
+  playerSlotOccupied: {
+    borderStyle: 'solid',
+    borderColor: '#4CAF50',
+    backgroundColor: 'rgba(76, 175, 80, 0.1)',
+    shadowColor: '#4CAF50',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.5,
+    shadowRadius: 8,
+  },
+  playerSlotEmpty: {
+    opacity: 0.7,
+  },
+  playerColorIndicator: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    marginBottom: 8,
+    borderWidth: 2,
+    borderColor: '#fff',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+  },
+  playerName: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#fff',
+    textAlign: 'center',
+    marginBottom: 4,
+    maxWidth: 80,
+  },
+  playerStatusIcon: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+  },
+  emptySlotIcon: {
+    marginBottom: 8,
+  },
+  emptySlotText: {
+    fontSize: 12,
+    color: '#888',
+    textAlign: 'center',
+  },
+  statusMessageContainer: {
+    alignItems: 'center',
     marginBottom: 20,
   },
-  modalTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#FFF',
-    marginBottom: 15,
+  statusText: {
+    fontSize: 18,
+    color: '#ccc',
     textAlign: 'center',
+    marginBottom: 8,
   },
-  modalMessage: {
-    fontSize: 16,
-    color: '#FFF',
+  creatorText: {
+    fontSize: 14,
+    color: '#FFD700',
     textAlign: 'center',
-    marginBottom: 30,
-    lineHeight: 22,
+    fontStyle: 'italic',
   },
-  modalButtons: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    width: '100%',
-    gap: 15,
-  },
-  modalButton: {
-    flex: 1,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderRadius: 25,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.3)',
-  },
-  modalButtonSecondary: {
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-  },
-  modalButtonText: {
-    color: '#FFF',
-    fontSize: 16,
+  readyText: {
+    fontSize: 20,
     fontWeight: 'bold',
+    color: '#4CAF50',
+    textAlign: 'center',
+    textShadowColor: 'rgba(76, 175, 80, 0.5)',
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 8,
   },
-  modalButtonTextSecondary: {
-    color: '#FFF',
-    opacity: 0.8,
+  bottomAnimation: {
+    width: 150,
+    height: 150,
+    opacity: 0.7,
   },
 });
 

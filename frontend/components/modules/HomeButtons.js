@@ -19,6 +19,7 @@ const HomeButtons = ({
   handleShop, 
   signOut,
   loading,
+  logoutLoading,
   showShopButton = true 
 }) => {
   return (
@@ -51,7 +52,7 @@ const HomeButtons = ({
           activeOpacity={0.8}
         >
           <LinearGradient
-            colors={['#FF6B35', '#FF8E53']}
+            colors={['#FFD700', '#FFA000']}
             style={styles.buttonGradient}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
@@ -89,7 +90,7 @@ const HomeButtons = ({
           activeOpacity={0.8}
         >
           <LinearGradient
-            colors={['#4CAF50', '#66BB6A']}
+            colors={['#00D9CC', '#00B8A6']}
             style={styles.buttonGradient}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
@@ -127,7 +128,7 @@ const HomeButtons = ({
           activeOpacity={0.8}
         >
           <LinearGradient
-            colors={['#2196F3', '#42A5F5']}
+            colors={['#E61A8D', '#C71585']}
             style={styles.buttonGradient}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
@@ -166,7 +167,7 @@ const HomeButtons = ({
             activeOpacity={0.8}
           >
             <LinearGradient
-              colors={['#9C27B0', '#BA68C8']}
+              colors={['#6E00B3', '#4A0080']}
               style={styles.buttonGradient}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}

@@ -4,8 +4,8 @@ import { DiamondService } from './DiamondService';
 const ENERGY_KEY = 'user_energy';
 const LAST_ENERGY_UPDATE_KEY = 'last_energy_update';
 const MAX_ENERGY = 5;
-const ENERGY_RECHARGE_TIME = 120 * 60 * 1000; // 120 dakika (milisaniye)
-const ENERGY_COST_PER_GAME = 1;
+const ENERGY_RECHARGE_TIME = 60 * 60 * 1000; // 60 dakika (milisaniye)
+const ENERGY_COST_PER_GAME = 1; // Sadece online mod için geçerlidir
 const DIAMONDS_PER_FULL_ENERGY = 50; // 5 enerji için 50 elmas
 
 export const EnergyService = {
@@ -66,7 +66,7 @@ export const EnergyService = {
     return await this.calculateAndUpdateEnergy();
   },
 
-  // Enerji kullan (oyun başlatırken)
+  // Enerji kullan (sadece online oyun başlatırken)
   async useEnergy(amount = ENERGY_COST_PER_GAME) {
     const currentEnergy = await this.getCurrentEnergy();
     
@@ -192,6 +192,22 @@ export const EnergyService = {
       energyToAdd,
       rechargeTime: ENERGY_RECHARGE_TIME
     };
+  },
+
+  // Enerji ekle (reklam ödülü için)
+  async addEnergy(amount) {
+    try {
+      const currentEnergy = await this.getCurrentEnergy();
+      const newEnergy = Math.min(currentEnergy + amount, MAX_ENERGY);
+      
+      await AsyncStorage.setItem(ENERGY_KEY, newEnergy.toString());
+      await AsyncStorage.setItem(LAST_ENERGY_UPDATE_KEY, Date.now().toString());
+      
+      return true;
+    } catch (error) {
+      console.error('Error adding energy:', error);
+      return false;
+    }
   },
 
   // Sabitler
