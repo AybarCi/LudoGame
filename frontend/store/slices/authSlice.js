@@ -1,8 +1,8 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { API_BASE_URL } from '../../constants/game';
 
-// API Base URL - Use environment variable or fallback to localhost
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://192.168.1.135:3001';
+
 
 // Helper function to check if token is expired
 const isTokenExpired = (token) => {

@@ -51,4 +51,40 @@ export const PATH_MAP = {
   },
 };
 
-export const API_BASE_URL = 'http://192.168.1.21:3001'; // Local network IP
+// --- Development URL Auto-Detection and Overrides ---
+// Rule: Fiziki cihazlarla test ediliyor. Bu nedenle, cihazdan erişilebilir IP’yi otomatik algıla.
+// Priority order:
+// 1) EXPO_PUBLIC_API_URL / EXPO_PUBLIC_SOCKET_URL (explicit overrides)
+// 2) Auto-detected host from scriptURL (Metro dev server) or hostname
+// 3) Fallback to 192.168.1.135 (last resort)
+
+import { NativeModules, Platform } from 'react-native';
+
+function getHost() {
+  try {
+    // scriptURL örn: "http://192.168.1.50:19000/index.bundle?platform=ios&dev=true&minify=false"
+    const scriptURL = NativeModules?.SourceCode?.scriptURL;
+    if (scriptURL) {
+      const url = new URL(scriptURL);
+      if (url.hostname && url.hostname !== 'localhost' && url.hostname !== '127.0.0.1') {
+        return url.hostname;
+      }
+    }
+    // iOS fiziki cihazlarda, bundle’dan hostname alınamazsa network IP’yi deneyebiliriz
+    // Son çare olarak mevcut fallback
+    return '192.168.1.135';
+  } catch (e) {
+    return '192.168.1.135';
+  }
+}
+
+const detectedHost = getHost();
+const DEFAULT_PORT = 3001;
+
+export const SOCKET_URL =
+  process.env.EXPO_PUBLIC_SOCKET_URL || `http://${detectedHost}:${DEFAULT_PORT}`;
+
+export const API_BASE_URL =
+  process.env.EXPO_PUBLIC_API_URL || `http://${detectedHost}:${DEFAULT_PORT}`;
+
+export const getApiUrl = (path = '') => `${API_BASE_URL}${path ? path.startsWith('/') ? path : `/${path}` : ''}`;

@@ -27,20 +27,25 @@ import {
 import { showAlert } from '../store/slices/alertSlice';
 import VerificationModal from '../components/VerificationModal';
 import { loginStyles as styles } from './login.styles';
+import { API_BASE_URL } from '../constants/game';
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://192.168.1.135:3001';
+const API_URL = API_BASE_URL;
 
 // Preload background image to prevent loading delay
 const logoImage = require('../assets/images/logo.png');
 
 export default function LoginScreen() {
+  console.log('=== LOGIN SCREEN MOUNTED ===');
   const dispatch = useDispatch();
   const router = useRouter();
   const {
     user,
     session,
-    timer
+    timer,
+    isAuthenticated
   } = useSelector((state) => state.auth);
+  
+  console.log('LoginScreen: Auth state:', { user: !!user, session: !!session, isAuthenticated });
   
   const [phoneNumber, setPhoneNumberState] = useState('');
   const [nickname, setNickname] = useState('');

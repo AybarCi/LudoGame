@@ -2575,7 +2575,8 @@ app.post('/api/avatar', async (req, res) => {
         if (success) {
             console.log(`[AVATAR UPLOAD] Başarılı - avatarUrl geri döndürülüyor`);
             // Return full URL including the base URL
-            const fullAvatarUrl = `http://192.168.1.21:3001${avatarFileUrl}`;
+            const baseUrl = process.env.BASE_URL || 'http://192.168.1.135:3001';
+            const fullAvatarUrl = `${baseUrl}${avatarFileUrl}`;
             res.json({ 
                 success: true, 
                 message: 'Avatar başarıyla güncellendi.',
@@ -2608,7 +2609,8 @@ app.get('/api/avatar/:userId', async (req, res) => {
         const avatarUrl = await getUserAvatar(userId);
         if (avatarUrl) {
             // Return full URL including the base URL
-            const fullAvatarUrl = `http://192.168.1.21:3001${avatarUrl}`;
+            const baseUrl = process.env.BASE_URL || 'http://192.168.1.135:3001';
+            const fullAvatarUrl = `${baseUrl}${avatarUrl}`;
             res.json({ success: true, avatarUrl: fullAvatarUrl });
         } else {
             res.json({ success: true, avatarUrl: null });
@@ -2620,7 +2622,7 @@ app.get('/api/avatar/:userId', async (req, res) => {
 });
 
 // --- Server Listen ---
-server.listen(PORT, '192.168.1.21', async () => {
+server.listen(PORT, '0.0.0.0', async () => {
     try {
         await executeQuery('SELECT 1');
         console.log('Veritabanı bağlantısı başarıyla doğrulandı.');

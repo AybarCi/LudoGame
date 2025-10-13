@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { API_BASE_URL } from '../constants/game';
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://192.168.1.135:3001';
+const API_URL = API_BASE_URL;
 
 class PawnService {
   // Token yenileme fonksiyonu

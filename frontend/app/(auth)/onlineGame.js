@@ -86,6 +86,26 @@ const OnlineGameScreen = () => {
   // Component mount durumu için ref
   const isMountedRef = useRef(true);
   
+  // Navigation tekrarını önlemek için ref
+  const hasNavigatedRef = useRef(false);
+  
+  // Room ID değiştiğinde roomClosed state'ini sıfırlamak için ref
+  const previousRoomIdRef = useRef(null);
+
+  // Component unmount cleanup
+  useEffect(() => {
+    return () => {
+      console.log('[OnlineGame] Component unmounting, cleaning up...');
+      isMountedRef.current = false;
+      hasNavigatedRef.current = false; // Navigation flag'ini sıfırla
+      
+      // Component unmount olurken room closed state'lerini temizle
+      console.log('[OnlineGame] Unmount sırasında room closed stateleri temizleniyor...');
+      setIsRoomClosed(false);
+      setRoomClosedReason('');
+    };
+  }, []);
+
   // Geri sayım için animasyon değeri - Component seviyesinde tanımlanmalı
   const countdownScale = useRef(new Animated.Value(1)).current;
 
@@ -98,6 +118,7 @@ const OnlineGameScreen = () => {
     setChatBlockDuration(data.blockDuration);
   };
 
+  // Socket bağlantısını ve roomClosed state'ini önce al - useEffect'lerden önce
   const { 
     socket, 
     room, 
@@ -117,7 +138,28 @@ const OnlineGameScreen = () => {
   } = useSocket({
     onProfanityWarning: handleProfanityWarning,
     onMessageBlocked: handleMessageBlocked
-  }); 
+  });
+
+  // Room ID değiştiğinde roomClosed state'ini sıfırla - DAHA GÜÇLÜ VERSİYON
+  useEffect(() => {
+    if (roomId && roomId !== previousRoomIdRef.current) {
+      console.log(`[OnlineGame] Room ID değişti: ${previousRoomIdRef.current} -> ${roomId}, TÜM roomClosed state'leri sıfırlanıyor`);
+      
+      // Önceki room ID'yi güncelle
+      previousRoomIdRef.current = roomId;
+      
+      // Room closed state'ini sıfırla - yeni odaya katılırken eski kapanma durumunu temizle
+      if (roomClosed.isClosed) {
+        console.log('[OnlineGame] Eski roomClosed state sıfırlanıyor');
+        setRoomClosed({ isClosed: false, reason: '' });
+      }
+      
+      // Local state'leri de sıfırla - HER DURUMDA
+      console.log('[OnlineGame] Local roomClosed stateleri sıfırlanıyor');
+      setIsRoomClosed(false);
+      setRoomClosedReason('');
+    }
+  }, [roomId, roomClosed.isClosed, setRoomClosed]); 
 
   // Current user tanımlaması
   const currentUser = actualUser;
@@ -717,16 +759,19 @@ useEffect(() => {
     };
   }, [gamePhase, navigation]);
 
-  // Room closed durumunu güncelle
+  // Room closed durumunu güncelle - DAHA GÜÇLÜ VERSİYON
   useEffect(() => {
     if (roomClosed.isClosed) {
+      console.log('[OnlineGame] Room closed detected, setting isRoomClosed to true');
       setIsRoomClosed(true);
       setRoomClosedReason(roomClosed.reason);
+    } else {
+      // Room closed değilse, local state'i de temizle
+      console.log('[OnlineGame] Room is not closed, ensuring local state is clean');
+      setIsRoomClosed(false);
+      setRoomClosedReason('');
     }
   }, [roomClosed]);
-
-  // Navigation flag'ini takip et - çift navigation'ı önlemek için
-  const hasNavigatedRef = useRef(false);
 
   const renderWaitingOverlay = () => {
   const maxPlayers = 4;
@@ -953,6 +998,14 @@ useEffect(() => {
           onPress: () => {
             console.log('[Leave Game] Oyuncu oyundan ayrılmak istiyor.');
             
+            // ÖNEMLİ: Room closed state'lerini temizle - yeni oda kurarken sorun olmaması için
+            console.log('[Leave Game] Room closed stateleri temizleniyor...');
+            setIsRoomClosed(false);
+            setRoomClosedReason('');
+            if (roomClosed.isClosed) {
+              setRoomClosed({ isClosed: false, reason: '' });
+            }
+            
             // Eğer zaten navigation yapıldıysa tekrar yapma
             if (hasNavigatedRef.current) {
               console.log('[Navigation] Zaten navigation yapıldı, leave game atlanıyor');
@@ -965,50 +1018,53 @@ useEffect(() => {
             
             // Navigation'ı bir sonraki event loop cycle'a ertele
             // Bu, Alert modal'ının tamamen kapanmasını sağlar
-            // setImmediate yerine setTimeout(0) kullan - daha güvenli
             setTimeout(async () => {
               try {
-                // First try to leave the room properly
-                if (socket && socket.connected && room?.id) {
+                // Odadan ayrılmayı dene - socket bağlantısı yoksa bile devam et
+                if (socket && room?.id) {
                   console.log(`[Leave Game] Leaving room: ${room.id}`);
-                  socket.emit('leave_room', { roomId: room.id });
                   
-                  // Wait a bit for the server to process the leave
-                  await new Promise(resolve => setTimeout(resolve, 300));
-                } else {
-                  console.warn('[Leave Game] Socket not available or not connected, forcing navigation');
-                  
-                  // Try to reconnect if socket exists but not connected
-                  if (socket && !socket.connected) {
-                    console.log('[Leave Game] Attempting to reconnect socket...');
+                  // Socket bağlı değilse bağlanmayı dene
+                  if (!socket.connected) {
+                    console.log('[Leave Game] Socket not connected, attempting to connect...');
                     socket.connect();
-                    await new Promise(resolve => setTimeout(resolve, 500));
                     
-                    // Try to leave again after reconnection
-                    if (socket.connected && room?.id) {
-                      socket.emit('leave_room', { roomId: room.id });
-                      await new Promise(resolve => setTimeout(resolve, 300));
-                    }
+                    // Bağlantı kurulmasını bekle
+                    await new Promise(resolve => setTimeout(resolve, 1000));
                   }
+                  
+                  // Socket şimdi bağlıysa leave_room gönder
+                  if (socket.connected) {
+                    socket.emit('leave_room', { roomId: room.id });
+                    console.log('[Leave Game] Leave room emitted successfully');
+                    
+                    // Sunucunun işlemesi için kısa bir süre bekle
+                    await new Promise(resolve => setTimeout(resolve, 300));
+                  } else {
+                    console.warn('[Leave Game] Socket still not connected, proceeding with navigation anyway');
+                  }
+                } else {
+                  console.warn('[Leave Game] No socket or room available, proceeding with navigation');
                 }
                 
-                // Navigation'ı bir sonraki tick'e ertele - bu çok önemli!
+                // Her durumda navigation'a devam et - odadan ayrılmak başarısız olsa bile
+                console.log('[Leave Game] Proceeding to home screen...');
                 setTimeout(() => {
                   if (isMountedRef.current) {
                     safeNavigateToHome();
                   } else {
                     console.warn('[Leave Game] Component unmounted, skipping navigation');
                   }
-                }, 300);
+                }, 100);
                 
               } catch (error) {
                 console.error('[Leave Game] Error during leave process:', error);
-                // Navigation'ı bir sonraki tick'e ertele
+                // Hata durumunda bile navigation'a devam et
                 setTimeout(() => {
                   if (isMountedRef.current) {
                     safeNavigateToHome();
                   }
-                }, 300);
+                }, 100);
               }
             }, 0);
           }

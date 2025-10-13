@@ -14,7 +14,7 @@ import { useRouter } from 'expo-router';
 const { width, height } = Dimensions.get('window');
 
 const Lobby = () => {
-  const { socket } = useSocket();
+  const { socket, setRoomClosed } = useSocket();
   const user = useSelector(state => state.auth.user);
   
   // Extract actual user object if it's wrapped in success property
@@ -174,6 +174,11 @@ const Lobby = () => {
   const handleCreateRoom = async () => {
     if (!socket) return;
     
+    // Reset roomClosed state to prevent issues from previous room closures
+    if (setRoomClosed) {
+      setRoomClosed({ isClosed: false, reason: '' });
+    }
+    
     // Check energy before creating room
     const hasEnergy = await EnergyService.hasEnoughEnergy();
     if (!hasEnergy) {
@@ -185,15 +190,22 @@ const Lobby = () => {
     
     setIsLoading(true);
     try {
-      // Get user data from AsyncStorage to extract nickname
-      const userData = await AsyncStorage.getItem('user');
+      // Get user data from Redux store or AsyncStorage to extract nickname
       let nickname = 'Guest';
       
-      if (userData) {
+      // Önce Redux store'dan kullanıcı bilgilerini al
+      if (actualUser && (actualUser.nickname || actualUser.name)) {
+        nickname = actualUser.nickname || actualUser.name || 'Guest';
+      } else {
+        // Redux'ta yoksa AsyncStorage'dan dene
         try {
-          const user = JSON.parse(userData);
-          nickname = actualUser.nickname || actualUser.name || 'Guest';
+          const userData = await AsyncStorage.getItem('user');
+          if (userData) {
+            const storedUser = JSON.parse(userData);
+            nickname = storedUser.nickname || storedUser.name || 'Guest';
+          }
         } catch (e) {
+          console.warn('[Lobby] Failed to read user data from storage:', e);
           // Silent fail for user data parse
         }
       }
@@ -325,6 +337,11 @@ const Lobby = () => {
   const handleJoinRoom = async (roomId) => {
     if (!socket) return;
     
+    // Reset roomClosed state to prevent issues from previous room closures
+    if (setRoomClosed) {
+      setRoomClosed({ isClosed: false, reason: '' });
+    }
+    
     // Check energy before joining room
     const hasEnough = await hasEnoughEnergy(1);
     if (!hasEnough) {
@@ -347,15 +364,22 @@ const Lobby = () => {
     }
     
     try {
-      // Get user data from AsyncStorage to extract nickname
-      const userData = await AsyncStorage.getItem('user');
+      // Get user data from Redux store or AsyncStorage to extract nickname
       let nickname = 'Guest';
       
-      if (userData) {
+      // Önce Redux store'dan kullanıcı bilgilerini al
+      if (actualUser && (actualUser.nickname || actualUser.name)) {
+        nickname = actualUser.nickname || actualUser.name || 'Guest';
+      } else {
+        // Redux'ta yoksa AsyncStorage'dan dene
         try {
-          const user = JSON.parse(userData);
-          nickname = actualUser.nickname || actualUser.name || 'Guest';
+          const userData = await AsyncStorage.getItem('user');
+          if (userData) {
+            const storedUser = JSON.parse(userData);
+            nickname = storedUser.nickname || storedUser.name || 'Guest';
+          }
         } catch (e) {
+          console.warn('[Lobby] Failed to read user data from storage:', e);
           // Silent fail for user data parse
         }
       }

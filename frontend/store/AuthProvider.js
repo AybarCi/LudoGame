@@ -2,8 +2,10 @@ import React, { useState, useEffect, createContext, useContext } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
 import { DiamondService } from '../services/DiamondService';
+import { store } from './index';
+import { API_BASE_URL } from '../constants/game';
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://192.168.1.135:3001';
+const API_URL = API_BASE_URL;
 
 const AuthContext = createContext({});
 
@@ -190,6 +192,7 @@ export function AuthProvider({ children }) {
     };
 
     const signOut = async () => {
+        console.log('=== AUTH PROVIDER SIGNOUT STARTING ===');
         setLoading(true);
         try {
             const refreshToken = await AsyncStorage.getItem('refreshToken');
@@ -212,14 +215,23 @@ export function AuthProvider({ children }) {
             await AsyncStorage.removeItem('user');
             setUser(null);
             setSession(null);
+             
+            // Redux state'i de temizle - bu önemli!
+            console.log('Dispatching Redux logout action...');
+            store.dispatch(logout());
+            console.log('Redux logout action dispatched');
+             
             // Root Layout'un mount edilmesini beklemek için setTimeout kullan
             setTimeout(() => {
+                console.log('Navigating to login screen...');
                 router.replace('/login');
+                console.log('Navigation to login completed');
             }, 300);
         } catch (error) {
             console.error('Sign out error:', error);
         } finally {
             setLoading(false);
+            console.log('=== AUTH PROVIDER SIGNOUT COMPLETED ===');
         }
     };
 

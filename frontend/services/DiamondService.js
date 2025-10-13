@@ -1,10 +1,11 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { store } from '../store';
 import { setDiamonds, addDiamonds, spendDiamonds } from '../store/slices/diamondSlice';
+import { API_BASE_URL as API_BASE_ORIGIN } from '../constants/game';
 
 const DIAMONDS_KEY = 'user_diamonds';
 const DAILY_REWARD_KEY = 'daily_reward_last_claim';
-const API_BASE_URL = `${process.env.EXPO_PUBLIC_API_URL || 'http://192.168.1.135:3001'}/api`;
+const API_BASE_URL = `${API_BASE_ORIGIN}/api`;
 
 export const DiamondService = {
   // API'den access token al

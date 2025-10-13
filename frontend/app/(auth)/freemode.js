@@ -15,7 +15,6 @@ import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useSelector, useDispatch } from 'react-redux';
-import { EnergyService } from '../../services/EnergyService';
 import { showAlert } from '../../store/slices/alertSlice';
 
 const { width } = Dimensions.get('window');
@@ -38,6 +37,20 @@ const FreeModeScreen = () => {
   const [tempPlayerNames, setTempPlayerNames] = useState({});
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(30)).current;
+  const particlesAnim = useRef(new Animated.Value(0)).current;
+
+  // Particle animation
+  useEffect(() => {
+    const particleAnimation = Animated.loop(
+      Animated.timing(particlesAnim, {
+        toValue: 1,
+        duration: 8000,
+        useNativeDriver: true,
+      })
+    );
+    particleAnimation.start();
+    return () => particleAnimation.stop();
+  }, []);
 
   useEffect(() => {
     Animated.parallel([
@@ -130,13 +143,6 @@ const FreeModeScreen = () => {
     }
 
     try {
-      // Check energy before starting game
-      const hasEnergy = await EnergyService.hasEnoughEnergy();
-      if (!hasEnergy) {
-        router.push('/(auth)/energy');
-        return;
-      }
-
       // Free mode - no energy required
       // Navigate to free mode game with selected parameters
       const gameParams = {
@@ -160,23 +166,63 @@ const FreeModeScreen = () => {
   };
 
   return (
-    <ImageBackground 
-      source={require('../../assets/images/wood-background.png')}
-      style={styles.container}
-      resizeMode="cover"
-    >
+    <View style={styles.container}>
+      {/* Animated Background */}
       <LinearGradient
-        colors={['rgba(0,0,0,0.3)', 'rgba(0,0,0,0.6)', 'rgba(0,0,0,0.4)']}
-        style={styles.gradient}
+        colors={['#1a1a2e', '#16213e', '#0f3460']}
+        style={styles.backgroundGradient}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
       >
-        {/* Back Button */}
-        <TouchableOpacity 
-          style={styles.backButton}
-          onPress={goBack}
-          activeOpacity={0.8}
-        >
-          <Ionicons name="arrow-back" size={24} color="white" />
-        </TouchableOpacity>
+        {/* Animated Particles */}
+        <View style={styles.particlesContainer}>
+          {[...Array(6)].map((_, i) => (
+            <Animated.View
+              key={i}
+              style={[
+                styles.particle,
+                {
+                  left: `${20 + (i * 15)}%`,
+                  top: `${10 + (i * 12)}%`,
+                  transform: [
+                    {
+                      translateY: slideAnim.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [0, -20 - (i * 10)]
+                      })
+                    },
+                    {
+                      scale: fadeAnim.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [0.5, 1]
+                      })
+                    }
+                  ],
+                  opacity: fadeAnim.interpolate({
+                    inputRange: [0, 0.5, 1],
+                    outputRange: [0, 0.3, 0.1]
+                  })
+                }
+              ]}
+            />
+          ))}
+        </View>
+
+        <View style={styles.header}>
+          <TouchableOpacity 
+            style={styles.backButton}
+            onPress={goBack}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="arrow-back" size={24} color="#00d4ff" />
+          </TouchableOpacity>
+          
+          <Animated.View style={[styles.headerTitleContainer, { opacity: fadeAnim }]}>
+            <Text style={styles.headerTitle}>SERBEST MOD</Text>
+          </Animated.View>
+          
+          <View style={{ width: 40 }} />
+        </View>
 
         <ScrollView 
           contentContainerStyle={styles.scrollContent}
@@ -191,35 +237,78 @@ const FreeModeScreen = () => {
               }
             ]}
           >
-            {/* Title */}
+            {/* Modern Title Section */}
             <View style={styles.titleContainer}>
-              <Text style={styles.title}>Serbest Mod</Text>
+              <Animated.View
+                style={[
+                  styles.titleIconContainer,
+                  {
+                    transform: [
+                      {
+                        scale: fadeAnim.interpolate({
+                          inputRange: [0, 1],
+                          outputRange: [0.8, 1]
+                        })
+                      }
+                    ]
+                  }
+                ]}
+              >
+                <Ionicons name="people" size={isTablet ? 48 : 40} color="#00d4ff" />
+              </Animated.View>
+              <Text style={styles.title}>SERBEST MOD</Text>
               <Text style={styles.subtitle}>
-                {isTablet ? 'Tablet' : 'Telefon'} üzerinde arkadaşlarınızla birlikte oynayın
+                Aynı cihazda arkadaşlarınla birlikte oynayın
               </Text>
             </View>
 
             {/* Player Count Selection */}
             <View style={styles.sectionContainer}>
-              <Text style={styles.sectionTitle}>Oyuncu Sayısı</Text>
+              <Text style={styles.sectionTitle}>OYUNCU SAYISI</Text>
               <View style={styles.playerCountContainer}>
-                {[2, 3, 4].map((count) => (
-                  <TouchableOpacity
+                {[2, 3, 4].map((count, index) => (
+                  <Animated.View
                     key={count}
                     style={[
-                      styles.playerCountButton,
-                      playerCount === count && styles.playerCountButtonActive
+                      styles.playerCountButtonWrapper,
+                      {
+                        transform: [
+                          {
+                            translateY: fadeAnim.interpolate({
+                              inputRange: [0, 1],
+                              outputRange: [50, 0]
+                            })
+                          }
+                        ],
+                        opacity: fadeAnim.interpolate({
+                          inputRange: [0, 0.5, 1],
+                          outputRange: [0, 0.5, 1]
+                        })
+                      }
                     ]}
-                    onPress={() => handlePlayerCountChange(count)}
-                    activeOpacity={0.8}
                   >
-                    <Text style={[
-                      styles.playerCountText,
-                      playerCount === count && styles.playerCountTextActive
-                    ]}>
-                      {count} Oyuncu
-                    </Text>
-                  </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[
+                        styles.playerCountButton,
+                        playerCount === count && styles.playerCountButtonActive
+                      ]}
+                      onPress={() => handlePlayerCountChange(count)}
+                      activeOpacity={0.9}
+                    >
+                      <Text style={[
+                        styles.playerCountText,
+                        playerCount === count && styles.playerCountTextActive
+                      ]}>
+                        {count}
+                      </Text>
+                      <Text style={[
+                        styles.playerCountSubText,
+                        playerCount === count && styles.playerCountSubTextActive
+                      ]}>
+                        Oyuncu
+                      </Text>
+                    </TouchableOpacity>
+                  </Animated.View>
                 ))}
               </View>
             </View>
@@ -227,7 +316,7 @@ const FreeModeScreen = () => {
             {/* Color Selection */}
             <View style={styles.sectionContainer}>
               <Text style={styles.sectionTitle}>
-                Renk Seçimi ({selectedPlayers.length}/{playerCount})
+                RENK SEÇİMİ ({selectedPlayers.length}/{playerCount})
               </Text>
               <View style={styles.colorGrid}>
                 {colors.slice(0, playerCount).map((colorItem) => {
@@ -235,30 +324,76 @@ const FreeModeScreen = () => {
                   const isDisabled = !isSelected && selectedPlayers.length >= playerCount;
                   
                   return (
-                    <TouchableOpacity
+                    <Animated.View
                       key={colorItem.value}
                       style={[
-                        styles.colorButton,
-                        { backgroundColor: colorItem.color },
-                        isSelected && styles.colorButtonSelected,
-                        isDisabled && styles.colorButtonDisabled
+                        styles.colorButtonWrapper,
+                        {
+                          transform: [
+                            {
+                              translateY: fadeAnim.interpolate({
+                                inputRange: [0, 1],
+                                outputRange: [30, 0]
+                              })
+                            }
+                          ],
+                          opacity: fadeAnim.interpolate({
+                            inputRange: [0, 0.7, 1],
+                            outputRange: [0, 0.7, 1]
+                          })
+                        }
                       ]}
-                      onPress={() => togglePlayerColor(colorItem.value)}
-                      disabled={isDisabled}
-                      activeOpacity={0.8}
                     >
-                      <Ionicons 
-                        name={colorItem.icon} 
-                        size={isTablet ? 40 : 30} 
-                        color="white" 
-                      />
-                      <Text style={styles.colorButtonText}>{colorItem.name}</Text>
-                      {isSelected && (
-                        <View style={styles.selectedIndicator}>
-                          <Ionicons name="checkmark" size={20} color="white" />
-                        </View>
-                      )}
-                    </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[
+                          styles.colorButton,
+                          { backgroundColor: colorItem.color },
+                          isSelected && styles.colorButtonSelected,
+                          isDisabled && styles.colorButtonDisabled
+                        ]}
+                        onPress={() => togglePlayerColor(colorItem.value)}
+                        disabled={isDisabled}
+                        activeOpacity={0.9}
+                      >
+                        <Animated.View
+                          style={[
+                            styles.colorIconContainer,
+                            isSelected && {
+                              transform: [
+                                {
+                                  scale: fadeAnim.interpolate({
+                                    inputRange: [0, 1],
+                                    outputRange: [1, 1.1]
+                                  })
+                                }
+                              ]
+                            }
+                          ]}
+                        >
+                          <Ionicons 
+                            name={colorItem.icon} 
+                            size={isTablet ? 40 : 30} 
+                            color="white" 
+                          />
+                        </Animated.View>
+                        <Text style={styles.colorButtonText}>{colorItem.name}</Text>
+                        {isSelected && (
+                          <Animated.View
+                            style={[
+                              styles.selectedIndicator,
+                              {
+                                opacity: fadeAnim.interpolate({
+                                  inputRange: [0, 0.5, 1],
+                                  outputRange: [0, 0, 1]
+                                })
+                              }
+                            ]}
+                          >
+                            <Ionicons name="checkmark" size={24} color="white" />
+                          </Animated.View>
+                        )}
+                      </TouchableOpacity>
+                    </Animated.View>
                   );
                 })}
               </View>
@@ -290,28 +425,48 @@ const FreeModeScreen = () => {
             </View>
 
             {/* Start Button */}
-            <TouchableOpacity
+            <Animated.View
               style={[
-                styles.startButton,
-                selectedPlayers.length !== playerCount && styles.startButtonDisabled
-              ]}
-              onPress={handleStartGame}
-              disabled={selectedPlayers.length !== playerCount}
-              activeOpacity={0.8}
-            >
-              <LinearGradient
-                colors={selectedPlayers.length === playerCount 
-                  ? ['#4CAF50', '#66BB6A'] 
-                  : ['#666', '#888']
+                styles.startButtonWrapper,
+                {
+                  transform: [
+                    {
+                      translateY: fadeAnim.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [60, 0]
+                      })
+                    }
+                  ],
+                  opacity: fadeAnim.interpolate({
+                    inputRange: [0, 0.8, 1],
+                    outputRange: [0, 0.8, 1]
+                  })
                 }
-                style={styles.startButtonGradient}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
+              ]}
+            >
+              <TouchableOpacity
+                style={[
+                  styles.startButton,
+                  selectedPlayers.length !== playerCount && styles.startButtonDisabled
+                ]}
+                onPress={handleStartGame}
+                disabled={selectedPlayers.length !== playerCount}
+                activeOpacity={0.9}
               >
-                <Ionicons name="play" size={24} color="white" />
-                <Text style={styles.startButtonText}>Oyunu Başlat</Text>
-              </LinearGradient>
-            </TouchableOpacity>
+                <LinearGradient
+                  colors={selectedPlayers.length === playerCount 
+                    ? ['#00d4ff', '#0099cc'] 
+                    : ['#666', '#444']
+                  }
+                  style={styles.startButtonGradient}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                >
+                  <Text style={styles.startButtonText}>OYUNA BAŞLA</Text>
+                  <Ionicons name="play" size={24} color="white" style={styles.startButtonIcon} />
+                </LinearGradient>
+              </TouchableOpacity>
+            </Animated.View>
           </Animated.View>
         </ScrollView>
         
@@ -378,7 +533,7 @@ const FreeModeScreen = () => {
           </View>
         </Modal>
       </LinearGradient>
-    </ImageBackground>
+    </View>
   );
 };
 
@@ -386,24 +541,62 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  gradient: {
+  backgroundGradient: {
     flex: 1,
+    paddingHorizontal: isTablet ? 40 : 20,
+    paddingTop: isTablet ? 60 : 40,
+    paddingBottom: isTablet ? 40 : 20,
+  },
+  particlesContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    overflow: 'hidden',
+  },
+  particle: {
+    position: 'absolute',
+    width: 4,
+    height: 4,
+    backgroundColor: 'rgba(0, 212, 255, 0.6)',
+    borderRadius: 2,
   },
   backButton: {
-    position: 'absolute',
-    top: 50,
-    left: 20,
-    zIndex: 10,
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
   },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingTop: 50,
+    paddingBottom: 20,
+    backgroundColor: 'transparent',
+  },
+  headerTitleContainer: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  headerTitle: {
+    color: '#00d4ff',
+    fontSize: 24,
+    fontWeight: '700',
+    textShadowColor: 'rgba(0, 212, 255, 0.5)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 4,
+  },
+
   scrollContent: {
     flexGrow: 1,
-    paddingTop: 100,
+    paddingTop: 20,
     paddingBottom: 40,
   },
   content: {
@@ -412,62 +605,94 @@ const styles = StyleSheet.create({
   },
   titleContainer: {
     alignItems: 'center',
-    marginBottom: 40,
+    marginBottom: isTablet ? 50 : 40,
+  },
+  titleIconContainer: {
+    marginBottom: 16,
+    padding: 16,
+    backgroundColor: 'rgba(0, 212, 255, 0.1)',
+    borderRadius: 50,
+    borderWidth: 2,
+    borderColor: 'rgba(0, 212, 255, 0.3)',
   },
   title: {
-    fontSize: isTablet ? 36 : 28,
-    fontWeight: 'bold',
-    color: '#FFD700',
+    fontSize: isTablet ? 42 : 32,
+    fontWeight: '800',
+    color: 'white',
+    marginBottom: 8,
     textAlign: 'center',
-    textShadowColor: 'rgba(0, 0, 0, 0.8)',
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 10,
-    marginBottom: 10,
+    letterSpacing: 2,
+    textShadowColor: 'rgba(0, 212, 255, 0.5)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 4,
   },
   subtitle: {
-    fontSize: isTablet ? 18 : 16,
-    color: 'rgba(255, 255, 255, 0.8)',
+    fontSize: isTablet ? 16 : 14,
+    color: 'rgba(255, 255, 255, 0.7)',
     textAlign: 'center',
-    lineHeight: 24,
+    letterSpacing: 1,
   },
   sectionContainer: {
-    marginBottom: 30,
+    marginBottom: 35,
   },
   sectionTitle: {
-    fontSize: isTablet ? 22 : 20,
-    fontWeight: 'bold',
-    color: 'white',
-    marginBottom: 15,
-    textShadowColor: 'rgba(0, 0, 0, 0.8)',
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 5,
+    fontSize: isTablet ? 18 : 16,
+    fontWeight: '700',
+    color: 'rgba(0, 212, 255, 0.9)',
+    marginBottom: 20,
+    letterSpacing: 1.5,
+    textAlign: 'center',
   },
   playerCountContainer: {
     flexDirection: 'row',
     justifyContent: 'space-around',
     marginBottom: 10,
   },
+  playerCountButtonWrapper: {
+    flex: 1,
+    marginHorizontal: 5,
+  },
   playerCountButton: {
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    borderWidth: 2,
-    borderColor: 'rgba(255, 255, 255, 0.3)',
-    borderRadius: 15,
-    paddingVertical: isTablet ? 15 : 12,
-    paddingHorizontal: isTablet ? 25 : 20,
-    minWidth: isTablet ? 120 : 100,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+    borderRadius: 20,
+    paddingVertical: isTablet ? 20 : 16,
+    paddingHorizontal: 10,
     alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
   },
   playerCountButtonActive: {
-    backgroundColor: 'rgba(255, 215, 0, 0.2)',
-    borderColor: '#FFD700',
+    backgroundColor: 'rgba(0, 212, 255, 0.15)',
+    borderColor: '#00d4ff',
+    borderWidth: 2,
+    elevation: 8,
+    shadowColor: '#00d4ff',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
   },
   playerCountText: {
     color: 'rgba(255, 255, 255, 0.8)',
-    fontSize: isTablet ? 16 : 14,
+    fontSize: isTablet ? 28 : 24,
+    fontWeight: '800',
+    marginBottom: 2,
+  },
+  playerCountSubText: {
+    color: 'rgba(255, 255, 255, 0.6)',
+    fontSize: isTablet ? 12 : 10,
     fontWeight: '600',
   },
   playerCountTextActive: {
-    color: '#FFD700',
+    color: '#00d4ff',
+  },
+  playerCountSubTextActive: {
+    color: 'rgba(0, 212, 255, 0.8)',
   },
   colorGrid: {
     flexDirection: 'row',
@@ -475,49 +700,58 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: isTablet ? 20 : 15,
   },
-  colorButton: {
+  colorButtonWrapper: {
     width: isTablet ? '45%' : '47%',
+  },
+  colorButton: {
+    width: '100%',
     aspectRatio: isTablet ? 1.5 : 1.2,
     borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 15,
-    elevation: 8,
+    elevation: 4,
     shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
-    shadowOpacity: 0.3,
-    shadowRadius: 4.65,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 3,
     position: 'relative',
   },
   colorButtonSelected: {
-    borderWidth: 3,
+    borderWidth: 2,
     borderColor: 'white',
+    elevation: 8,
+    shadowColor: 'white',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 6,
   },
   colorButtonDisabled: {
-    opacity: 0.5,
+    opacity: 0.4,
+  },
+  colorIconContainer: {
+    marginBottom: 8,
   },
   colorButtonText: {
     color: 'white',
     fontSize: isTablet ? 16 : 14,
-    fontWeight: 'bold',
-    marginTop: 8,
-    textShadowColor: 'rgba(0, 0, 0, 0.8)',
+    fontWeight: '700',
+    textShadowColor: 'rgba(0, 0, 0, 0.7)',
     textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 3,
+    textShadowRadius: 2,
   },
   selectedIndicator: {
     position: 'absolute',
-    top: 10,
-    right: 10,
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    top: 8,
+    right: 8,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
   },
   rulesContainer: {
     backgroundColor: 'rgba(255, 255, 255, 0.1)',
@@ -538,17 +772,16 @@ const styles = StyleSheet.create({
     flex: 1,
     lineHeight: 20,
   },
+  startButtonWrapper: {
+    marginTop: 30,
+  },
   startButton: {
-    borderRadius: 25,
-    elevation: 8,
+    borderRadius: 30,
+    elevation: 10,
     shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
-    shadowOpacity: 0.3,
-    shadowRadius: 4.65,
-    marginTop: 20,
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
   },
   startButtonDisabled: {
     opacity: 0.6,
@@ -557,14 +790,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: isTablet ? 20 : 18,
-    paddingHorizontal: 30,
-    borderRadius: 25,
+    paddingVertical: isTablet ? 22 : 20,
+    paddingHorizontal: 40,
+    borderRadius: 30,
   },
   startButtonText: {
     color: 'white',
-    fontSize: isTablet ? 20 : 18,
-    fontWeight: 'bold',
+    fontSize: isTablet ? 18 : 16,
+    fontWeight: '800',
+    letterSpacing: 1.5,
+  },
+  startButtonIcon: {
     marginLeft: 10,
   },
   // Modal Styles

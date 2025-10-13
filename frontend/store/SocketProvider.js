@@ -1,6 +1,8 @@
 import React, { createContext, useContext, useState, useMemo, useRef, useCallback, useEffect } from 'react';
 import { io } from 'socket.io-client';
 import { useSelector } from 'react-redux';
+import { API_BASE_URL, SOCKET_URL } from '../constants/game';
+const socketUrl = SOCKET_URL || API_BASE_URL;
 
 // Context oluştur
 const SocketContext = createContext(null);
@@ -132,7 +134,7 @@ export const SocketProvider = ({ children }) => {
                     }
                     
                     if (!socketRef.current) {
-                    const socketUrl = process.env.EXPO_PUBLIC_SOCKET_URL || 'http://192.168.1.135:3001';
+                    const socketUrlLocal = socketUrl;
                     console.log('[SocketProvider] Creating socket with auth (useEffect):', {
                     userId: actualUser.id,
                     nickname: actualUser.nickname,
@@ -140,7 +142,7 @@ export const SocketProvider = ({ children }) => {
                     tokenLength: session ? session.length : 0,
                     tokenStart: session ? session.substring(0, 20) + '...' : 'null'
                 });
-                    socketRef.current = io(socketUrl, {
+                    socketRef.current = io(socketUrlLocal, {
                         auth: { 
                             userId: actualUser.id,
                             nickname: actualUser.nickname,
@@ -250,21 +252,38 @@ export const SocketProvider = ({ children }) => {
         };
     }, [session]);
 
-    // Bağlantı yeniden kurulduğunda odaya tekrar katılmayı dene
+    // Bağlantı yeniden kurulduğunda odaya tekrar katılmayı dene - sadece oyuncu aktif olarak oyundayken
     useEffect(() => {
         if (isConnected && lastRoomIdRef.current && !room) {
-            console.log(`[Auto-Rejoin] Bağlantı kuruldu, odaya tekrar katılınıyor: ${lastRoomIdRef.current}`);
-            socketRef.current.emit('join_room', { roomId: lastRoomIdRef.current }, (response) => {
-                if (response.success) {
-                    console.log('[Auto-Rejoin] Odaya başarıyla tekrar katıldı.');
-                    setRoom(response.room);
+            // Sadece oyuncu aktif bir oda içindeyken veya oyun devam ediyorken otomatik yeniden katılım yap
+            // Eğer kullanıcı oyundan ayrılmak istemişse (leave_room çağırmışsa), otomatik yeniden katılma
+            const shouldAutoRejoin = lastRoomIdRef.current && 
+                                   !room && 
+                                   socketRef.current?.connected && 
+                                   // Kullanıcı tarafından ayrılınmadıysa (örneğin bağlantı kopması durumu)
+                                   lastRoomIdRef.current !== 'USER_LEFT';
+            
+            if (shouldAutoRejoin) {
+                console.log(`[Auto-Rejoin] Bağlantı kuruldu, odaya tekrar katılınıyor: ${lastRoomIdRef.current}`);
+                
+                // Ekstra güvenlik: Kullanıcı hâlâ aktif mi kontrol et
+                if (session && session.length > 0) {
+                    socketRef.current.emit('join_room', { roomId: lastRoomIdRef.current }, (response) => {
+                        if (response.success) {
+                            console.log('[Auto-Rejoin] Odaya başarıyla tekrar katıldı.');
+                            setRoom(response.room);
+                        } else {
+                            console.error(`[Auto-Rejoin] Odaya tekrar katılım başarısız: ${response.message}`);
+                            lastRoomIdRef.current = null; // Başarısız olursa ref'i temizle
+                        }
+                    });
                 } else {
-                    console.error(`[Auto-Rejoin] Odaya tekrar katılım başarısız: ${response.message}`);
-                    lastRoomIdRef.current = null; // Başarısız olursa ref'i temizle
+                    console.warn('[Auto-Rejoin] Session yok, otomatik yeniden katılım iptal edildi');
+                    lastRoomIdRef.current = null; // Session yoksa ref'i temizle
                 }
-            });
+            }
         }
-    }, [isConnected, room]);
+    }, [isConnected, room, session]);
 
     // contextValue'yu memoize ederek gereksiz re-render'ları önle
     const setProfanityCallbacks = useCallback((onProfanityWarning, onMessageBlocked) => {
@@ -306,10 +325,10 @@ export const SocketProvider = ({ children }) => {
 
             // Soket örneği daha önce oluşturulmadıysa oluştur (Lazy Initialization)
             if (!socketRef.current) {
-                const socketUrl = process.env.EXPO_PUBLIC_SOCKET_URL || 'http://192.168.1.135:3001';
-                console.log(`[SocketProvider] Socket URL: ${socketUrl}`);
+                const socketUrlLocal = socketUrl;
+console.log(`[SocketProvider] Socket URL: ${socketUrlLocal}`);
 
-                console.log(`[SocketProvider] İlk bağlantı. Soket oluşturuluyor: ${socketUrl}`);
+                console.log(`[SocketProvider] İlk bağlantı. Soket oluşturuluyor: ${socketUrlLocal}`);
                 console.log('[SocketProvider] Creating socket with auth (contextValue):', {
                     userId: connectUser.id,
                     nickname: connectUser.nickname,
@@ -317,7 +336,7 @@ export const SocketProvider = ({ children }) => {
                     tokenLength: session ? session.length : 0,
                     tokenStart: session ? session.substring(0, 20) + '...' : 'null'
                 });
-                                socketRef.current = io(socketUrl, {
+                                socketRef.current = io(socketUrlLocal, {
                     auth: { 
                         userId: connectUser.id,
                         nickname: connectUser.nickname,
@@ -482,7 +501,8 @@ export const SocketProvider = ({ children }) => {
                 console.log(`[SocketProvider] Odadan ayrılıyor: ${room.id}`);
                 socketRef.current.emit('leave_room');
                 setRoom(null);
-                lastRoomIdRef.current = null; // Odadan ayrılınca ref'i temizle
+                // Kullanıcının bilerek ayrıldığını işaretle - otomatik yeniden katılmayı engelle
+                lastRoomIdRef.current = 'USER_LEFT'; 
             }
         };
 

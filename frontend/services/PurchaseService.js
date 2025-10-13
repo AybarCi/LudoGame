@@ -42,7 +42,8 @@ const DIAMOND_PACKAGES = {
   }
 };
 
-const API_BASE_URL = `${process.env.EXPO_PUBLIC_API_URL || 'http://192.168.1.135:3001'}/api`;
+import { API_BASE_URL as API_BASE_ORIGIN } from '../constants/game';
+const API_BASE_URL = `${API_BASE_ORIGIN}/api`;
 
 export const PurchaseService = {
   // In-App Purchase'ı başlat

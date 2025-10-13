@@ -1,18 +1,17 @@
 module.exports = {
-    server: '192.168.1.21',
-    user: 'sa',
-    // Lütfen Azure SQL Edge'i kurarken belirlediğiniz şifreyi buraya girin.
-    password: 'Ca090353--',
-    database: 'ludoturcodb', // Veritabanı adını bu şekilde bırakabiliriz.
+    server: process.env.DB_SERVER || '192.168.1.135',
+    user: process.env.DB_USER || 'sa',
+    password: process.env.DB_PASSWORD || 'Ca090353--',
+    database: process.env.DB_DATABASE || 'ludoturcodb',
     options: {
-        encrypt: false, // Yerel geliştirme için false
-        trustServerCertificate: true, // Yerel geliştirme için true
-        connectionTimeout: 30000, // 30 saniye bağlantı timeout
-        requestTimeout: 30000, // 30 saniye sorgu timeout
+        encrypt: process.env.DB_ENCRYPT === 'true',
+        trustServerCertificate: process.env.DB_TRUST_SERVER_CERTIFICATE === 'true',
+        connectionTimeout: parseInt(process.env.DB_CONNECTION_TIMEOUT) || 30000,
+        requestTimeout: parseInt(process.env.DB_REQUEST_TIMEOUT) || 30000,
         pool: {
-            max: 10, // Maksimum bağlantı sayısı
-            min: 0, // Minimum bağlantı sayısı
-            idleTimeoutMillis: 30000 // 30 saniye idle timeout
+            max: parseInt(process.env.DB_POOL_MAX) || 10,
+            min: parseInt(process.env.DB_POOL_MIN) || 0,
+            idleTimeoutMillis: parseInt(process.env.DB_POOL_IDLE_TIMEOUT) || 30000
         }
     }
 };

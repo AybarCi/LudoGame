@@ -21,8 +21,9 @@ import { DiamondService } from '../../services/DiamondService';
 import { useDispatch } from 'react-redux';
 import { showAlert } from '../../store/slices/alertSlice';
 import Svg, { Circle, Path, Text as SvgText, Line, Rect } from 'react-native-svg';
+import { API_BASE_URL } from '../../constants/game';
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://192.168.1.135:3001';
+const API_URL = API_BASE_URL;
 
 const { width, height } = Dimensions.get('window');
 
@@ -1034,7 +1035,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 20,
-    paddingTop: 50,
+    paddingTop: 70,
     paddingBottom: 20,
   },
   backButton: {
@@ -1420,5 +1421,4 @@ const styles = StyleSheet.create({
     fontFamily: 'Poppins_700Bold',
   },
 });
-
 export default ShopScreen;

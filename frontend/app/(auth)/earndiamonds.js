@@ -31,6 +31,7 @@ export default function EarnDiamonds() {
   const [isLoading, setIsLoading] = useState(false);
   const [canClaimDaily, setCanClaimDaily] = useState(false);
   const [diamondRefresh, setDiamondRefresh] = useState(0);
+  const diamonds = useSelector(state => state.diamonds?.count || 0);
   
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(50)).current;
@@ -139,15 +140,18 @@ export default function EarnDiamonds() {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <View style={{ flex: 1 }}>
       <LinearGradient
-        colors={['#6E00B3', '#4A0080', '#2A0055']}
-        style={styles.background}
-      >
+        colors={['#1a0033', '#330066', '#4d0099']}
+        style={styles.gradient}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+      />
+      <SafeAreaView style={styles.safeArea}>
         <View style={styles.container}>
           {/* Header */}
           <View style={styles.header}>
-            <TouchableOpacity
+            <TouchableOpacity 
               style={styles.backButton}
               onPress={() => router.back()}
             >
@@ -158,9 +162,10 @@ export default function EarnDiamonds() {
               <Text style={styles.headerTitle}>Elmas Kazan</Text>
             </View>
             
-            <Animated.View style={{ transform: [{ scale: diamondAnim }] }}>
-              <DiamondDisplay refreshTrigger={diamondRefresh} />
-            </Animated.View>
+            <View style={styles.diamondDisplay}>
+              <Ionicons name="diamond" size={20} color="#00D9CC" />
+              <Text style={styles.diamondText}>{diamonds}</Text>
+            </View>
           </View>
 
           {/* Content */}
@@ -181,7 +186,7 @@ export default function EarnDiamonds() {
               {/* Reklam İzle Kartı */}
               <View style={styles.card}>
                 <LinearGradient
-                  colors={['#6E00B3', '#4A0080']}
+                  colors={['rgba(255, 255, 255, 0.08)', 'rgba(255, 255, 255, 0.04)']}
                   style={styles.cardGradient}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 1 }}
@@ -198,7 +203,7 @@ export default function EarnDiamonds() {
                   
                   <View style={styles.rewardContainer}>
                     <View style={styles.rewardBadge}>
-                      <Ionicons name="diamond" size={24} color="#FFD700" />
+                      <Ionicons name="diamond" size={24} color="#6E00B3" />
                       <Text style={styles.rewardAmount}>+1</Text>
                     </View>
                   </View>
@@ -242,7 +247,7 @@ export default function EarnDiamonds() {
                   
                   <View style={styles.rewardContainer}>
                     <View style={[styles.rewardBadge, !canClaimDaily && styles.disabledRewardBadge]}>
-                      <Ionicons name="diamond" size={24} color="#FFD700" />
+                      <Ionicons name="diamond" size={24} color="#6E00B3" />
                       <Text style={[styles.rewardAmount, !canClaimDaily && styles.disabledRewardText]}>+5</Text>
                     </View>
                   </View>
@@ -287,18 +292,23 @@ export default function EarnDiamonds() {
             </Animated.View>
           </ScrollView>
         </View>
-      </LinearGradient>
-    </SafeAreaView>
+      </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#6E00B3',
+    backgroundColor: 'transparent',
     paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight || 0 : 0,
   },
-  background: {
+  gradient: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
     flex: 1,
   },
   container: {
@@ -309,39 +319,46 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 20,
-    paddingVertical: 20,
-    backgroundColor: 'rgba(110, 0, 179, 0.8)',
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(0, 217, 204, 0.2)',
+    paddingTop: 20,
+    paddingBottom: 20,
   },
   backButton: {
-    width: 45,
-    height: 45,
-    borderRadius: 22.5,
-    backgroundColor: 'rgba(0, 217, 204, 0.1)',
-    borderWidth: 1,
-    borderColor: 'rgba(0, 217, 204, 0.3)',
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#00D9CC',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.3,
-    shadowRadius: 5,
-    elevation: 5,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
   },
   headerTitleContainer: {
     flex: 1,
     alignItems: 'center',
-    marginLeft: 20,
   },
   headerTitle: {
-    fontSize: isTablet ? 32 : 28,
     color: '#FFD700',
-    fontWeight: 'bold',
+    fontSize: isTablet ? 32 : 26,
     fontFamily: 'Poppins_700Bold',
-    textShadowColor: 'rgba(255, 215, 0, 0.3)',
-    textShadowOffset: { width: 0, height: 0 },
-    textShadowRadius: 10,
+    textShadowColor: 'rgba(255, 215, 0, 0.5)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 4,
+  },
+  diamondDisplay: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 217, 204, 0.2)',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 217, 204, 0.4)',
+  },
+  diamondText: {
+    color: '#00D9CC',
+    fontSize: 16,
+    fontFamily: 'Poppins_600SemiBold',
+    marginLeft: 5,
   },
   content: {
     flex: 1,
@@ -357,10 +374,13 @@ const styles = StyleSheet.create({
     borderRadius: 25,
     overflow: 'hidden',
     elevation: 15,
-    shadowColor: '#00D9CC',
+    shadowColor: '#000',
     shadowOffset: { width: 0, height: 5 },
     shadowOpacity: 0.3,
     shadowRadius: 15,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
   },
   cardGradient: {
     padding: 30,
@@ -371,9 +391,9 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.95)',
     borderRadius: 50,
     padding: 15,
-    shadowColor: '#00D9CC',
+    shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
+    shadowOpacity: 0.2,
     shadowRadius: 8,
     elevation: 10,
   },

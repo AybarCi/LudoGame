@@ -1,7 +1,6 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://192.168.1.135:3001';
+import { API_BASE_URL } from '../../constants/game';
 
 // Helper function to get auth headers
 const getAuthHeaders = async () => {

@@ -3,42 +3,37 @@ import { useSelector } from 'react-redux';
 import { useState, useEffect, useMemo, useRef } from 'react';
 
 export default function AuthLayout() {
-  // Component mount durumunu takip et
-  const isMountedRef = useRef(true);
-  
-  // TÜM hook'ları en başta çağır - React hooks kuralları KESİNLİKLE zorunlu
+  // Redux store'dan auth durumunu doğrudan al - local state gerekmez
   const authState = useSelector(state => state?.auth || { token: null, user: null, isAuthenticated: false });
-  const { token, user, isAuthenticated: reduxIsAuthenticated } = authState;
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const { token, isAuthenticated } = authState;
   
-  // Component mount/unmount durumunu takip et
-  useEffect(() => {
-    isMountedRef.current = true;
-    return () => {
-      isMountedRef.current = false;
-    };
-  }, []);
-  
-  // useEffect HER ZAMAN çağrılır - conditional değil
-  useEffect(() => {
-    if (isMountedRef.current) {
-      const shouldBeAuthenticated = reduxIsAuthenticated !== undefined ? reduxIsAuthenticated : !!token;
-      setIsAuthenticated(shouldBeAuthenticated);
-    }
-  }, [token, reduxIsAuthenticated]);
-
-  // Auth durumunu memoize et - bu hook'ların sırasını sabitler
+  // Auth durumunu memoize et - gereksiz re-render'ları önle
   const authCheck = useMemo(() => {
-    return isAuthenticated;
-  }, [isAuthenticated]);
+    // Redux'ta isAuthenticated undefined olabilir, bu durumda token kontrolü yap
+    return isAuthenticated !== undefined ? isAuthenticated : !!token;
+  }, [isAuthenticated, token]);
 
-  // Koşullu render yerine koşullu içerik kullan - React Hooks kurallarına uygun
+  // Debug için sadece auth durumu değiştiğinde log yaz
+  useEffect(() => {
+    console.log('AuthLayout: Auth state changed:', {
+      isAuthenticated,
+      hasToken: !!token,
+      authCheck,
+      timestamp: Date.now()
+    });
+    
+    if (authCheck) {
+      console.log('AuthLayout: User authenticated, rendering auth layout');
+    } else {
+      console.log('AuthLayout: No token found, redirecting to login');
+    }
+  }, [authCheck, isAuthenticated, token]);
+
+  // Koşullu render
   if (!authCheck) {
-    console.log('AuthLayout: No token found, redirecting to login');
+    console.log('AuthLayout: Redirecting to login...');
     return <Redirect href="/login" />;
   }
-
-  console.log('AuthLayout: User authenticated, rendering auth layout');
 
   return (
     <Stack>
