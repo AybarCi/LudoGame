@@ -86,7 +86,7 @@ export default function Hero() {
               transition={{ duration: 0.8, delay: 0.8 }}
               className="text-xl md:text-2xl text-gray-400 max-w-3xl mx-auto leading-relaxed mb-12"
             >
-              Türkiye'nin en sevilen Ludo oyunu! Arkadaşlarınla veya dünyanın dört bir yanından oyuncularla 
+              Türkiye&#39;nin en sevilen Ludo oyunu! Arkadaşlarınla veya dünyanın dört bir yanından oyuncularla 
               çevrimiçi oyna, turnuvalara katıl, seviye atla ve ödüller kazan. 
               En güzel Ludo deneyimi seni bekliyor.
             </motion.p>
