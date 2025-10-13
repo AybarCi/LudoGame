@@ -43,7 +43,7 @@ export default function TermsOfService() {
     {
       icon: <AlertCircle className="w-8 h-8 text-gray-400" />,
       title: "Sorumluluk Reddi",
-      content: "Hizmetlerimiz 'olduğu gibi', açık veya zımni hiçbir garanti olmaksızın sunulmaktadır. Hizmetlerimizin kesintisiz, hatasız veya virüs veya diğer zararlı bileşenlerden arınmış olacağını garanti etmiyoruz."
+      content: "Hizmetlerimiz \"olduğu gibi\", açık veya zımni hiçbir garanti olmaksızın sunulmaktadır. Hizmetlerimizin kesintisiz, hatasız veya virüs veya diğer zararlı bileşenlerden arınmış olacağını garanti etmiyoruz.",
     },
     {
       icon: <Gavel className="w-8 h-8 text-indigo-400" />,

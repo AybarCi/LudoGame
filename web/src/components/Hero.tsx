@@ -1,8 +1,9 @@
 'use client';
 
 import { motion, useScroll, useTransform } from 'framer-motion';
-import { Download, Play, Users, Trophy, Smartphone, Star, Zap, Shield, Gamepad2 } from 'lucide-react';
+import { Users, Trophy, Zap } from 'lucide-react';
 import { useRef } from 'react';
+import Image from 'next/image';
 
 export default function Hero() {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -65,10 +66,13 @@ export default function Hero() {
                 transition={{ duration: 0.8, delay: 0.2 }}
                 className="mb-8"
               >
-                <img 
+                <Image 
                   src="/logo.png" 
                   alt="Ludo Turco" 
-                  className="w-96 h-96 object-contain"
+                  width={384}
+                  height={384}
+                  className="object-contain"
+                  priority
                 />
               </motion.div>
             </div>
@@ -107,7 +111,7 @@ export default function Hero() {
               whileTap={{ scale: 0.95 }}
             >
               <div className="mr-4">
-                <img src="/apple-white-svgrepo-com.svg" alt="Apple" className="w-8 h-8" />
+                <Image src="/apple-white-svgrepo-com.svg" alt="Apple" width={32} height={32} className="w-8 h-8" />
               </div>
               <div className="text-left">
                 <div className="text-xs text-gray-300">Download on the</div>

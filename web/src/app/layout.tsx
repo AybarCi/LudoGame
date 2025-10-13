@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Ludo Turco - Türkiye'nin En İyi Ludo Oyunu",
+  title: "Ludo Turco - Türkiye&#39;nin En İyi Ludo Oyunu",
   description: "Türkiye'nin en sevilen Ludo oyunu! Arkadaşlarınla veya dünyanın dört bir yanından oyuncularla çevrimiçi oyna, turnuvalara katıl, seviye atla ve ödüller kazan.",
   keywords: "ludo, tavla, okey, online oyun, çok oyunculu, mobil oyun, strateji oyunu, türkçe ludo",
   icons: {
@@ -22,7 +22,7 @@ export const metadata: Metadata = {
     apple: '/header_logo.png',
   },
   openGraph: {
-    title: "Ludo Turco - Türkiye'nin En İyi Ludo Oyunu",
+    title: "Ludo Turco - Türkiye&#39;nin En İyi Ludo Oyunu",
     description: "Türkiye'nin en sevilen Ludo oyunu! Arkadaşlarınla veya dünyanın dört bir yanından oyuncularla çevrimiçi oyna.",
     type: "website",
   },

@@ -1,6 +1,7 @@
 "use client";
 import { motion } from "framer-motion";
 import Link from 'next/link';
+import Image from 'next/image';
 
 export default function DownloadPage() {
   return (
@@ -17,7 +18,7 @@ export default function DownloadPage() {
               Hemen İndir, Oyuna Başla!
             </h1>
             <p className="text-xl text-gray-400 mb-12 leading-relaxed">
-              Türkiye'nin en sevilen Ludo oyunu artık cebinde! Ücretsiz indir, arkadaşlarınla oyna, turnuvalara katıl ve ödüller kazan.
+              Türkiye&apos;nin en sevilen Ludo oyunu artık cebinde! Ücretsiz indir, arkadaşlarınla oyna, turnuvalara katıl ve ödüller kazan.
             </p>
             
             {/* App Store Buttons */}
@@ -36,7 +37,7 @@ export default function DownloadPage() {
                 whileTap={{ scale: 0.95 }}
               >
                 <div className="mr-4">
-                  <img src="/apple-white-svgrepo-com.svg" alt="Apple" className="w-8 h-8" />
+                  <Image src="/apple-white-svgrepo-com.svg" alt="Apple" width={32} height={32} />
                 </div>
                 <div className="text-left">
                   <div className="text-xs text-gray-300">Download on the</div>
@@ -53,7 +54,7 @@ export default function DownloadPage() {
                 whileTap={{ scale: 0.95 }}
               >
                 <div className="mr-4">
-                  <img src="/google-play-svgrepo-com.svg" alt="Google Play" className="w-8 h-8" />
+                  <Image src="/google-play-svgrepo-com.svg" alt="Google Play" width={32} height={32} />
                 </div>
                 <div className="text-left">
                   <div className="text-xs text-gray-300">Get it on</div>
@@ -79,7 +80,7 @@ export default function DownloadPage() {
               Neden Ludo Turco?
             </h2>
             <p className="text-xl text-gray-400 max-w-3xl mx-auto">
-              Türkiye'nin en gelişmiş Ludo oyunu ile tanış. Binlerce oyuncu, eşsiz özellikler ve sürekli güncellemeler!
+              Türkiye&apos;nin en gelişmiş Ludo oyunu ile tanış. Binlerce oyuncu, eşsiz özellikler ve sürekli güncellemeler!
             </p>
           </motion.div>
 
@@ -92,7 +93,7 @@ export default function DownloadPage() {
               },
               {
                 title: "Çevrimiçi Multiplayer",
-                description: "Türkiye'nin dört bir yanından oyuncularla gerçek zamanlı oyna.",
+                description: "Türkiye&apos;nin dört bir yanından oyuncularla gerçek zamanlı oyna.",
                 icon: "🌟"
               },
               {
@@ -186,7 +187,7 @@ export default function DownloadPage() {
               Hala Düşünüyor musun?
             </h2>
             <p className="text-xl text-blue-100 mb-8 max-w-2xl mx-auto">
-              100.000'den fazla oyuncu Ludo Turco'yu tercih ediyor. Sende aramıza katıl, Türkiye'nin en büyük Ludo topluluğunun bir parçası ol!
+              100.000&apos;den fazla oyuncu Ludo Turco&apos;yu tercih ediyor. Sende aramıza katıl, Türkiye&apos;nin en büyük Ludo topluluğunun bir parçası ol!
             </p>
             <div className="flex flex-col sm:flex-row gap-6 justify-center">
               <Link

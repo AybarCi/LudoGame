@@ -25,6 +25,8 @@ if [ ! -f ".env" ]; then
     exit 1
 fi
 
+
+
 # SSL sertifikalarını kontrol et
 if [ ! -f "ssl/cert.pem" ] || [ ! -f "ssl/key.pem" ]; then
     echo -e "${YELLOW}⚠️  SSL sertifikaları bulunamadı, self-signed sertifika oluşturuluyor...${NC}"

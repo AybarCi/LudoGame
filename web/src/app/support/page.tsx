@@ -1,5 +1,5 @@
 import { Metadata } from "next";
-import { Mail, MessageCircle, Clock, HelpCircle, Phone, Send, Star, Users, Zap, Shield } from 'lucide-react';
+import { Mail, Clock, HelpCircle, Send } from 'lucide-react';
 
 export const metadata: Metadata = {
   title: "Destek - Ludo Turco",
@@ -10,7 +10,7 @@ export default function SupportPage() {
   const faqs = [
     {
       question: "Nasıl hesap oluşturabilirim?",
-      answer: "Uygulamayı indirin, 'Kayıt Ol' butonuna tıklayın ve kayıt sürecini takip edin. Telefon numaranızla kayıt olabilirsiniz."
+      answer: "Uygulamayı indirin, \"Kayıt Ol\" butonuna tıklayın ve kayıt sürecini takip edin. Telefon numaranızla kayıt olabilirsiniz.",
     },
     {
       question: "Çevrimdışı oynayabilir miyim?",

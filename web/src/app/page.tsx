@@ -1,8 +1,9 @@
 "use client"
 
 import Hero from "@/components/Hero";
-import { Star, Zap, Trophy, Users, MessageCircle, Gem, Battery, Crown, Shield } from 'lucide-react';
+import { Trophy, Users, MessageCircle, Gem, Battery, Crown, Shield } from 'lucide-react';
 import { motion } from 'framer-motion';
+import Image from 'next/image';
 
 export default function Home() {
   return (
@@ -41,7 +42,7 @@ export default function Home() {
               </div>
               <h3 className="text-2xl font-bold text-gray-100 mb-4">Seviye Sistemi</h3>
               <p className="text-gray-400 text-base leading-relaxed mb-6">
-                1'den 100'e kadar seviye sistemimizle her oyununda tecrübe puanı kazan.
+                1&apos;den 100&apos;e kadar seviye sistemimizle her oyununda tecrübe puanı kazan.
               </p>
               <div className="bg-gray-700/50 rounded-full h-3 mb-3">
                 <div className="bg-gradient-to-r from-yellow-500 to-yellow-600 h-3 rounded-full w-3/4"></div>
@@ -138,7 +139,7 @@ export default function Home() {
               Deneyim
             </h2>
             <p className="text-xl text-gray-400 max-w-2xl mx-auto leading-relaxed font-light">
-              Ludo Turco'nun eşsiz oyun deneyimini keşfet
+              Ludo Turco&apos;nun eşsiz oyun deneyimini keşfet
             </p>
           </motion.div>
 
@@ -227,7 +228,7 @@ export default function Home() {
                   viewport={{ once: true }}
                 >
                   <p className="text-2xl text-gray-300 mb-8 max-w-3xl mx-auto leading-relaxed">
-                    "Her oyun yeni bir hikaye, her hamle yeni bir fırsat"
+                    &quot;Her oyun yeni bir hikaye, her hamle yeni bir fırsat&quot;
                   </p>
                   <div className="flex items-center justify-center space-x-4 text-gray-400">
                     <div className="w-12 h-px bg-gradient-to-r from-transparent to-gray-600"></div>
@@ -251,10 +252,11 @@ export default function Home() {
               className="group relative overflow-hidden rounded-[2rem] bg-gray-900/50 backdrop-blur-sm border border-white/10"
             >
               <div className="aspect-[9/16] relative">
-                <img 
+                <Image 
                   src="/screenshots/onlinemodgameboard.png" 
                   alt="Çevrimiçi Mod" 
-                  className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110 brightness-50 group-hover:brightness-90"
+                  fill
+                  className="object-cover transition-transform duration-700 group-hover:scale-110 brightness-50 group-hover:brightness-90"
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-700"></div>
                 <div className="absolute bottom-6 left-6 right-6 transform translate-y-full group-hover:translate-y-0 transition-transform duration-700">
@@ -273,10 +275,11 @@ export default function Home() {
               className="group relative overflow-hidden rounded-[2rem] bg-gray-900/50 backdrop-blur-sm border border-white/10"
             >
               <div className="aspect-[9/16] relative">
-                <img 
+                <Image 
                   src="/screenshots/piyonmagazasiscreen.png" 
                   alt="Piyon Mağazası" 
-                  className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110 brightness-50 group-hover:brightness-90"
+                  fill
+                  className="object-cover transition-transform duration-700 group-hover:scale-110 brightness-50 group-hover:brightness-90"
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-700"></div>
                 <div className="absolute bottom-6 left-6 right-6 transform translate-y-full group-hover:translate-y-0 transition-transform duration-700">
@@ -295,10 +298,11 @@ export default function Home() {
               className="group relative overflow-hidden rounded-[2rem] bg-gray-900/50 backdrop-blur-sm border border-white/10"
             >
               <div className="aspect-[9/16] relative">
-                <img 
+                <Image 
                   src="/screenshots/yapayzekamodboard.png" 
                   alt="Yapay Zeka Modu" 
-                  className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110 brightness-50 group-hover:brightness-90"
+                  fill
+                  className="object-cover transition-transform duration-700 group-hover:scale-110 brightness-50 group-hover:brightness-90"
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-700"></div>
                 <div className="absolute bottom-6 left-6 right-6 transform translate-y-full group-hover:translate-y-0 transition-transform duration-700">
@@ -317,10 +321,11 @@ export default function Home() {
               className="group relative overflow-hidden rounded-[2rem] bg-gray-900/50 backdrop-blur-sm border border-white/10"
             >
               <div className="aspect-[9/16] relative">
-                <img 
+                <Image 
                   src="/screenshots/homescreen.png" 
                   alt="Ana Ekran" 
-                  className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110 brightness-50 group-hover:brightness-90"
+                  fill
+                  className="object-cover transition-transform duration-700 group-hover:scale-110 brightness-50 group-hover:brightness-90"
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-700"></div>
                 <div className="absolute bottom-6 left-6 right-6 transform translate-y-full group-hover:translate-y-0 transition-transform duration-700">
@@ -470,7 +475,7 @@ export default function Home() {
               viewport={{ once: true, amount: 0.3 }}
               className="text-xl text-gray-400 mb-12 leading-relaxed"
             >
-              Türkiye'nin en büyük Ludo topluluğuna katıl, arkadaşlarınla oyna ve ödüller kazan!
+              Türkiye&apos;nin en büyük Ludo topluluğuna katıl, arkadaşlarınla oyna ve ödüller kazan!
             </motion.p>
             <motion.div 
               initial={{ opacity: 0, y: 20 }}
@@ -486,7 +491,7 @@ export default function Home() {
                 className="group bg-black text-white px-8 py-5 rounded-2xl font-bold text-lg hover:shadow-2xl hover:shadow-gray-500/25 transition-all duration-300 flex items-center backdrop-blur-sm border border-gray-600 hover:border-gray-500"
               >
                 <div className="mr-4">
-                  <img src="/apple-white-svgrepo-com.svg" alt="Apple" className="w-8 h-8" />
+                  <Image src="/apple-white-svgrepo-com.svg" alt="Apple" width={32} height={32} />
                 </div>
                 <div className="text-left">
                   <div className="text-xs text-gray-300">Download on the</div>
@@ -500,7 +505,7 @@ export default function Home() {
                 className="group bg-black text-white px-8 py-5 rounded-2xl font-bold text-lg hover:shadow-2xl hover:shadow-green-500/25 transition-all duration-300 flex items-center backdrop-blur-sm border border-gray-600 hover:border-gray-500"
               >
                 <div className="mr-4">
-                  <img src="/google-play-svgrepo-com.svg" alt="Google Play" className="w-8 h-8" />
+                  <Image src="/google-play-svgrepo-com.svg" alt="Google Play" width={32} height={32} />
                 </div>
                 <div className="text-left">
                   <div className="text-xs text-gray-300">Get it on</div>

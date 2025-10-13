@@ -24,7 +24,7 @@ export default function PrivacyPolicy() {
             </p>
             <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-6 inline-block">
               <p className="text-gray-300">
-                Son güncelleme: <span className="text-white font-semibold">{new Date().toLocaleDateString('tr-TR', { month: 'long', day: 'numeric', year: 'numeric' })}</span>
+                Son güncelleme: <span className="text-white font-semibold">{new Date().toLocaleDateString("tr-TR", { month: "long", day: "numeric", year: "numeric" })}</span>
               </p>
             </div>
           </div>
@@ -189,7 +189,7 @@ export default function PrivacyPolicy() {
           <section className="bg-white/5 backdrop-blur-sm rounded-3xl p-8 border border-white/10 hover:border-white/20 transition-all duration-300">
             <h2 className="text-3xl font-bold text-white mb-6">Bu Politikadaki Değişiklikler</h2>
             <p className="text-gray-300 mb-4">
-              Gizlilik Politikamızı zaman zaman güncelleyebiliriz. Herhangi bir değişiklik hakkında sizi bilgilendirmek için yeni politikayı bu sayfada yayınlayacağız ve "Son güncelleme" tarihini güncelleyeceğiz. Herhangi bir değişiklik için bu Gizlilik Politikasını periyodik olarak gözden geçirmenizi teşvik ediyoruz.
+              Gizlilik Politikamızı zaman zaman güncelleyebiliriz. Herhangi bir değişiklik hakkında sizi bilgilendirmek için yeni politikayı bu sayfada yayınlayacağız ve &quot;Son güncelleme&quot; tarihini güncelleyeceğiz. Herhangi bir değişiklik için bu Gizlilik Politikasını periyodik olarak gözden geçirmenizi teşvik ediyoruz.
             </p>
             <div className="bg-blue-500/10 border border-blue-500/30 rounded-xl p-6">
               <p className="text-blue-300">

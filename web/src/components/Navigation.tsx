@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { usePathname } from 'next/navigation';
 import { Menu, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import Image from 'next/image';
 
 export default function Navigation() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -28,10 +29,13 @@ export default function Navigation() {
         <div className="flex justify-between items-center h-16">
           {/* Logo */}
           <Link href="/" className="flex items-center space-x-3">
-            <img 
+            <Image 
               src="/header_logo.png" 
               alt="Ludo Turco" 
-              className="w-20 h-20 object-contain"
+              width={80}
+              height={80}
+              className="object-contain"
+              priority
             />
             <span className="text-xl font-bold text-gray-900 dark:text-white">
               Ludo Turco
