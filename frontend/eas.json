@@ -1,0 +1,47 @@
+{
+  "cli": {
+    "version": ">= 16.22.0",
+    "appVersionSource": "remote"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "ios": {
+        "resourceClass": "m-medium"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "http://localhost:3001",
+        "EXPO_PUBLIC_SOCKET_URL": "http://localhost:3001"
+      }
+    },
+    "preview": {
+      "distribution": "internal",
+      "ios": {
+        "resourceClass": "m-medium"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://ludoturcoapi.istekbilisim.com",
+        "EXPO_PUBLIC_SOCKET_URL": "https://ludoturcoapi.istekbilisim.com"
+      }
+    },
+    "production": {
+      "autoIncrement": true,
+      "ios": {
+        "resourceClass": "m-medium"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://ludoturcoapi.istekbilisim.com",
+        "EXPO_PUBLIC_SOCKET_URL": "https://ludoturcoapi.istekbilisim.com"
+      },
+      "cache": {
+        "key": "npm-override",
+        "customPaths": ["node_modules"]
+      },
+      "nodeModulesCommand": "install --legacy-peer-deps"
+    }
+  },
+  "submit": {
+    "production": {}
+  }
+}
