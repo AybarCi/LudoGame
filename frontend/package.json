@@ -12,7 +12,7 @@
     "test": "jest",
     "test:watch": "jest --watch",
     "eas-build-pre-install": "npm install --legacy-peer-deps"
-  }
+  },
   "dependencies": {
     "@expo-google-fonts/poppins": "^0.4.0",
     "@expo/vector-icons": "^15.0.2",
@@ -67,7 +67,7 @@
     "@babel/core": "^7.25.2",
     "@react-native-community/cli": "^20.0.2",
     "@react-native-community/cli-server-api": "^18.0.0",
-    "@testing-library/jest-native": "^12.0.0",
+    "@testing-library/jest-native": "^5.4.0",
     "@testing-library/react-native": "^12.9.0",
     "@types/react": "~19.1.10",
     "eslint": "^9.25.0",
