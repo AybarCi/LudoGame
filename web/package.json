@@ -1,6 +1,6 @@
 {
   "name": "web",
-  "version": "0.1.1","explanation":"Package version'ını değiştirip workflow tetikliyorum"}
+  "version": "0.1.1",
   "private": true,
   "scripts": {
     "dev": "next dev",
