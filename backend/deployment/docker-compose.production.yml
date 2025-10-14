@@ -8,36 +8,11 @@ services:
     container_name: ludo-backend-production
     ports:
       - "3001:3001"
+    env_file:
+      - stack.env
     environment:
-      # Production Database Configuration
-      - DB_SERVER=mssql.istekbilisim.com
-      - DB_USER=sa
-      - DB_PASSWORD=SeKo153759++
-      - DB_DATABASE=ludoturcodb
-      - DB_PORT=1433
-      - DB_ENCRYPT=false
-      - DB_TRUST_SERVER_CERTIFICATE=true
-      
-      # JWT Configuration
-      - JWT_SECRET=your-production-jwt-secret-key-here
-      - JWT_EXPIRES_IN=24h
-      
-      # Application Configuration
+      # Override only if needed - stack.env has priority
       - NODE_ENV=production
-      - PORT=3001
-      - HOST=0.0.0.0
-      
-      # CORS Configuration
-      - CORS_ORIGIN=https://your-frontend-domain.com
-      - CORS_CREDENTIALS=true
-      
-      # Rate Limiting
-      - RATE_LIMIT_WINDOW_MS=900000  # 15 dakika
-      - RATE_LIMIT_MAX_REQUESTS=100
-      
-      # Logging
-      - LOG_LEVEL=info
-      - LOG_FILE=/app/logs/production.log
     
     volumes:
       - ./logs:/app/logs

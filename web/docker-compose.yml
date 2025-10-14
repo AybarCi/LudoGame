@@ -7,75 +7,9 @@ services:
     restart: unless-stopped
     ports:
       - "3002:3000"
-    environment:
-      - NODE_ENV=production
-      - NEXT_PUBLIC_API_URL=http://ludo-backend:3001
-      - NEXT_PUBLIC_WS_URL=ws://ludo-backend:3001
     networks:
-      - ludo-network
-    depends_on:
-      - ludo-backend
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.ludo-web.rule=Host(`ludo-web.local`)"
-      - "traefik.http.services.ludo-web.loadbalancer.server.port=3000"
-
-  ludo-backend:
-    image: ghcr.io/aybarci/ludogame/ludo-backend:latest
-    container_name: ludo-backend
-    restart: unless-stopped
-    ports:
-      - "3001:3001"
-    environment:
-      - NODE_ENV=production
-      - PORT=3001
-      - DB_PATH=./database.db
-      - JWT_SECRET=${JWT_SECRET:-your-secret-key}
-      - REDIS_URL=redis://redis:6379
-      - CORS_ORIGIN=http://localhost:3002
-    volumes:
-      - ludo-data:/app/data
-      - ./backend/database.db:/app/database.db
-    networks:
-      - ludo-network
-    depends_on:
-      - redis
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
-
-  redis:
-    image: redis:7-alpine
-    container_name: ludo-redis
-    restart: unless-stopped
-    ports:
-      - "6379:6379"
-    networks:
-      - ludo-network
-    volumes:
-      - redis-data:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 10s
+      - web-network
 
 networks:
-  ludo-network:
+  web-network:
     driver: bridge
-
-volumes:
-  ludo-data:
-    driver: local
-  redis-data:
-    driver: local

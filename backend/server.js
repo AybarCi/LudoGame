@@ -1,3 +1,6 @@
+// Environment variables yükleme
+require('dotenv').config();
+
 const express = require('express');
 const dbConfig = require('./db-config');
 const http = require('http');
@@ -7,6 +10,7 @@ const { v4: uuidv4 } = require('uuid');
 const { findOrCreateUser, updateUserAvatar, getUserAvatar } = require('./services/user-service');
 const { executeQuery, sql } = require('./db');
 const { checkProfanity, filterProfanity, profanityTracker, SEVERITY_LEVELS } = require('./utils/messageFilter');
+const smsService = require('./services/sms-service');
 
 // --- Game Constants ---
 const PAWN_COUNT = 4;
@@ -2078,9 +2082,9 @@ app.get('/health', async (req, res) => {
     }
 });
 
-// --- Phone Verification API Routes (SMS Service Olmadan) ---
+// --- Phone Verification API Routes (VatanSMS Entegrasyonu) ---
 
-// Telefon doğrulama kodu gönder (SMS servisi yok, sadece DB'ye kaydet)
+// Telefon doğrulama kodu gönder (VatanSMS API ile)
 app.post('/api/send-sms-code', async (req, res) => {
     const { phoneNumber } = req.body;
     
@@ -2117,15 +2121,38 @@ app.post('/api/send-sms-code', async (req, res) => {
             ]
         );
 
-        // Demo için konsola yazdır (SMS servisi yok)
-        console.log(`[PHONE VERIFICATION] Telefon: ${cleanPhone}, Kod: ${verificationCode} (10 dakika geçerli)`);
+        // VatanSMS API ile SMS gönder
+        const smsResult = await smsService.send(cleanPhone, verificationCode);
 
-        res.json({ 
-            success: true, 
-            message: 'Doğrulama kodu oluşturuldu. (SMS servisi yok - kod konsolda)',
-            phoneNumber: cleanPhone,
-            expiresIn: 600 // 10 dakika
-        });
+        if (smsResult.success) {
+            console.log(`✅ SMS başarıyla gönderildi: ${cleanPhone} -> OTP: ${verificationCode}`);
+            
+            res.json({ 
+                success: true, 
+                message: 'Doğrulama kodu SMS ile gönderildi.',
+                phoneNumber: cleanPhone,
+                expiresIn: 600, // 10 dakika
+                smsStatus: smsResult.message
+            });
+        } else {
+            console.error(`❌ SMS gönderme başarısız: ${cleanPhone}`, smsResult.error);
+            
+            // SMS gönderme başarısız olsa bile kod DB'ye kaydedildi
+            // Development'ta konsola yazdır
+            if (process.env.NODE_ENV === 'development') {
+                console.log(`[DEVELOPMENT] Telefon: ${cleanPhone}, Kod: ${verificationCode} (10 dakika geçerli)`);
+            }
+            
+            res.json({ 
+                success: true, 
+                message: 'Doğrulama kodu oluşturuldu. SMS gönderiminde sorun yaşandı.',
+                phoneNumber: cleanPhone,
+                expiresIn: 600,
+                smsStatus: smsResult.message,
+                warning: 'SMS gönderimi başarısız - kod konsola yazdırıldı'
+            });
+        }
+
     } catch (error) {
         console.error('Send SMS code error:', error);
         res.status(500).json({ message: 'İç sunucu hatası', error: error.message });
@@ -2575,7 +2602,7 @@ app.post('/api/avatar', async (req, res) => {
         if (success) {
             console.log(`[AVATAR UPLOAD] Başarılı - avatarUrl geri döndürülüyor`);
             // Return full URL including the base URL
-            const baseUrl = process.env.BASE_URL || 'http://192.168.1.135:3001';
+            const baseUrl = process.env.BASE_URL || 'http://192.168.1.134:3001';
             const fullAvatarUrl = `${baseUrl}${avatarFileUrl}`;
             res.json({ 
                 success: true, 
@@ -2609,7 +2636,7 @@ app.get('/api/avatar/:userId', async (req, res) => {
         const avatarUrl = await getUserAvatar(userId);
         if (avatarUrl) {
             // Return full URL including the base URL
-            const baseUrl = process.env.BASE_URL || 'http://192.168.1.135:3001';
+            const baseUrl = process.env.BASE_URL || 'http://192.168.1.134:3001';
             const fullAvatarUrl = `${baseUrl}${avatarUrl}`;
             res.json({ success: true, avatarUrl: fullAvatarUrl });
         } else {
