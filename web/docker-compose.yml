@@ -5,6 +5,7 @@ services:
     image: ghcr.io/aybarci/ludogame/ludo-web:latest
     container_name: ludo-web
     restart: unless-stopped
+    pull_policy: always
     ports:
       - "3002:3000"
     networks:
