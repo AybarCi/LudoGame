@@ -69,14 +69,14 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v4
     
-    - name: Deploy to Production Server
+    - name: Deploy Backend to Production Server
       if: env.PRODUCTION_SERVER != ''
       env:
         PRODUCTION_SERVER: ${{ secrets.PRODUCTION_SERVER }}
       run: |
-        echo "🚀 Deploying to production server..."
+        echo "🚀 Deploying backend to production server..."
         
-        # Production server'a SSH ile bağlan ve deployment yap
+        # Production server'a SSH ile bağlan ve backend deployment yap
         ssh -o StrictHostKeyChecking=no ${{ secrets.PRODUCTION_SSH_USER }}@${{ secrets.PRODUCTION_SERVER }} << 'ENDSSH'
           cd /opt/ludo/backend
           
@@ -92,7 +92,7 @@ jobs:
           export BASE_URL="${{ secrets.BASE_URL }}"
           export CORS_ORIGIN="${{ secrets.CORS_ORIGIN }}"
           
-          # Docker container'ları yeniden başlat
+          # Backend container'ları yeniden başlat
           docker-compose -f docker-compose.production.yml down
           docker-compose -f docker-compose.production.yml up -d
           
@@ -100,7 +100,32 @@ jobs:
           sleep 30
           curl -f http://localhost:3001/health || exit 1
           
-          echo "✅ Production deployment successful!"
+          echo "✅ Backend deployment successful!"
+        ENDSSH
+    
+    - name: Deploy Web Frontend to Production Server
+      if: env.PRODUCTION_SERVER != ''
+      env:
+        PRODUCTION_SERVER: ${{ secrets.PRODUCTION_SERVER }}
+      run: |
+        echo "🚀 Deploying web frontend to production server..."
+        
+        # Production server'a SSH ile bağlan ve web frontend deployment yap
+        ssh -o StrictHostKeyChecking=no ${{ secrets.PRODUCTION_SSH_USER }}@${{ secrets.PRODUCTION_SERVER }} << 'ENDSSH'
+          cd /opt/ludo/web
+          
+          # Latest web frontend image'ını pull et
+          docker pull ${{ env.REGISTRY }}/${{ env.WEB_IMAGE_NAME }}:latest
+          
+          # Web container'ı yeniden başlat
+          docker-compose -f docker-compose.yml down
+          docker-compose -f docker-compose.yml up -d
+          
+          # Health check bekle
+          sleep 30
+          curl -f http://localhost:3002/ || exit 1
+          
+          echo "✅ Web frontend deployment successful!"
         ENDSSH
     
     - name: Trigger Portainer Webhook (Alternative)
