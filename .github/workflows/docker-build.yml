@@ -16,13 +16,6 @@ jobs:
   build-backend:
     name: Build and Push Backend
     runs-on: ubuntu-latest
-    if: |
-      (github.event_name == 'push' && 
-       (contains(github.event.head_commit.modified, 'backend/') || 
-        contains(github.event.head_commit.added, 'backend/') || 
-        contains(github.event.head_commit.removed, 'backend/'))) ||
-      (github.event_name == 'pull_request' && 
-       (contains(github.event.pull_request.changed_files, 'backend/')))
     permissions:
       contents: read
       packages: write
@@ -130,13 +123,6 @@ jobs:
   build-web:
     name: Build and Push Web Frontend
     runs-on: ubuntu-latest
-    if: |
-      (github.event_name == 'push' && 
-       (contains(github.event.head_commit.modified, 'web/') || 
-        contains(github.event.head_commit.added, 'web/') || 
-        contains(github.event.head_commit.removed, 'web/'))) ||
-      (github.event_name == 'pull_request' && 
-       (contains(github.event.pull_request.changed_files, 'web/')))
     permissions:
       contents: read
       packages: write
