@@ -38,7 +38,7 @@
         "key": "npm-override",
         "customPaths": ["node_modules"]
       },
-      "nodeModulesCommand": "install --legacy-peer-deps"
+      "node": "18.18.0"
     }
   },
   "submit": {
