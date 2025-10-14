@@ -1,6 +1,6 @@
 # Multi-stage Dockerfile for Next.js 14
 # Multi-architecture support for ARM64 and AMD64
-# Force rebuild to update container hash
+# Force rebuild to update container hash - Take 2
 
 # Stage 1: Dependencies
 FROM --platform=$BUILDPLATFORM node:20-alpine AS deps
