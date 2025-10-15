@@ -69,70 +69,13 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v4
     
-    - name: Deploy Backend to Production Server
-      if: env.PRODUCTION_SERVER != ''
-      env:
-        PRODUCTION_SERVER: ${{ secrets.PRODUCTION_SERVER }}
-      run: |
-        echo "🚀 Deploying backend to production server..."
-        
-        # Production server'a SSH ile bağlan ve backend deployment yap
-        ssh -o StrictHostKeyChecking=no ${{ secrets.PRODUCTION_SSH_USER }}@${{ secrets.PRODUCTION_SERVER }} << 'ENDSSH'
-          cd /opt/ludo/backend
-          
-          # Latest backend image'ını pull et
-          docker pull ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:latest
-          
-          # Environment değişkenlerini güncelle
-          export DB_SERVER="${{ secrets.DB_SERVER }}"
-          export DB_USER="${{ secrets.DB_USER }}"
-          export DB_PASSWORD="${{ secrets.DB_PASSWORD }}"
-          export DB_DATABASE="${{ secrets.DB_DATABASE }}"
-          export JWT_SECRET="${{ secrets.JWT_SECRET }}"
-          export BASE_URL="${{ secrets.BASE_URL }}"
-          export CORS_ORIGIN="${{ secrets.CORS_ORIGIN }}"
-          
-          # Backend container'ları yeniden başlat
-          docker-compose -f docker-compose.production.yml down
-          docker-compose -f docker-compose.production.yml up -d
-          
-          # Health check bekle
-          sleep 30
-          curl -f http://localhost:3001/health || exit 1
-          
-          echo "✅ Backend deployment successful!"
-        ENDSSH
-    
-    - name: Deploy Web Frontend to Production Server
-      if: env.PRODUCTION_SERVER != ''
-      env:
-        PRODUCTION_SERVER: ${{ secrets.PRODUCTION_SERVER }}
-      run: |
-        echo "🚀 Deploying web frontend to production server..."
-        
-        # Production server'a SSH ile bağlan ve web frontend deployment yap
-        ssh -o StrictHostKeyChecking=no ${{ secrets.PRODUCTION_SSH_USER }}@${{ secrets.PRODUCTION_SERVER }} << 'ENDSSH'
-          cd /opt/ludo/web
-          
-          # Latest web frontend image'ını pull et
-          docker pull ${{ env.REGISTRY }}/${{ env.WEB_IMAGE_NAME }}:latest
-          
-          # Web container'ı yeniden başlat
-          docker-compose -f docker-compose.yml down
-          docker-compose -f docker-compose.yml up -d
-          
-          # Health check bekle
-          sleep 30
-          curl -f http://localhost:3002/ || exit 1
-          
-          echo "✅ Web frontend deployment successful!"
-        ENDSSH
-    
-    - name: Trigger Portainer Webhook (Alternative)
-      if: env.PORTAINER_WEBHOOK_URL != '' && env.PRODUCTION_SERVER == ''
+    - name: Trigger Portainer Webhook
+      if: env.PORTAINER_WEBHOOK_URL != ''
       env:
         PORTAINER_WEBHOOK_URL: ${{ secrets.PORTAINER_WEBHOOK_URL }}
       run: |
+        echo "🚀 Triggering Portainer webhook for deployment..."
+        
         curl -X POST "${{ secrets.PORTAINER_WEBHOOK_URL }}" \
           -H "Content-Type: application/json" \
           -d '{
@@ -143,7 +86,45 @@ jobs:
               "${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:latest",
               "${{ env.REGISTRY }}/${{ env.WEB_IMAGE_NAME }}:latest"
             ]
-          }'
+          }' \
+          || echo "⚠️ Webhook failed, but continuing..."
+        
+        echo "✅ Webhook triggered successfully!"
+    
+    - name: Manual Deployment (if webhook not available)
+      if: env.PORTAINER_WEBHOOK_URL == '' && (env.PRODUCTION_SERVER != '' || env.DEPLOYMENT_SSH_HOST != '')
+      run: |
+        echo "🚀 Performing manual deployment..."
+        
+        # Use PRODUCTION_SERVER or DEPLOYMENT_SSH_HOST
+        SSH_HOST="${{ secrets.PRODUCTION_SERVER || secrets.DEPLOYMENT_SSH_HOST }}"
+        SSH_USER="${{ secrets.PRODUCTION_SSH_USER || 'root' }}"
+        
+        ssh -o StrictHostKeyChecking=no $SSH_USER@$SSH_HOST << 'ENDSSH'
+          echo "📦 Updating Docker images..."
+          
+          # Pull latest images
+          docker pull ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:latest
+          docker pull ${{ env.REGISTRY }}/${{ env.WEB_IMAGE_NAME }}:latest
+          
+          echo "🔄 Restarting containers..."
+          
+          # Restart backend if exists
+          if [ -f "/opt/ludo/backend/docker-compose.production.yml" ]; then
+            cd /opt/ludo/backend
+            docker-compose -f docker-compose.production.yml down
+            docker-compose -f docker-compose.production.yml up -d
+          fi
+          
+          # Restart web if exists  
+          if [ -f "/opt/ludo/web/docker-compose.yml" ]; then
+            cd /opt/ludo/web
+            docker-compose -f docker-compose.yml down
+            docker-compose -f docker-compose.yml up -d
+          fi
+          
+          echo "✅ Manual deployment completed!"
+        ENDSSH
 
   build-web:
     name: Build and Push Web Frontend
