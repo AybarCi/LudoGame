@@ -1,5 +1,6 @@
 module.exports = {
-    server: process.env.DB_SERVER || '192.168.1.135',
+    server: process.env.DB_SERVER || '172.20.10.8',
+    port: parseInt(process.env.DB_PORT) || 1433,
     user: process.env.DB_USER || 'sa',
     password: process.env.DB_PASSWORD || 'Ca090353--',
     database: process.env.DB_DATABASE || 'ludoturcodb',

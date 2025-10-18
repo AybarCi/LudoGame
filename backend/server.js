@@ -8,9 +8,10 @@ const { Server } = require('socket.io');
 const cors = require('cors');
 const { v4: uuidv4 } = require('uuid');
 const { findOrCreateUser, updateUserAvatar, getUserAvatar } = require('./services/user-service');
-const { executeQuery, sql } = require('./db');
+const { executeQuery, sql, checkDatabaseConnection } = require('./db');
 const { checkProfanity, filterProfanity, profanityTracker, SEVERITY_LEVELS } = require('./utils/messageFilter');
 const smsService = require('./services/sms-service');
+const { generalSmsLimiter, phoneNumberLimiter, ipDailyPhoneLimit, verificationLimiter } = require('./middleware/rateLimiters');
 
 // --- Game Constants ---
 const PAWN_COUNT = 4;
@@ -100,6 +101,27 @@ app.use((req, res, next) => {
   console.log(`[${new Date().toISOString()}] ${req.method} ${req.url} from ${req.ip || req.connection.remoteAddress}`);
   next();
 });
+
+// Database availability check middleware for routes that require DB
+const requireDatabase = async (req, res, next) => {
+  try {
+    const dbStatus = await checkDatabaseConnection();
+    if (!dbStatus.connected) {
+      return res.status(503).json({ 
+        error: 'Database unavailable', 
+        message: 'Veritabanı bağlantısı mevcut değil. Lütfen daha sonra tekrar deneyin.',
+        details: dbStatus.error
+      });
+    }
+    next();
+  } catch (error) {
+    console.error('Database check error:', error);
+    return res.status(503).json({ 
+      error: 'Database check failed', 
+      message: 'Veritabanı bağlantısı kontrol edilemedi.'
+    });
+  }
+};
 
 const PORT = 3001;
 
@@ -1097,6 +1119,7 @@ const startPreGame = (roomId) => {
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const JWT_SECRET = 'your-super-secret-key-that-should-be-in-env-vars'; // IMPORTANT: Move to .env file in production
+const { encryptPhoneNumber, decryptPhoneNumber, comparePhoneNumbers } = require('./utils/encryption');
 
 app.post('/api/register', async (req, res) => {
     const { email, password, nickname } = req.body;
@@ -2085,7 +2108,7 @@ app.get('/health', async (req, res) => {
 // --- Phone Verification API Routes (VatanSMS Entegrasyonu) ---
 
 // Telefon doğrulama kodu gönder (VatanSMS API ile)
-app.post('/api/send-sms-code', async (req, res) => {
+app.post('/api/send-sms-code', generalSmsLimiter, phoneNumberLimiter, ipDailyPhoneLimit, async (req, res) => {
     const { phoneNumber } = req.body;
     
     if (!phoneNumber) {
@@ -2107,7 +2130,7 @@ app.post('/api/send-sms-code', async (req, res) => {
         // Eski kodları temizle
         await executeQuery(
             'DELETE FROM phone_verifications WHERE phone_number = @phoneNumber',
-            [{ name: 'phoneNumber', type: sql.NVarChar(20), value: cleanPhone }]
+            [{ name: 'phoneNumber', type: sql.NVarChar(255), value: cleanPhone }]
         );
 
         // Yeni kodu kaydet
@@ -2115,7 +2138,7 @@ app.post('/api/send-sms-code', async (req, res) => {
             'INSERT INTO phone_verifications (id, phone_number, verification_code, expires_at) VALUES (@id, @phoneNumber, @code, @expiresAt)',
             [
                 { name: 'id', type: sql.NVarChar(36), value: verificationId },
-                { name: 'phoneNumber', type: sql.NVarChar(20), value: cleanPhone },
+                { name: 'phoneNumber', type: sql.NVarChar(255), value: cleanPhone },
                 { name: 'code', type: sql.NVarChar(6), value: verificationCode },
                 { name: 'expiresAt', type: sql.DateTime2, value: expiresAt }
             ]
@@ -2189,7 +2212,7 @@ app.get('/api/test-db-connection', async (req, res) => {
 });
 
 // Telefon doğrulama kodunu kontrol et
-app.post('/api/verify-phone', async (req, res) => {
+app.post('/api/verify-phone', verificationLimiter, async (req, res) => {
     console.log(`[${new Date().toISOString()}] 📞 VERIFY-PHONE REQUEST STARTED`);
     console.log(`[${new Date().toISOString()}] 📱 Request Body:`, JSON.stringify(req.body, null, 2));
     console.log(`[${new Date().toISOString()}] 📝 Headers:`, JSON.stringify(req.headers, null, 2));
@@ -2216,7 +2239,7 @@ app.post('/api/verify-phone', async (req, res) => {
         const result = await executeQuery(
             'SELECT * FROM phone_verifications WHERE phone_number = @phoneNumber AND verification_code = @code AND expires_at > GETDATE() AND is_used = 0',
             [
-                { name: 'phoneNumber', type: sql.NVarChar(20), value: cleanPhone },
+                { name: 'phoneNumber', type: sql.NVarChar(255), value: cleanPhone },
                 { name: 'code', type: sql.NVarChar(6), value: verificationCode }
             ]
         );
@@ -2238,17 +2261,30 @@ app.post('/api/verify-phone', async (req, res) => {
             [{ name: 'id', type: sql.NVarChar(36), value: result[0].id }]
         );
 
-        // Check if user exists with this phone number
+        // Check if user exists with this phone number (şifrelenmiş telefonları kontrol et)
         console.log(`[${new Date().toISOString()}] 🔍 Checking if user exists with phone number...`);
-        const userResult = await executeQuery(
-            'SELECT id, nickname, email, phone_number, score, games_played, wins FROM users WHERE phone_number = @phoneNumber',
-            [{ name: 'phoneNumber', type: sql.NVarChar(20), value: cleanPhone }]
+        const allUsers = await executeQuery(
+            'SELECT id, nickname, email, phone_number, score, games_played, wins FROM users WHERE phone_number IS NOT NULL'
         );
+        
+        let user = null;
+        for (const dbUser of allUsers) {
+            try {
+                const decryptedPhone = decryptPhoneNumber(dbUser.phone_number);
+                if (decryptedPhone === cleanPhone) {
+                    user = dbUser;
+                    break;
+                }
+            } catch (error) {
+                // Şifre çözme hatası varsa, bu kullanıcıyı atla
+                console.error('Telefon çözme hatası:', error);
+                continue;
+            }
+        }
 
         let response;
-        if (userResult.length > 0) {
+        if (user) {
             // User exists
-            const user = userResult[0];
             console.log(`[${new Date().toISOString()}] ✅ User found:`, user);
             response = { 
                 success: true, 
@@ -2259,7 +2295,7 @@ app.post('/api/verify-phone', async (req, res) => {
                     id: user.id,
                     nickname: user.nickname,
                     email: user.email,
-                    phoneNumber: user.phone_number,
+                    phoneNumber: cleanPhone, // Maskelenmemiş orijinal telefon
                     score: user.score,
                     gamesPlayed: user.games_played,
                     wins: user.wins
@@ -2303,7 +2339,7 @@ app.post('/api/register-phone', async (req, res) => {
         const verifyResult = await executeQuery(
             'SELECT * FROM phone_verifications WHERE phone_number = @phoneNumber AND verification_code = @code AND expires_at > GETDATE()',
             [
-                { name: 'phoneNumber', type: sql.NVarChar(20), value: cleanPhone },
+                { name: 'phoneNumber', type: sql.NVarChar(255), value: cleanPhone },
                 { name: 'code', type: sql.NVarChar(6), value: verificationCode }
             ]
         );
@@ -2313,12 +2349,26 @@ app.post('/api/register-phone', async (req, res) => {
         }
 
         // Telefon numarasının daha önce kullanılıp kullanılmadığını kontrol et
-        const existingUser = await executeQuery(
-            'SELECT * FROM users WHERE phone_number = @phoneNumber',
-            [{ name: 'phoneNumber', type: sql.NVarChar(20), value: cleanPhone }]
+        const allUsers = await executeQuery(
+            'SELECT id, phone_number FROM users WHERE phone_number IS NOT NULL'
         );
+        
+        let phoneExists = false;
+        for (const user of allUsers) {
+            try {
+                const decryptedPhone = decryptPhoneNumber(user.phone_number);
+                if (decryptedPhone === cleanPhone) {
+                    phoneExists = true;
+                    break;
+                }
+            } catch (error) {
+                // Şifre çözme hatası varsa, bu kullanıcıyı atla
+                console.error('Telefon çözme hatası:', error);
+                continue;
+            }
+        }
 
-        if (existingUser.length > 0) {
+        if (phoneExists) {
             return res.status(400).json({ message: 'Bu telefon numarası ile zaten kayıt olunmuş.' });
         }
 
@@ -2332,22 +2382,45 @@ app.post('/api/register-phone', async (req, res) => {
             return res.status(400).json({ message: 'Bu rumuz zaten kullanılıyor.' });
         }
 
-        // Yeni kullanıcı oluştur
-        const userId = uuidv4();
-        const password_hash = await bcrypt.hash(cleanPhone + JWT_SECRET, 10); // Telefon + secret ile geçici şifre
-
-        await executeQuery(
-            'INSERT INTO users (id, email, password_hash, username, nickname, phone_number, salt, score, games_played, wins) VALUES (@id, @email, @passwordHash, @username, @nickname, @phoneNumber, @salt, 0, 0, 0)',
-            [
-                { name: 'id', type: sql.NVarChar(36), value: userId },
-                { name: 'email', type: sql.NVarChar(255), value: `${cleanPhone}@phone.user` }, // Geçici email
-                { name: 'passwordHash', type: sql.NVarChar(255), value: password_hash },
-                { name: 'username', type: sql.NVarChar(50), value: nickname },
-                { name: 'nickname', type: sql.NVarChar(50), value: nickname },
-                { name: 'phoneNumber', type: sql.NVarChar(20), value: cleanPhone },
-                { name: 'salt', type: sql.NVarChar(255), value: '' }
-            ]
+        // Email kontrolü - telefon numarası formatında email var mı?
+        const existingEmail = await executeQuery(
+            'SELECT * FROM users WHERE email = @email',
+            [{ name: 'email', type: sql.NVarChar(255), value: `${cleanPhone}@phone.user` }]
         );
+
+        let userId;
+        let encryptedPhone = encryptPhoneNumber(cleanPhone);
+
+        if (existingEmail.length > 0) {
+            // Email zaten varsa, mevcut kullanıcıyı güncelle
+            userId = existingEmail[0].id;
+            await executeQuery(
+                'UPDATE users SET phone_number = @phoneNumber, nickname = @nickname, username = @username WHERE id = @id',
+                [
+                    { name: 'phoneNumber', type: sql.NVarChar(255), value: encryptedPhone },
+                    { name: 'nickname', type: sql.NVarChar(50), value: nickname },
+                    { name: 'username', type: sql.NVarChar(50), value: nickname },
+                    { name: 'id', type: sql.NVarChar(36), value: userId }
+                ]
+            );
+        } else {
+            // Yeni kullanıcı oluştur
+            userId = uuidv4();
+            const password_hash = await bcrypt.hash(cleanPhone + JWT_SECRET, 10); // Telefon + secret ile geçici şifre
+            
+            await executeQuery(
+                'INSERT INTO users (id, email, password_hash, username, nickname, phone_number, salt, score, games_played, wins) VALUES (@id, @email, @passwordHash, @username, @nickname, @phoneNumber, @salt, 0, 0, 0)',
+                [
+                    { name: 'id', type: sql.NVarChar(36), value: userId },
+                    { name: 'email', type: sql.NVarChar(255), value: `${cleanPhone}@phone.user` }, // Geçici email
+                    { name: 'passwordHash', type: sql.NVarChar(255), value: password_hash },
+                    { name: 'username', type: sql.NVarChar(50), value: nickname },
+                    { name: 'nickname', type: sql.NVarChar(50), value: nickname },
+                    { name: 'phoneNumber', type: sql.NVarChar(255), value: encryptedPhone },
+                    { name: 'salt', type: sql.NVarChar(255), value: '' }
+                ]
+            );
+        }
 
         // Kodu kullanıldı olarak işaretle
         await executeQuery(
@@ -2408,7 +2481,7 @@ app.post('/api/login-phone', async (req, res) => {
         const verifyResult = await executeQuery(
             'SELECT * FROM phone_verifications WHERE phone_number = @phoneNumber AND verification_code = @code AND expires_at > GETDATE()',
             [
-                { name: 'phoneNumber', type: sql.NVarChar(20), value: cleanPhone },
+                { name: 'phoneNumber', type: sql.NVarChar(255), value: cleanPhone },
                 { name: 'code', type: sql.NVarChar(6), value: verificationCode }
             ]
         );
@@ -2417,17 +2490,29 @@ app.post('/api/login-phone', async (req, res) => {
             return res.status(400).json({ message: 'Geçersiz veya süresi dolmuş doğrulama kodu.' });
         }
 
-        // Kullanıcıyı telefon numarası ile bul
-        const userResult = await executeQuery(
-            'SELECT * FROM users WHERE phone_number = @phoneNumber',
-            [{ name: 'phoneNumber', type: sql.NVarChar(20), value: cleanPhone }]
+        // Kullanıcıyı telefon numarası ile bul (şifrelenmiş telefonları kontrol et)
+        const allUsers = await executeQuery(
+            'SELECT id, email, username, nickname, phone_number, score, games_played, wins FROM users WHERE phone_number IS NOT NULL'
         );
-
-        if (userResult.length === 0) {
-            return res.status(404).json({ message: 'Bu telefon numarası ile kayıtlı kullanıcı bulunamadı.' });
+        
+        let user = null;
+        for (const dbUser of allUsers) {
+            try {
+                const decryptedPhone = decryptPhoneNumber(dbUser.phone_number);
+                if (decryptedPhone === cleanPhone) {
+                    user = dbUser;
+                    break;
+                }
+            } catch (error) {
+                // Şifre çözme hatası varsa, bu kullanıcıyı atla
+                console.error('Telefon çözme hatası:', error);
+                continue;
+            }
         }
 
-        const user = userResult[0];
+        if (!user) {
+            return res.status(404).json({ message: 'Bu telefon numarası ile kayıtlı kullanıcı bulunamadı.' });
+        }
 
         // Kodu kullanıldı olarak işaretle
         await executeQuery(
@@ -2474,7 +2559,7 @@ app.post('/api/login-phone', async (req, res) => {
 });
 
 // Kullanıcı profili endpoint'i
-app.get('/api/user/profile', async (req, res) => {
+app.get('/api/user/profile', requireDatabase, async (req, res) => {
     const authHeader = req.headers.authorization;
     
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -2499,6 +2584,20 @@ app.get('/api/user/profile', async (req, res) => {
         }
 
         const user = userResult[0];
+        
+        // Telefon numarasını çöz ve maskele
+        let maskedPhoneNumber = null;
+        if (user.phone_number) {
+            try {
+                const decryptedPhone = decryptPhoneNumber(user.phone_number);
+                const { maskPhoneNumber } = require('./utils/encryption');
+                maskedPhoneNumber = maskPhoneNumber(decryptedPhone);
+            } catch (error) {
+                console.error('Telefon numarası çözme hatası:', error);
+                maskedPhoneNumber = '*** *** ** **'; // Hata durumunda varsayılan maske
+            }
+        }
+        
         res.json({
             success: true,
             user: {
@@ -2506,7 +2605,7 @@ app.get('/api/user/profile', async (req, res) => {
                 email: user.email,
                 username: user.username,
                 nickname: user.nickname,
-                phoneNumber: user.phone_number,
+                phoneNumber: maskedPhoneNumber, // Maskelenmiş telefon numarası
                 score: user.score,
                 gamesPlayed: user.games_played,
                 wins: user.wins
@@ -2602,7 +2701,7 @@ app.post('/api/avatar', async (req, res) => {
         if (success) {
             console.log(`[AVATAR UPLOAD] Başarılı - avatarUrl geri döndürülüyor`);
             // Return full URL including the base URL
-            const baseUrl = process.env.BASE_URL || 'http://192.168.1.134:3001';
+            const baseUrl = process.env.BASE_URL || 'http://192.168.14:3001';
             const fullAvatarUrl = `${baseUrl}${avatarFileUrl}`;
             res.json({ 
                 success: true, 
@@ -2636,7 +2735,7 @@ app.get('/api/avatar/:userId', async (req, res) => {
         const avatarUrl = await getUserAvatar(userId);
         if (avatarUrl) {
             // Return full URL including the base URL
-            const baseUrl = process.env.BASE_URL || 'http://192.168.1.134:3001';
+            const baseUrl = process.env.BASE_URL || 'http://192.168.134:3001';
             const fullAvatarUrl = `${baseUrl}${avatarUrl}`;
             res.json({ success: true, avatarUrl: fullAvatarUrl });
         } else {
@@ -2648,14 +2747,76 @@ app.get('/api/avatar/:userId', async (req, res) => {
     }
 });
 
+// Hesap silme endpoint'i
+app.delete('/api/user/account', async (req, res) => {
+    const authHeader = req.headers.authorization;
+    
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return res.status(401).json({ message: 'Yetkilendirme başlığı gerekli.' });
+    }
+
+    const token = authHeader.substring(7); // Remove 'Bearer ' prefix
+
+    try {
+        // JWT token doğrulama
+        const decoded = jwt.verify(token, JWT_SECRET);
+        const userId = decoded.userId;
+
+        // Kullanıcının var olup olmadığını kontrol et
+        const userCheck = await executeQuery(
+            'SELECT id, nickname FROM users WHERE id = @userId',
+            [{ name: 'userId', type: sql.NVarChar(36), value: userId }]
+        );
+
+        if (userCheck.length === 0) {
+            return res.status(404).json({ message: 'Kullanıcı bulunamadı.' });
+        }
+
+        const userNickname = userCheck[0].nickname;
+        console.log(`[HESAP SİLME] Kullanıcı hesabı siliniyor: ${userNickname} (${userId})`);
+
+        // User service'deki deleteUserAccount fonksiyonunu çağır
+        const { deleteUserAccount } = require('./services/user-service');
+        const success = await deleteUserAccount(userId);
+
+        if (success) {
+            console.log(`[HESAP SİLME] Hesap başarıyla silindi: ${userNickname} (${userId})`);
+            res.json({ 
+                success: true, 
+                message: 'Hesabınız başarıyla silindi.' 
+            });
+        } else {
+            console.error(`[HESAP SİLME] Hesap silme başarısız: ${userNickname} (${userId})`);
+            res.status(500).json({ 
+                success: false, 
+                message: 'Hesap silme işlemi başarısız oldu.' 
+            });
+        }
+    } catch (error) {
+        console.error('Hesap silme hatası:', error);
+        if (error.name === 'JsonWebTokenError') {
+            return res.status(401).json({ message: 'Geçersiz token.' });
+        } else if (error.name === 'TokenExpiredError') {
+            return res.status(401).json({ message: 'Token süresi dolmuş.' });
+        }
+        res.status(500).json({ message: 'İç sunucu hatası', error: error.message });
+    }
+});
+
 // --- Server Listen ---
 server.listen(PORT, '0.0.0.0', async () => {
     try {
-        await executeQuery('SELECT 1');
-        console.log('Veritabanı bağlantısı başarıyla doğrulandı.');
+        const dbStatus = await checkDatabaseConnection();
+        if (dbStatus.connected) {
+            console.log('✅ Veritabanı bağlantısı başarıyla doğrulandı.');
+        } else {
+            console.error('❌ Veritabanı bağlantısı başarısız:', dbStatus.error);
+            console.warn('⚠️  Sunucu yine de başlatılıyor, ancak veritabanı özellikleri çalışmayabilir.');
+            console.warn('💡 Lütfen veritabanı sunucusunun çalıştığından ve bağlantı ayarlarının doğru olduğundan emin olun.');
+        }
     } catch (err) {
-        console.error('Sunucu başlatılırken veritabanına bağlanılamadı:', err);
-        process.exit(1);
+        console.error('❌ Sunucu başlatılırken veritabanı bağlantısı test edilemedi:', err);
+        console.warn('⚠️  Sunucu yine de başlatılıyor, ancak veritabanı özellikleri çalışmayabilir.');
     }
-    console.log(`Sunucu ${PORT} portunda çalışıyor`);
+    console.log(`🚀 Sunucu ${PORT} portunda çalışıyor`);
 });

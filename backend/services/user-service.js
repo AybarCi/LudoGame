@@ -143,4 +143,79 @@ const getUserAvatar = async (userId) => {
     }
 };
 
-module.exports = { findOrCreateUser, updateUserAvatar, getUserAvatar };
+/**
+ * Kullanıcı hesabını ve tüm ilişkili verilerini kalıcı olarak siler
+ * @param {string} userId - Silinecek kullanıcı ID'si
+ * @returns {Promise<boolean>} Silme işlemi başarılı mı
+ */
+const deleteUserAccount = async (userId) => {
+    try {
+        console.log(`[deleteUserAccount] Hesap silme başlatıldı - UserId: ${userId}`);
+        
+        // Transaction başlat
+        const transaction = new sql.Transaction();
+        await transaction.begin();
+        
+        try {
+            // 1. Refresh token'ları sil
+            await executeQuery(
+                'DELETE FROM refresh_tokens WHERE user_id = @userId',
+                [{ name: 'userId', type: sql.NVarChar(36), value: userId }],
+                transaction
+            );
+            
+            // 2. Phone verifications tablosunu sil
+            await executeQuery(
+                'DELETE FROM phone_verifications WHERE user_id = @userId',
+                [{ name: 'userId', type: sql.NVarChar(36), value: userId }],
+                transaction
+            );
+            
+            // 3. Oyuncu istatistiklerini sil
+            await executeQuery(
+                'DELETE FROM player_statistics WHERE user_id = @userId',
+                [{ name: 'userId', type: sql.NVarChar(36), value: userId }],
+                transaction
+            );
+            
+            // 4. Game players kayıtlarını sil (önce game_players)
+            await executeQuery(
+                'DELETE FROM game_players WHERE user_id = @userId',
+                [{ name: 'userId', type: sql.NVarChar(36), value: userId }],
+                transaction
+            );
+            
+            // 5. Kullanıcının oluşturduğu oyunları sil
+            await executeQuery(
+                'DELETE FROM games WHERE host_id = @userId',
+                [{ name: 'userId', type: sql.NVarChar(36), value: userId }],
+                transaction
+            );
+            
+            // 6. Kullanıcıyı sil
+            const deleteResult = await executeQuery(
+                'DELETE FROM users WHERE id = @userId',
+                [{ name: 'userId', type: sql.NVarChar(36), value: userId }],
+                transaction
+            );
+            
+            // Transaction'ı commit et
+            await transaction.commit();
+            
+            const success = deleteResult.rowsAffected > 0;
+            console.log(`[deleteUserAccount] Hesap silme ${success ? 'başarılı' : 'başarısız'} - UserId: ${userId}`);
+            return success;
+            
+        } catch (error) {
+            // Hata durumunda transaction'ı rollback et
+            await transaction.rollback();
+            throw error;
+        }
+        
+    } catch (error) {
+        console.error('Hesap silme hatası:', error);
+        return false;
+    }
+};
+
+module.exports = { findOrCreateUser, updateUserAvatar, getUserAvatar, deleteUserAccount };

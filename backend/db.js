@@ -8,9 +8,27 @@ const poolPromise = new sql.ConnectionPool(dbConfig)
         console.log('SQL Server veritabanına başarıyla bağlanıldı.');
         return pool;
     })
-    .catch(err => console.error('Veritabanı bağlantı hatası: ', err));
+    .catch(err => {
+        console.error('Veritabanı bağlantı hatası: ', err);
+        throw err; // Hataları yeniden fırlat ki executeQuery'de yakalanabilsin
+    });
+
+// Veritabanı bağlantı durumunu kontrol et
+const checkDatabaseConnection = async () => {
+    try {
+        const pool = await poolPromise;
+        if (!pool) {
+            return { connected: false, error: 'Pool is undefined' };
+        }
+        await pool.request().query('SELECT 1');
+        return { connected: true };
+    } catch (error) {
+        return { connected: false, error: error.message };
+    }
+};
 
 module.exports = {
+    checkDatabaseConnection,
     // Sorguları çalıştırmak için bir yardımcı fonksiyon
     executeQuery: async (query, params = []) => {
         let pool;
@@ -21,6 +39,17 @@ module.exports = {
             console.log(`[${new Date().toISOString()}] 📋 Parameters:`, JSON.stringify(params, null, 2));
             
             pool = await poolPromise;
+            
+            // Pool'un tanımlı olduğunu kontrol et
+            if (!pool) {
+                throw new Error('Database connection pool is not available. Please check database connection.');
+            }
+            
+            // Pool nesnesinin request method'unun var olduğunu kontrol et
+            if (typeof pool.request !== 'function') {
+                throw new Error('Database pool is not properly initialized. Pool.request is not a function.');
+            }
+            
             request = pool.request();
             
             // Timeout ayarını ekle
