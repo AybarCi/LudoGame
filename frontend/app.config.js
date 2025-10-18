@@ -55,7 +55,7 @@ export default {
         {
           "ios": {
             "useFrameworks": "static",
-            "deploymentTarget": "15.0",
+            "deploymentTarget": "15.1",
             "flipper": false
           }
         }
