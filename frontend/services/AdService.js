@@ -29,7 +29,7 @@ console.log('AdMob enabled with react-native-google-mobile-ads');
 console.log('Test mode:', isTestMode ? 'AÇIK' : 'KAPALI');
 
 // CRASH PREVENTION: Temporarily disable AdMob for testing
-const ADMOB_DISABLED = true;
+const ADMOB_DISABLED = false;
 if (ADMOB_DISABLED) {
   console.warn('⚠️ ADMOB DISABLED FOR CRASH TESTING ⚠️');
 }

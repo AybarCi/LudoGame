@@ -423,4 +423,28 @@ export const loginStyles = StyleSheet.create({
     fontSize: 14,
     fontFamily: 'Poppins_500Medium',
   },
+  // Rate limiting styles
+  rateLimitContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 107, 107, 0.1)',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 107, 107, 0.3)',
+  },
+  rateLimitText: {
+    color: '#ff6b6b',
+    fontSize: 13,
+    marginLeft: 6,
+    fontFamily: 'Poppins_500Medium',
+  },
+  rateLimitTimer: {
+    color: '#ff6b6b',
+    fontSize: 13,
+    fontFamily: 'Poppins_600SemiBold',
+    marginLeft: 4,
+  },
 });

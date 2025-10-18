@@ -188,6 +188,24 @@ export const sendVerificationCode = createAsyncThunk(
 
       if (!response.ok) {
         console.log('❌ Response başarısız, status:', response.status);
+        
+        // Rate limiting hatalarını özel olarak işle
+        if (response.status === 429) {
+          let errorMessage = 'Çok fazla istek gönderdiniz. Lütfen bir süre bekleyin.';
+          
+          if (data.error === 'PHONE_RATE_LIMIT_EXCEEDED') {
+            const minutes = data.retryAfterMinutes || Math.ceil(data.retryAfter / 60);
+            errorMessage = `Bu telefon numarasına çok fazla SMS gönderildi. Lütfen ${minutes} dakika sonra tekrar deneyin.`;
+          } else if (data.error === 'IP_RATE_LIMIT_EXCEEDED') {
+            const minutes = data.retryAfterMinutes || Math.ceil(data.retryAfter / 60);
+            errorMessage = `Çok fazla istek gönderdiniz. Lütfen ${minutes} dakika sonra tekrar deneyin.`;
+          } else if (data.error === 'DAILY_PHONE_LIMIT_EXCEEDED') {
+            errorMessage = 'Günlük telefon numarası limitine ulaştınız. Lütfen 24 saat sonra tekrar deneyin.';
+          }
+          
+          throw new Error(errorMessage);
+        }
+        
         throw new Error(data.message || 'Doğrulama kodu gönderilemedi');
       }
 
@@ -238,6 +256,18 @@ export const verifyCode = createAsyncThunk(
       const data = await response.json();
 
       if (!response.ok) {
+        // Rate limiting hatalarını özel olarak işle
+        if (response.status === 429) {
+          let errorMessage = 'Çok fazma doğrulama denemesi yaptınız. Lütfen bir süre bekleyin.';
+          
+          if (data.error === 'VERIFICATION_RATE_LIMIT_EXCEEDED') {
+            const minutes = data.retryAfterMinutes || Math.ceil(data.retryAfter / 60);
+            errorMessage = `Çok fazla doğrulama denemesi yaptınız. Lütfen ${minutes} dakika sonra tekrar deneyin.`;
+          }
+          
+          throw new Error(errorMessage);
+        }
+        
         throw new Error(data.message || 'Doğrulama başarısız');
       }
 

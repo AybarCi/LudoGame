@@ -23,7 +23,19 @@ export const ReduxAuthProvider = ({ children }) => {
   const [modalVisible, setModalVisible] = useState(false);
   const [modalError, setModalError] = useState('');
 
-  console.log('ReduxAuthProvider render, isAuthenticated:', isAuthenticated, 'token:', !!token, 'timestamp:', Date.now());
+  // Sadece değişiklik olduğunda log yaz
+  const prevAuthState = useRef({ user: null, isAuthenticated: false, token: null });
+  useEffect(() => {
+    const currentState = { user: !!user, isAuthenticated, token: !!token };
+    const prevState = prevAuthState.current;
+    
+    if (currentState.user !== prevState.user || 
+        currentState.isAuthenticated !== prevState.isAuthenticated || 
+        currentState.token !== prevState.token) {
+      console.log('ReduxAuthProvider: Auth state changed:', currentState);
+      prevAuthState.current = currentState;
+    }
+  }, [user, isAuthenticated, token]);
 
   // Check token expiry periodically - optimize to prevent unnecessary re-renders
   useEffect(() => {

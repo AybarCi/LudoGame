@@ -54,12 +54,15 @@ export default function LoginScreen() {
   const [showNicknameScreen, setShowNicknameScreen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [showVerificationModalLocal, setShowVerificationModalLocal] = useState(false);
+  const [rateLimitInfo, setRateLimitInfo] = useState(null); // Rate limiting bilgisi için
   
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(30)).current;
   const scaleAnim = useRef(new Animated.Value(0.9)).current;
 
   useEffect(() => {
+    console.log('LoginScreen: Initial useEffect running');
+    
     // Component mount olduğunda state'leri sıfırla
     setPhoneNumberState('');
     setNickname('');
@@ -67,6 +70,7 @@ export default function LoginScreen() {
     setShowNicknameScreen(false);
     setLoading(false);
     setShowVerificationModalLocal(false);
+    setRateLimitInfo(null);
     
     // Start animations immediately
     setTimeout(() => {
@@ -98,9 +102,9 @@ export default function LoginScreen() {
       setShowNicknameScreen(false);
       setLoading(false);
       setShowVerificationModalLocal(false);
+      setRateLimitInfo(null);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, []); // Boş dependency array - sadece mount/unmount'ta çalışır
 
   useEffect(() => {
     let interval;
@@ -112,6 +116,32 @@ export default function LoginScreen() {
     return () => clearInterval(interval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [timer]);
+
+  // Rate limiting timer için useEffect
+  useEffect(() => {
+    let interval;
+    if (rateLimitInfo && rateLimitInfo.retryAfter > 0) {
+      console.log('Rate limit timer started:', rateLimitInfo.retryAfter, 'seconds');
+      interval = setInterval(() => {
+        setRateLimitInfo(prev => {
+          if (prev && prev.retryAfter > 1) {
+            return { ...prev, retryAfter: prev.retryAfter - 1 };
+          } else {
+            console.log('Rate limit timer finished');
+            // Süre doldu, rate limit bilgisini temizle
+            return null;
+          }
+        });
+      }, 1000);
+    }
+    
+    return () => {
+      if (interval) {
+        console.log('Rate limit timer cleared');
+        clearInterval(interval);
+      }
+    };
+  }, [rateLimitInfo?.retryAfter]); // Sadece retryAfter değiştiğinde tetikle
 
 
 
@@ -161,6 +191,8 @@ export default function LoginScreen() {
     console.log('Request body:', JSON.stringify({ phoneNumber: cleanPhoneNumber }));
     
     dispatch(setPhoneNumber(cleanPhoneNumber));
+    // Rate limit bilgisini sadece başarılı istekte temizle
+    // Başarısız istekte mevcut limit bilgisi korunmalı
     
     try {
       const result = await dispatch(sendVerificationCode(cleanPhoneNumber));
@@ -168,10 +200,31 @@ export default function LoginScreen() {
       
       if (sendVerificationCode.fulfilled.match(result)) {
         console.log('✅ SMS kodu başarıyla gönderildi');
+        setRateLimitInfo(null); // Başarılı istekte rate limit bilgisini temizle
         setShowVerificationModalLocal(true);
       } else if (sendVerificationCode.rejected.match(result)) {
         console.log('❌ SMS kodu gönderilemedi:', result.payload);
-        dispatch(showAlert({ message: result.payload, type: 'error' }));
+        // Rate limiting hatası mı kontrol et
+        const errorMessage = result.payload;
+        if (errorMessage && errorMessage.includes('dakika')) {
+          // Dakika içeren mesajdan süreyi çıkar
+          const match = errorMessage.match(/(\d+)\s*dakika/);
+          const minutes = match ? parseInt(match[1]) : 1;
+          const newRetryAfter = minutes * 60;
+          
+          // Sadece daha uzun bir süre geldiğinde veya yeni bir limit durumu oluştuğunda güncelle
+          if (!rateLimitInfo || newRetryAfter > rateLimitInfo.retryAfter) {
+            setRateLimitInfo({
+              type: 'sms',
+              retryAfter: newRetryAfter,
+              message: errorMessage
+            });
+          }
+        }
+        // Rate limiting hatası varsa sadece modalda göster, alert gösterme
+        if (!errorMessage.includes('dakika')) {
+          dispatch(showAlert({ message: errorMessage, type: 'error' }));
+        }
       }
     } catch (error) {
       console.log('🚨 Exception during SMS send:', error);
@@ -196,7 +249,10 @@ export default function LoginScreen() {
         type: 'success' 
       }));
     } else if (sendVerificationCode.rejected.match(result)) {
-      dispatch(showAlert({ message: result.payload, type: 'error' }));
+      // Rate limiting hatası varsa sadece modalda göster, alert gösterme
+      if (!result.payload.includes('dakika')) {
+        dispatch(showAlert({ message: result.payload, type: 'error' }));
+      }
     }
   }
 
@@ -208,6 +264,7 @@ export default function LoginScreen() {
 
     setLoading(true);
     setVerificationCode(code); // Store the verification code for registration
+    // Rate limit bilgisini sadece başarılı doğrulamada temizle
 
     try {
       const cleanPhoneNumber = getCleanPhoneNumber(phoneNumber);
@@ -219,7 +276,25 @@ export default function LoginScreen() {
         // Hata mesajını verification modal'ı içinde göster, ayrıca alert gösterme
         // Bu sayede sadece bir modal açık kalır
         setLoading(false);
-        throw new Error(verifyResult.payload || 'Doğrulama kodu hatalı'); // Hata fırlat ki modal catch yapsın
+        
+        // Rate limiting hatası mı kontrol et
+        const errorMessage = verifyResult.payload;
+        if (errorMessage && errorMessage.includes('dakika')) {
+          const match = errorMessage.match(/(\d+)\s*dakika/);
+          const minutes = match ? parseInt(match[1]) : 1;
+          const newRetryAfter = minutes * 60;
+          
+          // Sadece daha uzun bir süre geldiğinde veya yeni bir limit durumu oluştuğunda güncelle
+          if (!rateLimitInfo || newRetryAfter > rateLimitInfo.retryAfter) {
+            setRateLimitInfo({
+              type: 'verification',
+              retryAfter: newRetryAfter,
+              message: errorMessage
+            });
+          }
+        }
+        
+        throw new Error(errorMessage || 'Doğrulama kodu hatalı'); // Hata fırlat ki modal catch yapsın
       }
       
       // Code verified successfully, check if user exists
@@ -312,6 +387,21 @@ export default function LoginScreen() {
     });
   };
 
+  const formatTime = (seconds) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  const formatRateLimitTime = (seconds) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    if (mins > 0) {
+      return `${mins} dakika ${secs} saniye`;
+    }
+    return `${secs} saniye`;
+  };
+
   return (
     <View style={styles.container}>
       <LinearGradient
@@ -399,6 +489,16 @@ export default function LoginScreen() {
                     underlineColorAndroid="transparent"
                   />
                   </View>
+                  {rateLimitInfo && (
+                    <View style={styles.rateLimitContainer}>
+                      <Text style={styles.rateLimitText}>
+                        ⏰ {rateLimitInfo.message} 
+                        <Text style={styles.rateLimitTimer}>
+                          ({formatRateLimitTime(rateLimitInfo.retryAfter)})
+                        </Text>
+                      </Text>
+                    </View>
+                  )}
                 </View>
               )}
             </View>

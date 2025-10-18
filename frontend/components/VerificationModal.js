@@ -19,6 +19,7 @@ const { width, height } = Dimensions.get('window');
 const VerificationModal = ({ visible, onClose, onVerify, phoneNumber, timer, onResend, loading }) => {
   const [code, setCode] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
+  const [rateLimitInfo, setRateLimitInfo] = useState(null); // Rate limiting bilgisi için
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(50)).current;
 
@@ -68,8 +69,29 @@ const VerificationModal = ({ visible, onClose, onVerify, phoneNumber, timer, onR
   // Loading state değiştiğinde kontrol et
   useEffect(() => {
     // Loading false olduğunda buton tekrar aktif olacak
-    // Bu useEffect sayesinde buton durumu güncellenecek
+  // Bu useEffect sayesinde buton durumu güncellenecek
   }, [loading]);
+
+  // Rate limiting timer için useEffect
+  useEffect(() => {
+    let interval;
+    if (rateLimitInfo && rateLimitInfo.retryAfter > 0) {
+      interval = setInterval(() => {
+        setRateLimitInfo(prev => {
+          if (prev && prev.retryAfter > 1) {
+            return { ...prev, retryAfter: prev.retryAfter - 1 };
+          } else {
+            // Süre doldu, rate limit bilgisini temizle
+            return null;
+          }
+        });
+      }, 1000);
+    }
+    
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [rateLimitInfo]);
 
   const handleVerify = async () => {
     if (code.length === 6 && !loading) {
@@ -79,8 +101,23 @@ const VerificationModal = ({ visible, onClose, onVerify, phoneNumber, timer, onR
         // onVerify başarılı olursa modal kapanır (parent component tarafından yönetilir)
       } catch (error) {
         // Hata durumunda kullanıcıya doğrudan feedback ver
-        // Hata mesajını console'dan al veya varsayılan mesaj göster
+        // Rate limiting hatası mı kontrol et
         const errorMsg = error.message || 'Doğrulama kodu hatalı veya süresi dolmuş. Lütfen tekrar deneyin.';
+        
+        if (errorMsg.includes('dakika')) {
+          const match = errorMsg.match(/(\d+)\s*dakika/);
+          const minutes = match ? parseInt(match[1]) : 1;
+          const newRetryAfter = minutes * 60;
+          
+          // Sadece daha uzun bir süre geldiğinde veya yeni bir limit durumu oluştuğunda güncelle
+          if (!rateLimitInfo || newRetryAfter > rateLimitInfo.retryAfter) {
+            setRateLimitInfo({
+              retryAfter: newRetryAfter,
+              message: errorMsg
+            });
+          }
+        }
+        
         setErrorMessage(errorMsg);
         // KODU TEMİZLEME! Kullanıcı hatalı kodu görsün ve düzeltebilsin
         console.error('Verification error:', error);
@@ -101,6 +138,15 @@ const VerificationModal = ({ visible, onClose, onVerify, phoneNumber, timer, onR
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
     return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  const formatRateLimitTime = (seconds) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    if (mins > 0) {
+      return `${mins} dakika ${secs} saniye`;
+    }
+    return `${secs} saniye`;
   };
 
   return (
@@ -166,10 +212,23 @@ const VerificationModal = ({ visible, onClose, onVerify, phoneNumber, timer, onR
             {errorMessage ? (
               <Text style={styles.errorText}>{errorMessage}</Text>
             ) : null}
+            
+            {rateLimitInfo && (
+              <View style={styles.rateLimitContainer}>
+                <Ionicons name="time-outline" size={14} color="#FF6B6B" />
+                <Text style={styles.rateLimitText}>
+                  {rateLimitInfo.message} ({formatRateLimitTime(rateLimitInfo.retryAfter)})
+                </Text>
+              </View>
+            )}
           </View>
 
           <View style={styles.actions}>
-            {timer > 0 ? (
+            {rateLimitInfo ? (
+              <Text style={[styles.timerText, { color: '#FF6B6B' }]}>
+                {rateLimitInfo.message} ({formatRateLimitTime(rateLimitInfo.retryAfter)})
+              </Text>
+            ) : timer > 0 ? (
               <Text style={styles.timerText}>
                 Kodu tekrar gönder ({formatTime(timer)})
               </Text>
@@ -187,10 +246,10 @@ const VerificationModal = ({ visible, onClose, onVerify, phoneNumber, timer, onR
             <TouchableOpacity 
               style={[
                 styles.verifyButton,
-                loading && styles.verifyButtonDisabled
+                (loading || rateLimitInfo) && styles.verifyButtonDisabled
               ]}
               onPress={handleVerify}
-              disabled={loading}
+              disabled={loading || rateLimitInfo}
             >
               {loading ? (
                 <Text style={styles.verifyButtonText}>Doğrulanıyor...</Text>
@@ -337,6 +396,24 @@ const styles = {
     color: '#FFFFFF',
     fontSize: 16,
     fontFamily: 'Poppins_600SemiBold',
+  },
+  // Rate limiting styles
+  rateLimitContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 107, 107, 0.1)',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 107, 107, 0.3)',
+  },
+  rateLimitText: {
+    color: '#ff6b6b',
+    fontSize: 13,
+    marginLeft: 6,
+    fontFamily: 'Poppins_500Medium',
   },
 };
 
