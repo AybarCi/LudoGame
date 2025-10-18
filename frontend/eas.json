@@ -45,7 +45,10 @@
         "EXPO_PUBLIC_ADMOB_INTERSTITIAL_ID": "ca-app-pub-1743455537598911/1234567890",
         "EXPO_PUBLIC_ADMOB_REWARDED_ID": "ca-app-pub-1743455537598911/1234567890"
       },
-      "node": "20.19.4"
+      "node": "20.19.4",
+      "npm": {
+        "ci": false
+      }
     }
   },
   "submit": {
