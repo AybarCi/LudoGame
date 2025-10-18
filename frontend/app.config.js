@@ -17,6 +17,12 @@ export default {
         NSPhotoLibraryUsageDescription: 'Fotoğraf galerisine erişim gerekiyor',
         NSPhotoLibraryAddUsageDescription: 'Fotoğraf kaydetmek için erişim gerekiyor',
         NSMicrophoneUsageDescription: 'Mikrofon erişimi gerekiyor',
+        // Network ve multiplayer için
+        NSLocalNetworkUsageDescription: 'Oyun bağlantıları için yerel ağ erişimi gerekiyor',
+        // Arkaplanda müzik/oyun sesleri için
+        UIBackgroundModes: ['audio', 'fetch'],
+        // Push bildirimleri (isteğe bağlı)
+        // NSUserNotificationUsageDescription: 'Oyun bildirimleri için izin gerekiyor',
       }
     },
     android: {
