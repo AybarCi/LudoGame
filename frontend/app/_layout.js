@@ -12,6 +12,9 @@ import { useFonts, Poppins_400Regular, Poppins_600SemiBold, Poppins_700Bold } fr
 import { useEffect, useState } from 'react';
 import { AdService } from '../services/AdService';
 import CustomSplashScreen from '../components/SplashScreen';
+import CrashHandler from '../utils/crashHandler';
+import LaunchDiagnostics from '../utils/launchDiagnostics';
+import DebugLauncher from '../components/DebugLauncher';
 
 
 // Custom splash screen kullanıyoruz, expo splash screen'i devre dışı bırak
@@ -24,6 +27,7 @@ const InitialLayout = React.memo(function InitialLayout() {
     Poppins_700Bold,
   });
   const [isReady, setIsReady] = useState(false);
+  const [criticalError, setCriticalError] = useState(null);
 
   const authState = useSelector(state => state?.auth || { isLoading: false, user: null });
   const loading = authState.isLoading;
@@ -48,13 +52,27 @@ const InitialLayout = React.memo(function InitialLayout() {
 
   // Font ve hazırlık effect'i - HER ZAMAN çağrılır
   useEffect(() => {
-    if (fontError) throw fontError;
+    if (fontError) {
+      console.error('[InitialLayout] Font yüklenirken hata:', fontError);
+      LaunchDiagnostics.logStage('FONT_LOAD_ERROR', { error: fontError.message });
+      // Font hatası varsa bile devam et (fallback fontlar kullanılacak)
+      setCriticalError(fontError);
+      setIsReady(true);
+      return;
+    }
 
     if (fontsLoaded) {
       // Fontlar yüklendiğinde hazır durumuna geç
       setIsReady(true);
       // AdService'i initialize et
-      AdService.initialize();
+      try {
+        AdService.initialize();
+        LaunchDiagnostics.logStage('ADSERVICE_INIT_SUCCESS');
+      } catch (adError) {
+        console.error('[InitialLayout] AdService initialize hatası:', adError);
+        LaunchDiagnostics.logStage('ADSERVICE_INIT_ERROR', { error: adError.message });
+        // AdService hatası kritik değil, devam et
+      }
     }
   }, [fontsLoaded, fontError]);
 
@@ -96,6 +114,48 @@ const AppContent = React.memo(function AppContent() {
 });
 
 export default function RootLayout() {
+  const [showDebugLauncher, setShowDebugLauncher] = useState(false);
+  const [launchErrors, setLaunchErrors] = useState([]);
+  
+  // Crash handler'ı en başta başlat
+  useEffect(() => {
+    console.log('RootLayout: Initializing crash handler...');
+    CrashHandler.initialize();
+    LaunchDiagnostics.logStage('ROOT_LAYOUT_MOUNT');
+    
+    // Launch crash'leri kontrol et
+    checkLaunchErrors();
+  }, []);
+  
+  const checkLaunchErrors = async () => {
+    try {
+      const launchLogs = await LaunchDiagnostics.getLaunchLogs();
+      const crashLogs = await CrashHandler.getCrashLogs();
+      
+      const allErrors = [
+        ...launchLogs.filter(log => log.stage?.includes('ERROR') || log.stage?.includes('CRASH')),
+        ...crashLogs.filter(log => log.isFatal)
+      ];
+      
+      if (allErrors.length > 0 && process.env.EXPO_PUBLIC_DEBUG_LAUNCHER === 'true') {
+        console.log('RootLayout: Launch errors detected, showing debug launcher');
+        setLaunchErrors(allErrors);
+        setShowDebugLauncher(true);
+      }
+    } catch (error) {
+      console.error('RootLayout: Error checking launch errors:', error);
+    }
+  };
+  
+  const handleDebugContinue = () => {
+    console.log('RootLayout: Debug launcher continue clicked');
+    setShowDebugLauncher(false);
+  };
+  
+  if (showDebugLauncher) {
+    return <DebugLauncher onContinue={handleDebugContinue} />;
+  }
+  
   return (
     <Provider store={store}>
       <ReduxAuthProvider>

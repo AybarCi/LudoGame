@@ -24,7 +24,7 @@ const ChatComponent = ({
   currentUser 
 }) => {
   const [inputText, setInputText] = useState('');
-  const [slideAnim] = useState(new Animated.Value(width));
+  const [slideAnim] = useState(new Animated.Value(width * 0.8)); // Ekranın %80'i kadar başlangıç
   const [warningMessage, setWarningMessage] = useState('');
   const [isBlocked, setIsBlocked] = useState(false);
   const [blockDuration, setBlockDuration] = useState(0);
@@ -32,10 +32,10 @@ const ChatComponent = ({
 
   useEffect(() => {
     Animated.timing(slideAnim, {
-      toValue: isVisible ? 0 : width,
-      duration: 300,
-      useNativeDriver: true,
-    }).start();
+         toValue: isVisible ? 0 : width * 0.8, // Ekranın %80'i kadar
+         duration: 300,
+         useNativeDriver: true,
+       }).start();
     
     // Klavyeyi kapatma işlemi
     if (!isVisible) {
@@ -101,7 +101,7 @@ const ChatComponent = ({
       style={[
         styles.chatContainer,
         {
-          transform: [{ translateX: slideAnim }]
+          transform: [{ translateX: slideAnim }] // translateY yerine translateX
         }
       ]}
     >
@@ -188,6 +188,7 @@ const ChatComponent = ({
       {/* Input */}
       <KeyboardAvoidingView 
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
         style={styles.inputContainer}
       >
         <View style={styles.inputRow}>
@@ -201,6 +202,7 @@ const ChatComponent = ({
             maxLength={200}
             onSubmitEditing={handleSend}
             blurOnSubmit={false}
+            returnKeyType="send"
           />
           <TouchableOpacity 
             onPress={handleSend}
@@ -225,26 +227,26 @@ const ChatComponent = ({
 const styles = StyleSheet.create({
   chatContainer: {
     position: 'absolute',
-    top: 0,
-    right: 0,
-    width: width * 0.85,
-    height: height,
-    backgroundColor: 'rgba(0, 0, 0, 0.75)',
-    zIndex: 1000,
-    borderLeftWidth: 1,
-    borderLeftColor: 'rgba(255, 255, 255, 0.3)',
-    backdropFilter: 'blur(10px)',
+    top: 0, // Tamamen üstten başlasın
+    right: 0, // tekrar sağ taraftan başlat
+    width: width * 0.8, // Ekranın %80'i kadar (daha geniş)
+    height: height, // Tam yükseklik
+    backgroundColor: 'rgba(20, 20, 20, 0.95)', // Daha yumuşak arka plan rengi
+    zIndex: 99999, // Header'ın üstünde görünmesi için çok yüksek z-index
+    elevation: 20,
+    borderTopLeftRadius: 25, // Daha yumuşak köşeler
+    borderBottomLeftRadius: 25, // Daha yumuşak köşeler
   },
   chatHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     padding: 15,
-    paddingTop: 50, // Status bar için
+    paddingTop: Platform.OS === 'ios' ? 50 : 30, // Status bar yüksekliği kadar padding
     backgroundColor: 'rgba(0, 0, 0, 0.6)',
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(255, 255, 255, 0.2)',
-    borderRadius: 0,
+    borderTopLeftRadius: 25, // Üst sol köşeyi yuvarlat
   },
   chatTitle: {
     fontSize: 18,
@@ -255,8 +257,9 @@ const styles = StyleSheet.create({
     padding: 5,
   },
   messagesContainer: {
-    flex: 1,
+    flex: 0.75, // Input alanı için daha fazla yer bırak (keyboard'a yakınlaşmak için)
     padding: 10,
+    borderRadius: 10, // İçerik alanına yumuşak köşeler
   },
   emptyContainer: {
     flex: 1,
@@ -333,8 +336,9 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 0, 0, 0.6)',
     borderTopWidth: 1,
     borderTopColor: 'rgba(255, 255, 255, 0.2)',
-    paddingBottom: 20, // Safe area için
+    paddingBottom: Platform.OS === 'ios' ? 10 : 5, // Keyboard için minimum boşluk
     backdropFilter: 'blur(5px)',
+    borderBottomLeftRadius: 25, // Alt sol köşeyi yuvarlat
   },
   inputRow: {
     flexDirection: 'row',
@@ -350,7 +354,8 @@ const styles = StyleSheet.create({
     marginRight: 10,
     color: 'white',
     fontSize: 14,
-    maxHeight: 100,
+    maxHeight: 80,
+    minHeight: 40,
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.3)',
     shadowColor: '#000',

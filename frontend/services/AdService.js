@@ -2,21 +2,36 @@
 import { Platform } from 'react-native';
 import Constants from 'expo-constants';
 
-// AdMob modüllerini sadece gerçek cihazlarda import et
-let AdMobInterstitial, AdMobRewarded, setTestDeviceIDAsync;
+// react-native-google-mobile-ads sadece EAS build'te çalışır
+// Expo Go'da çalışmaz, bu yüzden conditional import yapıyoruz
+let mobileAds, InterstitialAd, RewardedAd, TestIds, AdEventType, RewardedAdEventType;
+
+try {
+  const adsModule = require('react-native-google-mobile-ads');
+  mobileAds = adsModule.default;
+  InterstitialAd = adsModule.InterstitialAd;
+  RewardedAd = adsModule.RewardedAd;
+  TestIds = adsModule.TestIds;
+  AdEventType = adsModule.AdEventType;
+  RewardedAdEventType = adsModule.RewardedAdEventType;
+} catch (error) {
+  console.log('react-native-google-mobile-ads not available in Expo Go, will use mock ads');
+}
 
 // Web, simülatör ve emülatör kontrolü
 const isRealDevice = Platform.OS !== 'web' && Constants.isDevice === true;
 
-if (isRealDevice) {
-  try {
-    const admob = require('expo-ads-admob');
-    AdMobInterstitial = admob.AdMobInterstitial;
-    AdMobRewarded = admob.AdMobRewarded;
-    setTestDeviceIDAsync = admob.setTestDeviceIDAsync;
-  } catch (error) {
-    console.warn('AdMob module not available:', error.message);
-  }
+// Test modu kontrolü - __DEV__ false olduğunda gerçek reklamlar gösterilecek
+const isTestMode = __DEV__ || !isRealDevice;
+
+// AdMob başlatıldı
+console.log('AdMob enabled with react-native-google-mobile-ads');
+console.log('Test mode:', isTestMode ? 'AÇIK' : 'KAPALI');
+
+// CRASH PREVENTION: Temporarily disable AdMob for testing
+const ADMOB_DISABLED = true;
+if (ADMOB_DISABLED) {
+  console.warn('⚠️ ADMOB DISABLED FOR CRASH TESTING ⚠️');
 }
 
 // Mock reklam servisi (geliştirme ortamı için)
@@ -51,30 +66,65 @@ const MockAdService = {
 };
 
 // Test reklam ID'leri (Google tarafından sağlanan)
-const INTERSTITIAL_AD_ID = __DEV__ 
-  ? 'ca-app-pub-3940256099942544/1033173712' // Test ID
-  : 'ca-app-pub-XXXXXXXXXXXXXXXX/XXXXXXXXXX'; // Gerçek ID
+// Expo Go'da TestIds undefined olabilir, bu yüzden fallback değerler kullan
+const TEST_INTERSTITIAL_ID = 'ca-app-pub-3940256099942544/1033173712';
+const TEST_REWARDED_ID = 'ca-app-pub-3940256099942544/5224354917';
+
+const INTERSTITIAL_AD_ID = __DEV__
+  ? (TestIds?.INTERSTITIAL || TEST_INTERSTITIAL_ID) // Test ID veya fallback
+  : Platform.select({
+      ios: 'ca-app-pub-1743455537598911/1234567890', // Gerçek iOS ID - AdMob panelinden alınacak
+      android: 'ca-app-pub-1743455537598911/1234567891' // Gerçek Android ID - AdMob panelinden alınacak
+    });
 
 const REWARDED_AD_ID = __DEV__
-  ? 'ca-app-pub-3940256099942544/5224354917' // Test ID  
-  : 'ca-app-pub-XXXXXXXXXXXXXXXX/XXXXXXXXXX'; // Gerçek ID
+  ? (TestIds?.REWARDED || TEST_REWARDED_ID) // Test ID veya fallback
+  : Platform.select({
+      ios: 'ca-app-pub-1743455537598911/1234567892', // Gerçek iOS ID - AdMob panelinden alınacak
+      android: 'ca-app-pub-1743455537598911/1234567893' // Gerçek Android ID - AdMob panelinden alınacak
+    });
+
+// Reklam instance'ları
+let interstitialAd = null;
+let rewardedAd = null;
 
 class AdService {
   static async initialize() {
     try {
-      // Web ortamında ve simülatörde AdMob çalışmaz
-      if (!isRealDevice || !setTestDeviceIDAsync) {
-        console.log('AdService: Non-real device or AdMob not available, skipping AdMob initialization');
+      // CRASH PREVENTION: Skip AdMob initialization
+      if (ADMOB_DISABLED) {
+        console.log('AdService: SKIPPED - AdMob disabled for crash testing');
         return;
       }
       
-      // Test cihazı ayarla (geliştirme için)
-      if (__DEV__) {
-        await setTestDeviceIDAsync('EMULATOR');
+      // Eğer mobileAds yoksa (Expo Go'da), sadece mock servisi kullan
+      if (!mobileAds) {
+        console.log('AdService: Mobile ads not available, using mock ads only');
+        return;
       }
       
-      // Reklamları önceden yükle
-      await this.loadAds();
+      // Google Mobile Ads SDK'yı başlat
+      console.log('Initializing Google Mobile Ads SDK...');
+      await mobileAds().initialize();
+      console.log('Google Mobile Ads SDK initialized successfully');
+      
+      // Web ortamında ve simülatörde AdMob çalışmaz
+      if (!isRealDevice) {
+        console.log('AdService: Non-real device, skipping AdMob initialization');
+        return;
+      }
+      
+      // Reklam instance'larını oluştur
+      interstitialAd = InterstitialAd.createForAdRequest(INTERSTITIAL_AD_ID, {
+        requestNonPersonalizedAdsOnly: false,
+        keywords: ['game', 'ludo', 'board game']
+      });
+      
+      rewardedAd = RewardedAd.createForAdRequest(REWARDED_AD_ID, {
+        requestNonPersonalizedAdsOnly: false,
+        keywords: ['game', 'ludo', 'board game']
+      });
+      
       console.log('AdService initialized successfully');
     } catch (error) {
       console.error('Failed to initialize AdService:', error);
@@ -84,9 +134,9 @@ class AdService {
   static async showInterstitialAd() {
     return new Promise(async (resolve, reject) => {
       try {
-        // Web ortamında ve simülatörde AdMob çalışmaz
-        if (!isRealDevice || !AdMobInterstitial) {
-          console.log('AdService: Non-real device or AdMob not available, using mock interstitial ad');
+        // Web ortamında, simülatörde veya mobileAds yoksa mock servis kullan
+        if (!mobileAds || !isRealDevice || !interstitialAd) {
+          console.log('AdService: Using mock interstitial ad (mobileAds not available or not real device)');
           
           // Geliştirme ortamında mock reklam göster
           if (__DEV__) {
@@ -97,14 +147,30 @@ class AdService {
           return;
         }
         
-        // Reklamı yükle
-        await AdMobInterstitial.setAdUnitID(INTERSTITIAL_AD_ID);
-        await AdMobInterstitial.requestAdAsync({ servePersonalizedAds: true });
-        
         // Reklam yüklendiğinde göster
-        await AdMobInterstitial.showAdAsync();
+        const unsubscribeLoaded = interstitialAd.addAdEventListener(AdEventType.LOADED, () => {
+          console.log('Interstitial ad loaded');
+        });
+        
+        const unsubscribeClosed = interstitialAd.addAdEventListener(AdEventType.CLOSED, () => {
+          console.log('Interstitial ad closed');
+          unsubscribeLoaded();
+          unsubscribeClosed();
+          resolve();
+        });
+        
+        const unsubscribeError = interstitialAd.addAdEventListener(AdEventType.ERROR, (error) => {
+          console.error('Interstitial ad error:', error);
+          unsubscribeLoaded();
+          unsubscribeClosed();
+          unsubscribeError();
+          resolve(); // Hata olsa da devam et
+        });
+        
+        // Reklamı yükle ve göster
+        await interstitialAd.load();
+        await interstitialAd.show();
         console.log('Interstitial ad shown successfully');
-        resolve();
       } catch (error) {
         console.error('Failed to show interstitial ad:', error);
         // Reklam gösterilemezse de devam et
@@ -116,11 +182,10 @@ class AdService {
   static async showRewardedAd() {
     return new Promise(async (resolve, reject) => {
       try {
-        // Web ortamında ve simülatörde AdMob çalışmaz
-        if (!isRealDevice || !AdMobRewarded) {
-          console.log('AdService: Non-real device or AdMob not available, using mock rewarded ad');
+        // Test modunda ise mock servis kullan
+        if (isTestMode) {
+          console.log('AdService: Test modu AÇIK - Mock reklam gösteriliyor');
           
-          // Geliştirme ortamında mock reklam göster
           if (__DEV__) {
             const result = await MockAdService.showMockRewardedAd();
             resolve(result);
@@ -130,41 +195,45 @@ class AdService {
           return;
         }
         
-        // Reklam izleme olaylarını dinle
+        // Gerçek cihazda ama mobileAds yoksa hata ver
+        if (!mobileAds || !rewardedAd) {
+          console.log('AdService: Gerçek cihazda mobileAds yok!');
+          resolve({ userDidWatchAd: false });
+          return;
+        }
+        
         let userDidWatchAd = false;
         
         // Reklam ödülü verildiğinde
-        AdMobRewarded.addEventListener('rewardedVideoDidRewardUser', (reward) => {
+        const unsubscribeEarned = rewardedAd.addAdEventListener(RewardedAdEventType.EARNED_REWARD, (reward) => {
           console.log('User was rewarded with:', reward);
           userDidWatchAd = true;
         });
         
         // Reklam tamamlandığında
-        AdMobRewarded.addEventListener('rewardedVideoDidClose', () => {
+        const unsubscribeClosed = rewardedAd.addAdEventListener(AdEventType.CLOSED, () => {
           console.log('Rewarded ad closed, user watched:', userDidWatchAd);
-          // Event listener'ları temizle
-          AdMobRewarded.removeAllListeners();
+          unsubscribeEarned();
+          unsubscribeClosed();
           resolve({ userDidWatchAd });
         });
         
         // Reklam yüklenemediğinde
-        AdMobRewarded.addEventListener('rewardedVideoDidFailToLoad', (error) => {
-          console.log('Rewarded ad failed to load:', error);
-          AdMobRewarded.removeAllListeners();
+        const unsubscribeError = rewardedAd.addAdEventListener(AdEventType.ERROR, (error) => {
+          console.error('Rewarded ad error:', error);
+          unsubscribeEarned();
+          unsubscribeClosed();
+          unsubscribeError();
           resolve({ userDidWatchAd: false });
         });
         
         // Reklamı yükle ve göster
-        await AdMobRewarded.setAdUnitID(REWARDED_AD_ID);
-        await AdMobRewarded.requestAdAsync({ servePersonalizedAds: true });
-        await AdMobRewarded.showAdAsync();
+        await rewardedAd.load();
+        await rewardedAd.show();
         
       } catch (error) {
         console.error('Failed to show rewarded ad:', error);
         // Hata durumunda event listener'ları temizle
-        if (AdMobRewarded) {
-          AdMobRewarded.removeAllListeners();
-        }
         resolve({ userDidWatchAd: false });
       }
     });

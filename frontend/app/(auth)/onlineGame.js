@@ -168,12 +168,6 @@ const OnlineGameScreen = () => {
   const safeNavigateToHome = useCallback(() => {
     console.log('[safeNavigateToHome] Ana sayfaya yönlendirme deneniyor...');
     
-    // Component hala mounted mı kontrol et
-    if (!isMountedRef.current) {
-      console.log('[safeNavigateToHome] Component unmounted, navigation iptal edildi');
-      return;
-    }
-    
     // Navigation'ı dene - önce navigation.navigate, sonra router.replace
     try {
       // Önce navigation.navigate ile dene (daha güvenli)
@@ -199,12 +193,14 @@ const OnlineGameScreen = () => {
     } catch (error) {
       console.error('[safeNavigateToHome] Navigation hatası:', error);
       
-      // Navigation hatası varsa kullanıcıyı uyar
-      dispatch(showAlert({
-        type: 'error',
-        title: 'Gezinme Hatası',
-        message: 'Ana sayfaya dönülemedi. Lütfen manuel olarak ana sayfaya dönün.'
-      }));
+      // Navigation hatası varsa kullanıcıyı uyar (sadece component mounted ise)
+      if (isMountedRef.current) {
+        dispatch(showAlert({
+          type: 'error',
+          title: 'Gezinme Hatası',
+          message: 'Ana sayfaya dönülemedi. Lütfen manuel olarak ana sayfaya dönün.'
+        }));
+      }
       
       // Ekstra güvenlik: Hata durumunda navigation state'ini temizle
       try {
@@ -1048,14 +1044,16 @@ useEffect(() => {
                 }
                 
                 // Her durumda navigation'a devam et - odadan ayrılmak başarısız olsa bile
-                console.log('[Leave Game] Proceeding to home screen...');
-                setTimeout(() => {
-                  if (isMountedRef.current) {
-                    safeNavigateToHome();
-                  } else {
-                    console.warn('[Leave Game] Component unmounted, skipping navigation');
-                  }
-                }, 100);
+        console.log('[Leave Game] Proceeding to home screen...');
+        
+        // Kullanıcı ayrılmak istedi - roomClosed state'ini temizle
+        setIsRoomClosed(false);
+        setRoomClosedReason('');
+        
+        setTimeout(() => {
+          // Component unmount olsa bile navigation'ı dene - kullanıcı ayrılmak istedi
+          safeNavigateToHome();
+        }, 100);
                 
               } catch (error) {
                 console.error('[Leave Game] Error during leave process:', error);
@@ -1282,31 +1280,31 @@ useEffect(() => {
                 </TouchableOpacity>
               </View>
             </View>
-
-            {/* Chat Component */}
-            {!isAIMode && (
-              <ChatComponent
-                isVisible={isChatVisible}
-                onToggle={() => {
-                  console.log('Chat toggle pressed, current state:', isChatVisible);
-                  setIsChatVisible(!isChatVisible);
-                }}
-                messages={chatMessages || []}
-                onSendMessage={sendMessage}
-                currentUser={{ id: actualUser?.id, nickname: actualUser?.nickname }}
-                warningMessage={chatWarning}
-                isBlocked={chatBlocked}
-                blockDuration={chatBlockDuration}
-                onProfanityWarning={handleProfanityWarning}
-                onMessageBlocked={handleMessageBlocked}
-              />
-            )}
           </View>
         )}
           </>
         )}
             
         </SafeAreaView>
+        
+        {/* Chat Component - SafeAreaView dışına taşındı */}
+        {!isAIMode && (
+          <ChatComponent
+            isVisible={isChatVisible}
+            onToggle={() => {
+              console.log('Chat toggle pressed, current state:', isChatVisible);
+              setIsChatVisible(!isChatVisible);
+            }}
+            messages={chatMessages || []}
+            onSendMessage={sendMessage}
+            currentUser={{ id: actualUser?.id, nickname: actualUser?.nickname }}
+            warningMessage={chatWarning}
+            isBlocked={chatBlocked}
+            blockDuration={chatBlockDuration}
+            onProfanityWarning={handleProfanityWarning}
+            onMessageBlocked={handleMessageBlocked}
+          />
+        )}
     </ImageBackground>
   );
 };
@@ -1322,6 +1320,7 @@ const styles = StyleSheet.create({
     paddingTop: Platform.OS === 'android' ? getStatusBarHeight() + 10 : 10, // Android'de status bar yüksekliği kadar padding
     justifyContent: getContainerJustifyContent(), // Ekran boyutuna göre ortala veya üstten başla
     alignItems: 'center',
+    borderRadius: 15, // Container için yumuşak köşeler
   },
   header: {
     flexDirection: 'row',

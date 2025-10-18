@@ -1,53 +1,33 @@
 const { getDefaultConfig } = require('expo/metro-config');
+const path = require('path');
 
 module.exports = (async () => {
   const config = await getDefaultConfig(__dirname);
   
-  // Optimize for faster development builds
+  // Reset to defaults to avoid conflicts
   config.transformer = {
     ...config.transformer,
-    minifierConfig: {
-      mangle: false,
-      output: {
-        ascii_only: true,
-        quote_keys: true,
-        space_colon: false,
-      },
-      sourceMap: {
-        includeSources: false,
-      },
-      toplevel: false,
-      warnings: false,
-    },
   };
 
-  // Optimize resolver for faster resolution
   config.resolver = {
     ...config.resolver,
-    // Cache resolution results
-    useWatchman: true,
-    // Blacklist heavy modules that might slow down bundling
-    blacklistRE: /.*\/(test|__tests__|__mocks__)\/.*/,
+    // Fix for LoadingView import error in React Native 0.76+
+    resolverMainFields: ['react-native', 'browser', 'main'],
+    // Alias the missing LoadingView module to our custom implementation
+    extraNodeModules: {
+      'react-native/Libraries/Utilities/LoadingView': path.resolve(__dirname, 'LoadingView.js'),
+      ...config.resolver.extraNodeModules,
+    },
+    // Handle platform-specific module resolution
+    platforms: ['ios', 'android', 'web'],
+    // Block problematic web dependencies for native builds
+    blacklistRE: /node_modules\/.*\/.*\.web\.js$/,
+    // Add nodeModulesPaths to help with module resolution
+    nodeModulesPaths: [
+      path.resolve(__dirname, 'node_modules'),
+      ...(config.resolver.nodeModulesPaths || []),
+    ],
   };
 
-  // Handle web-specific module resolution for lottie-react-native
-  if (process.env.NODE_ENV === 'web') {
-    config.resolver.resolveRequest = (context, moduleName, platform) => {
-      // Handle lottie-react-native specifically for web
-      if (moduleName === 'lottie-react-native' || moduleName.includes('lottie-react-native')) {
-        return {
-          filePath: require.resolve('./components/shared/LottieWrapper.js'),
-          type: 'sourceFile',
-        };
-      }
-      
-      // Default resolution for other modules
-      return context.resolveRequest(context, moduleName, platform);
-    };
-  }
-
-  // Reduce memory usage and improve performance
-  config.maxWorkers = 2; // Limit workers for better memory management
-  
   return config;
 })();

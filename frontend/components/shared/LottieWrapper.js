@@ -26,6 +26,7 @@ if (Platform.OS === 'web') {
 } else {
   // For native platforms, use the real Lottie
   try {
+    // Use dynamic import to avoid bundling issues
     const LottieView = require('lottie-react-native');
     LottieComponent = LottieView.default || LottieView;
   } catch (error) {

@@ -52,39 +52,52 @@ export const PATH_MAP = {
 };
 
 // --- Development URL Auto-Detection and Overrides ---
-// Rule: Fiziki cihazlarla test ediliyor. Bu nedenle, cihazdan erişilebilir IP’yi otomatik algıla.
+// Rule: Fiziki cihazlarla test ediliyor. Bu nedenle, cihazdan erişilebilir IP'yi otomatik algıla.
 // Priority order:
 // 1) EXPO_PUBLIC_API_URL / EXPO_PUBLIC_SOCKET_URL (explicit overrides)
 // 2) Auto-detected host from scriptURL (Metro dev server) or hostname
-// 3) Fallback to 192.168.1.135 (last resort)
+// 3) Fallback to 192.168.1.134 (updated IP)
 
 import { NativeModules, Platform } from 'react-native';
 
-function getHost() {
-  try {
-    // scriptURL örn: "http://192.168.1.50:19000/index.bundle?platform=ios&dev=true&minify=false"
-    const scriptURL = NativeModules?.SourceCode?.scriptURL;
-    if (scriptURL) {
-      const url = new URL(scriptURL);
-      if (url.hostname && url.hostname !== 'localhost' && url.hostname !== '127.0.0.1') {
-        return url.hostname;
+// Environment-based configuration
+const getEnvironmentConfig = () => {
+  // Production URLs - gerçek production URL'leri
+  const PRODUCTION_API_URL = 'https://ludoturcoapi.istekbilisim.com';
+  const PRODUCTION_SOCKET_URL = 'https://ludoturcoapi.istekbilisim.com';
+  
+  // Development için local IP detection (sadece development modunda)
+  const getLocalHost = () => {
+    try {
+      const scriptURL = NativeModules?.SourceCode?.scriptURL;
+      if (scriptURL) {
+        const url = new URL(scriptURL);
+        if (url.hostname && url.hostname !== 'localhost' && url.hostname !== '127.0.0.1') {
+          return url.hostname;
+        }
       }
+      // Development için localhost fallback
+      return 'localhost';
+    } catch (e) {
+      return 'localhost';
     }
-    // iOS fiziki cihazlarda, bundle’dan hostname alınamazsa network IP’yi deneyebiliriz
-    // Son çare olarak mevcut fallback
-    return '192.168.1.135';
-  } catch (e) {
-    return '192.168.1.135';
-  }
-}
+  };
 
-const detectedHost = getHost();
-const DEFAULT_PORT = 3001;
+  const DEFAULT_PORT = 3001;
+  const localHost = getLocalHost();
+  
+  // Environment variable'lar öncelikli, sonra environment'a göre default değerler
+  return {
+    apiUrl: process.env.EXPO_PUBLIC_API_URL || 
+            (__DEV__ ? `http://${localHost}:${DEFAULT_PORT}` : PRODUCTION_API_URL),
+    socketUrl: process.env.EXPO_PUBLIC_SOCKET_URL || 
+               (__DEV__ ? `http://${localHost}:${DEFAULT_PORT}` : PRODUCTION_SOCKET_URL)
+  };
+};
 
-export const SOCKET_URL =
-  process.env.EXPO_PUBLIC_SOCKET_URL || `http://${detectedHost}:${DEFAULT_PORT}`;
+const config = getEnvironmentConfig();
 
-export const API_BASE_URL =
-  process.env.EXPO_PUBLIC_API_URL || `http://${detectedHost}:${DEFAULT_PORT}`;
+export const API_BASE_URL = config.apiUrl;
+export const SOCKET_URL = config.socketUrl;
 
 export const getApiUrl = (path = '') => `${API_BASE_URL}${path ? path.startsWith('/') ? path : `/${path}` : ''}`;

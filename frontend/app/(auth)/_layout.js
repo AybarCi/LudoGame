@@ -47,6 +47,7 @@ export default function AuthLayout() {
       <Stack.Screen name="earndiamonds" options={{ headerShown: false }} />
       <Stack.Screen name="energy" options={{ headerShown: false }} />
       <Stack.Screen name="diamonds" options={{ headerShown: false }} />
+      <Stack.Screen name="profile" options={{ headerShown: false }} />
     </Stack>
   );
 }

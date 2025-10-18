@@ -9,7 +9,8 @@ import {
   Platform,
   ScrollView,
   ImageBackground,
-  Image
+  Image,
+  Linking
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -59,6 +60,14 @@ export default function LoginScreen() {
   const scaleAnim = useRef(new Animated.Value(0.9)).current;
 
   useEffect(() => {
+    // Component mount olduğunda state'leri sıfırla
+    setPhoneNumberState('');
+    setNickname('');
+    setVerificationCode('');
+    setShowNicknameScreen(false);
+    setLoading(false);
+    setShowVerificationModalLocal(false);
+    
     // Start animations immediately
     setTimeout(() => {
       Animated.parallel([
@@ -80,6 +89,16 @@ export default function LoginScreen() {
         }),
       ]).start();
     }, 300);
+
+    // Cleanup function - component unmount olduğunda
+    return () => {
+      setPhoneNumberState('');
+      setNickname('');
+      setVerificationCode('');
+      setShowNicknameScreen(false);
+      setLoading(false);
+      setShowVerificationModalLocal(false);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -197,9 +216,10 @@ export default function LoginScreen() {
       const verifyResult = await dispatch(verifyCode({ phoneNumber: cleanPhoneNumber, code: code }));
       
       if (verifyCode.rejected.match(verifyResult)) {
-        dispatch(showAlert({ message: verifyResult.payload || 'Doğrulama kodu hatalı', type: 'error' }));
+        // Hata mesajını verification modal'ı içinde göster, ayrıca alert gösterme
+        // Bu sayede sadece bir modal açık kalır
         setLoading(false);
-        return;
+        throw new Error(verifyResult.payload || 'Doğrulama kodu hatalı'); // Hata fırlat ki modal catch yapsın
       }
       
       // Code verified successfully, check if user exists
@@ -223,6 +243,7 @@ export default function LoginScreen() {
             router.push('/(auth)/home');
           } else {
             dispatch(showAlert({ message: result.payload || 'Giriş başarısız', type: 'error' }));
+            setLoading(false); // Butonun tekrar aktif olması için
           }
         }
       } else {
@@ -232,7 +253,8 @@ export default function LoginScreen() {
       }
     } catch (error) {
       console.error('Verification error:', error);
-      dispatch(showAlert({ message: 'Doğrulama sırasında hata oluştu', type: 'error' }));
+      setLoading(false); // Butonun tekrar aktif olması için
+      throw error; // Hatayı yukarı fırlat ki modal catch yapsın
     } finally {
       setLoading(false);
     }
@@ -277,6 +299,18 @@ export default function LoginScreen() {
       setLoading(false);
     }
   }
+
+  const handlePrivacyPress = () => {
+    Linking.openURL('https://ludoturco.com/privacy').catch(() => {
+      dispatch(showAlert({ message: 'Gizlilik politikası sayfası açılamadı', type: 'error' }));
+    });
+  };
+
+  const handleTermsPress = () => {
+    Linking.openURL('https://ludoturco.com/terms').catch(() => {
+      dispatch(showAlert({ message: 'Kullanım şartları sayfası açılamadı', type: 'error' }));
+    });
+  };
 
   return (
     <View style={styles.container}>
@@ -333,6 +367,13 @@ export default function LoginScreen() {
                     onChangeText={setNickname}
                     maxLength={20}
                     autoFocus
+                    // Placeholder styling için ek özellikler
+                    selectionColor="#00D9CC"
+                    cursorColor="#00D9CC"
+                    // iOS için
+                    tintColor="#00D9CC"
+                    // Android için
+                    underlineColorAndroid="transparent"
                   />
                 </View>
               ) : (
@@ -342,14 +383,21 @@ export default function LoginScreen() {
                       <Text style={styles.countryCodeText}>+90</Text>
                     </View>
                     <TextInput
-                      style={styles.phoneInput}
-                      placeholder="Telefon Numarası"
-                      placeholderTextColor="rgba(255, 255, 255, 0.6)"
-                      value={phoneNumber}
-                      onChangeText={handlePhoneNumberChange}
-                      keyboardType="phone-pad"
-                      maxLength={14}
-                    />
+                    style={styles.phoneInput}
+                    placeholder="Telefon Numarası"
+                    placeholderTextColor="rgba(255, 255, 255, 0.6)"
+                    value={phoneNumber}
+                    onChangeText={handlePhoneNumberChange}
+                    keyboardType="phone-pad"
+                    maxLength={14}
+                    // Placeholder styling için ek özellikler
+                    selectionColor="#00D9CC"
+                    cursorColor="#00D9CC"
+                    // iOS için
+                    tintColor="#00D9CC"
+                    // Android için
+                    underlineColorAndroid="transparent"
+                  />
                   </View>
                 </View>
               )}
@@ -384,6 +432,17 @@ export default function LoginScreen() {
                 </>
               )}
             </View>
+
+            {/* Gizlilik ve Kullanım Şartları Linkleri */}
+            <View style={styles.legalContainer}>
+              <TouchableOpacity style={styles.legalLink} onPress={handlePrivacyPress}>
+                <Text style={styles.legalLinkText}>Gizlilik Politikası</Text>
+              </TouchableOpacity>
+              <Text style={styles.legalSeparator}>•</Text>
+              <TouchableOpacity style={styles.legalLink} onPress={handleTermsPress}>
+                <Text style={styles.legalLinkText}>Kullanım Şartları</Text>
+              </TouchableOpacity>
+            </View>
           </Animated.View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -393,6 +452,10 @@ export default function LoginScreen() {
         onClose={() => {
           setShowVerificationModalLocal(false);
           setVerificationCode(''); // Clear verification code when modal closes
+          setLoading(false); // Modal kapanırken loading state'ini sıfırla
+          setTimeout(() => {
+            setLoading(false); // Ekstra güvenlik için tekrar sıfırla
+          }, 100);
         }}
         onVerify={handleVerifyCode}
         phoneNumber={phoneNumber}

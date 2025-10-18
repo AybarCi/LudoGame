@@ -40,3 +40,9 @@ app-example
 
 # Environment variables
 .env
+
+# iOS (for CNG/Prebuild compatibility)
+/ios
+
+# Android (for CNG/Prebuild compatibility)
+/android

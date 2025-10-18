@@ -434,24 +434,19 @@ const HomeScreen = () => {
         </View>
       </Animated.View>
 
-      {/* Logout Icon - Top Left */}
+      {/* Profile Icon - Top Left */}
       <TouchableOpacity 
-        style={styles.logoutIcon}
-        onPress={handleLogoutPress}
-        disabled={logoutLoading}
+        style={styles.profileIcon}
+        onPress={() => router.push('/(auth)/profile')}
         activeOpacity={0.8}
       >
         <LinearGradient
-          colors={['#E61A8D', '#C71585']}
-          style={styles.logoutIconGradient}
+          colors={['#00D9CC', '#00B3A6']}
+          style={styles.profileIconGradient}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
         >
-          {logoutLoading ? (
-             <ActivityIndicator size={24} color="white" />
-           ) : (
-             <Ionicons name="log-out" size={24} color="white" />
-           )}
+          <Ionicons name="person" size={24} color="white" />
         </LinearGradient>
       </TouchableOpacity>
 
@@ -487,9 +482,7 @@ const HomeScreen = () => {
             handlePlayOnline={handlePlayOnline}
             handleFreeMode={handleFreeMode}
             handleShop={handleShop}
-            signOut={handleLogoutPress}
             loading={loading}
-            logoutLoading={logoutLoading}
             showShopButton={false}
           />
         </Animated.View>
@@ -610,7 +603,7 @@ const styles = StyleSheet.create({
     textShadowOffset: { width: 1, height: 1 },
     textShadowRadius: 10,
   },
-  logoutIcon: {
+  profileIcon: {
     position: 'absolute',
     top: 80,
     left: 20,
@@ -625,7 +618,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 4.65,
   },
-  logoutIconGradient: {
+  profileIconGradient: {
     width: 50,
     height: 50,
     borderRadius: 25,

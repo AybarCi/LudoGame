@@ -13,7 +13,8 @@
       "env": {
         "EXPO_PUBLIC_API_URL": "http://localhost:3001",
         "EXPO_PUBLIC_SOCKET_URL": "http://localhost:3001"
-      }
+      },
+      "node": "20.19.4"
     },
     "preview": {
       "distribution": "internal",
@@ -23,22 +24,32 @@
       "env": {
         "EXPO_PUBLIC_API_URL": "https://ludoturcoapi.istekbilisim.com",
         "EXPO_PUBLIC_SOCKET_URL": "https://ludoturcoapi.istekbilisim.com"
-      }
+      },
+      "node": "20.19.4"
     },
     "production": {
       "autoIncrement": true,
       "ios": {
-        "resourceClass": "m-medium"
+        "resourceClass": "m-medium",
+        "buildConfiguration": "Release",
+        "image": "latest"
+      },
+      "android": {
+        "buildType": "app-bundle",
+        "image": "latest"
       },
       "env": {
         "EXPO_PUBLIC_API_URL": "https://ludoturcoapi.istekbilisim.com",
-        "EXPO_PUBLIC_SOCKET_URL": "https://ludoturcoapi.istekbilisim.com"
+        "EXPO_PUBLIC_SOCKET_URL": "https://ludoturcoapi.istekbilisim.com",
+        "EXPO_PUBLIC_ADMOB_BANNER_ID": "ca-app-pub-1743455537598911/1234567890",
+        "EXPO_PUBLIC_ADMOB_INTERSTITIAL_ID": "ca-app-pub-1743455537598911/1234567890",
+        "EXPO_PUBLIC_ADMOB_REWARDED_ID": "ca-app-pub-1743455537598911/1234567890"
       },
       "cache": {
         "key": "npm-override",
         "customPaths": ["node_modules"]
       },
-      "node": "18.18.0"
+      "node": "20.19.4"
     }
   },
   "submit": {

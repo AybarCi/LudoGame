@@ -16,16 +16,9 @@ import { LinearGradient } from 'expo-linear-gradient';
 
 const { width, height } = Dimensions.get('window');
 
-const VerificationModal = ({ 
-  visible, 
-  onClose, 
-  onVerify, 
-  phoneNumber, 
-  timer, 
-  onResend,
-  loading
-}) => {
+const VerificationModal = ({ visible, onClose, onVerify, phoneNumber, timer, onResend, loading }) => {
   const [code, setCode] = useState('');
+  const [errorMessage, setErrorMessage] = useState('');
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(50)).current;
 
@@ -57,7 +50,10 @@ const VerificationModal = ({
           duration: 200,
           useNativeDriver: true,
         }),
-      ]).start();
+      ]).start(() => {
+        // Animasyon tamamlandıktan sonra state'leri temizle
+        setCode('');
+      });
     }
   }, [visible]);
 
@@ -65,17 +61,39 @@ const VerificationModal = ({
   useEffect(() => {
     if (visible) {
       setCode('');
+      setErrorMessage(''); // Clear error message when modal opens
     }
   }, [visible]);
 
-  const handleVerify = () => {
-    if (code.length === 6) {
-      onVerify(code);
+  // Loading state değiştiğinde kontrol et
+  useEffect(() => {
+    // Loading false olduğunda buton tekrar aktif olacak
+    // Bu useEffect sayesinde buton durumu güncellenecek
+  }, [loading]);
+
+  const handleVerify = async () => {
+    if (code.length === 6 && !loading) {
+      try {
+        setErrorMessage(''); // Hata mesajını temizle
+        await onVerify(code);
+        // onVerify başarılı olursa modal kapanır (parent component tarafından yönetilir)
+      } catch (error) {
+        // Hata durumunda kullanıcıya doğrudan feedback ver
+        // Hata mesajını console'dan al veya varsayılan mesaj göster
+        const errorMsg = error.message || 'Doğrulama kodu hatalı veya süresi dolmuş. Lütfen tekrar deneyin.';
+        setErrorMessage(errorMsg);
+        // KODU TEMİZLEME! Kullanıcı hatalı kodu görsün ve düzeltebilsin
+        console.error('Verification error:', error);
+      }
+    } else if (code.length !== 6) {
+      // Kullanıcı 6 haneden farklı kod girmişse uyarı ver
+      setErrorMessage('Lütfen 6 haneli doğrulama kodunu girin.');
     }
   };
 
   const handleResend = () => {
     setCode(''); // Clear the code input
+    setErrorMessage(''); // Clear error message
     onResend();
   };
 
@@ -96,11 +114,8 @@ const VerificationModal = ({
         style={styles.modalContainer}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
-        <TouchableOpacity 
-          style={styles.backdrop}
-          activeOpacity={1}
-          onPress={onClose}
-        />
+        {/* Arka plan tıklamasını engelle - sadece close butonu ile kapanabilir */}
+        <View style={styles.backdrop} />
         
         <Animated.View 
           style={[
@@ -130,11 +145,17 @@ const VerificationModal = ({
 
           <View style={styles.inputContainer}>
             <TextInput
-              style={styles.codeInput}
+              style={[
+                styles.codeInput,
+                errorMessage ? styles.codeInputError : null
+              ]}
               placeholder="------"
               placeholderTextColor="rgba(255, 255, 255, 0.3)"
               value={code}
-              onChangeText={setCode}
+              onChangeText={(text) => {
+                setCode(text);
+                if (errorMessage) setErrorMessage(''); // Hata mesajını temizle
+              }}
               keyboardType="number-pad"
               maxLength={6}
               autoFocus
@@ -142,6 +163,9 @@ const VerificationModal = ({
               returnKeyType="done"
               onSubmitEditing={handleVerify}
             />
+            {errorMessage ? (
+              <Text style={styles.errorText}>{errorMessage}</Text>
+            ) : null}
           </View>
 
           <View style={styles.actions}>
@@ -163,13 +187,15 @@ const VerificationModal = ({
             <TouchableOpacity 
               style={[
                 styles.verifyButton,
-                (code.length !== 6 || loading) && styles.verifyButtonDisabled
+                loading && styles.verifyButtonDisabled
               ]}
               onPress={handleVerify}
-              disabled={code.length !== 6 || loading}
+              disabled={loading}
             >
               {loading ? (
                 <Text style={styles.verifyButtonText}>Doğrulanıyor...</Text>
+              ) : errorMessage ? (
+                <Text style={styles.verifyButtonText}>Tekrar Dene</Text>
               ) : (
                 <Text style={styles.verifyButtonText}>Doğrula</Text>
               )}
@@ -260,6 +286,18 @@ const styles = {
     color: '#ffffff',
     fontFamily: 'Poppins_600SemiBold',
     letterSpacing: 8,
+  },
+  codeInputError: {
+    borderColor: '#E61A8D',
+    backgroundColor: 'rgba(230, 26, 141, 0.1)',
+  },
+  errorText: {
+    color: '#E61A8D',
+    fontSize: 14,
+    fontFamily: 'Poppins_400Regular',
+    textAlign: 'center',
+    marginTop: 8,
+    lineHeight: 20,
   },
   actions: {
     alignItems: 'center',

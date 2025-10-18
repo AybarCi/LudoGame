@@ -2,10 +2,12 @@ import { Platform } from 'react-native';
 import { DiamondService } from './DiamondService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// Safely import expo-in-app-purchases
+// Safely import expo-in-app-purchases - DISABLED for SDK 53 compatibility
 let InAppPurchases = null;
+// InAppPurchases = require('expo-in-app-purchases'); // CRASH RISK - DISABLED
 try {
-  InAppPurchases = require('expo-in-app-purchases');
+  // InAppPurchases = require('expo-in-app-purchases'); // CRASH RISK - DISABLED
+  console.warn('In-app purchases disabled for SDK 53 compatibility');
 } catch (error) {
   console.warn('expo-in-app-purchases not available:', error.message);
 }

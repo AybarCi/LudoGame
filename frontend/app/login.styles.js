@@ -135,6 +135,10 @@ export const loginStyles = StyleSheet.create({
     fontFamily: 'Poppins_400Regular',
     paddingHorizontal: 15,
     paddingVertical: 15,
+    // Placeholder styling için ek özellikler
+    textAlignVertical: 'center', // Android için
+    includeFontPadding: false, // Android için
+    writingDirection: 'ltr', // Metin yönü
   },
   textInput: {
     flex: 1,
@@ -147,6 +151,10 @@ export const loginStyles = StyleSheet.create({
     borderRadius: 15,
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.2)',
+    // Placeholder styling için ek özellikler
+    textAlignVertical: 'center', // Android için
+    includeFontPadding: false, // Android için
+    writingDirection: 'ltr', // Metin yönü
   },
   buttonsContainer: {
     marginTop: 15,
@@ -388,5 +396,31 @@ export const loginStyles = StyleSheet.create({
     color: 'rgba(255, 255, 255, 0.6)',
     fontSize: 20,
     fontWeight: 'bold',
+  },
+  // Legal links (Privacy & Terms)
+  legalContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 25,
+    paddingTop: 15,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  legalLink: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  legalLinkText: {
+    color: '#00D9CC',
+    fontSize: 13,
+    fontFamily: 'Poppins_500Medium',
+    textDecorationLine: 'underline',
+    opacity: 0.9,
+  },
+  legalSeparator: {
+    color: 'rgba(255, 255, 255, 0.5)',
+    fontSize: 14,
+    fontFamily: 'Poppins_500Medium',
   },
 });

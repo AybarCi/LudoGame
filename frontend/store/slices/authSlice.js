@@ -69,6 +69,48 @@ export const signIn = createAsyncThunk(
   }
 );
 
+// Hesap silme action'ı
+export const deleteAccount = createAsyncThunk(
+  'auth/deleteAccount',
+  async (_, { getState, rejectWithValue }) => {
+    try {
+      const { auth } = getState();
+      const { token } = auth;
+
+      if (!token) {
+        throw new Error('No authentication token available');
+      }
+
+      const response = await fetch(`${API_BASE_URL}/api/user/account`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      // Check if response is JSON
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        throw new Error('Network request failed - server returned non-JSON response');
+      }
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || 'Account deletion failed');
+      }
+
+      // Başarılı silme işlemi sonrası local storage'ı temizle
+      await AsyncStorage.clear();
+
+      return data;
+    } catch (error) {
+      return rejectWithValue(error.message);
+    }
+  }
+);
+
 export const signUp = createAsyncThunk(
   'auth/signUp',
   async ({ email, password, nickname }, { rejectWithValue }) => {
@@ -672,6 +714,26 @@ const authSlice = createSlice({
         state.verificationStep = false;
         state.phoneNumber = null;
         state.error = null;
+      })
+      
+      // Delete Account
+      .addCase(deleteAccount.pending, (state) => {
+        state.isLoading = true;
+        state.error = null;
+      })
+      .addCase(deleteAccount.fulfilled, (state) => {
+        state.isLoading = false;
+        state.user = null;
+        state.token = null;
+        state.session = null;
+        state.isAuthenticated = false;
+        state.verificationStep = false;
+        state.phoneNumber = null;
+        state.error = null;
+      })
+      .addCase(deleteAccount.rejected, (state, action) => {
+        state.isLoading = false;
+        state.error = action.payload;
       })
       
       // Refresh Access Token
