@@ -7,7 +7,7 @@ export default {
     orientation: "portrait",
     icon: "./assets/images/icon.png",
     userInterfaceStyle: "automatic",
-    newArchEnabled: true, // ENABLED: New architecture with latest SDK
+    newArchEnabled: false, // DISABLED: Fix folly/coro error for iOS build
     ios: {
       supportsTablet: false, // Disable tablet support for faster builds
       bundleIdentifier: "com.aybarc.ludoturco",
@@ -54,7 +54,9 @@ export default {
         "expo-build-properties",
         {
           "ios": {
-            "useFrameworks": "static"
+            "useFrameworks": "static",
+            "deploymentTarget": "15.0",
+            "flipper": false
           }
         }
       ]

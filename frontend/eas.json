@@ -32,7 +32,10 @@
       "ios": {
         "resourceClass": "m-medium",
         "buildConfiguration": "Release",
-        "image": "latest"
+        "image": "latest",
+        "env": {
+          "RCT_NEW_ARCH_ENABLED": "0"
+        }
       },
       "android": {
         "buildType": "app-bundle",
