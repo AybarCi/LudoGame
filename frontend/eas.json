@@ -43,12 +43,10 @@
         "EXPO_PUBLIC_SOCKET_URL": "https://ludoturcoapi.istekbilisim.com",
         "EXPO_PUBLIC_ADMOB_BANNER_ID": "ca-app-pub-1743455537598911/1234567890",
         "EXPO_PUBLIC_ADMOB_INTERSTITIAL_ID": "ca-app-pub-1743455537598911/1234567890",
-        "EXPO_PUBLIC_ADMOB_REWARDED_ID": "ca-app-pub-1743455537598911/1234567890"
+        "EXPO_PUBLIC_ADMOB_REWARDED_ID": "ca-app-pub-1743455537598911/1234567890",
+        "NPM_CONFIG_FROZEN_LOCKFILE": "false"
       },
-      "node": "20.19.4",
-      "hooks": {
-        "pre-install": "npm install"
-      }
+      "node": "20.19.4"
     }
   },
   "submit": {
