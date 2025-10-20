@@ -50,7 +50,7 @@
       },
       "cache": {
         "key": "npm-install",
-        "customPaths": ["node_modules"]
+        "paths": ["node_modules"]
       },
       "node": "20.19.4"
     }
