@@ -11,6 +11,7 @@ export default {
     ios: {
       supportsTablet: false, // Disable tablet support for faster builds
       bundleIdentifier: "com.aybarc.ludoturco",
+      icon: "./assets/images/icon.png", // iOS icon eklendi
       infoPlist: {
         ITSAppUsesNonExemptEncryption: false,
         NSCameraUsageDescription: 'Uygulama kamera erişimi gerekiyor',
@@ -46,7 +47,7 @@ export default {
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 200,
           "resizeMode": "contain",
-          "backgroundColor": "#0a0a0a"
+          "backgroundColor": "#6E00B3"
         }
       ],
       "expo-font",

@@ -1,6 +1,28 @@
 # Production Dockerfile for Ludo Backend
 FROM node:18-alpine
 
+# Build arguments for environment variables
+ARG NODE_ENV=production
+ARG VATAN_SMS_API_ID
+ARG VATAN_SMS_API_KEY
+ARG VATAN_SMS_SENDER
+ARG JWT_SECRET
+ARG DB_SERVER
+ARG DB_USER
+ARG DB_PASSWORD
+ARG DB_DATABASE
+
+# Set environment variables
+ENV NODE_ENV=${NODE_ENV}
+ENV VATAN_SMS_API_ID=${VATAN_SMS_API_ID}
+ENV VATAN_SMS_API_KEY=${VATAN_SMS_API_KEY}
+ENV VATAN_SMS_SENDER=${VATAN_SMS_SENDER}
+ENV JWT_SECRET=${JWT_SECRET}
+ENV DB_SERVER=${DB_SERVER}
+ENV DB_USER=${DB_USER}
+ENV DB_PASSWORD=${DB_PASSWORD}
+ENV DB_DATABASE=${DB_DATABASE}
+
 # Install system dependencies
 RUN apk add --no-cache \
     python3 \

@@ -58,6 +58,16 @@ jobs:
         cache-from: type=gha
         cache-to: type=gha,mode=max
         platforms: linux/amd64,linux/arm64
+        build-args: |
+          NODE_ENV=production
+          VATAN_SMS_API_ID=${{ secrets.VATAN_SMS_API_ID }}
+          VATAN_SMS_API_KEY=${{ secrets.VATAN_SMS_API_KEY }}
+          VATAN_SMS_SENDER=${{ secrets.VATAN_SMS_SENDER }}
+          JWT_SECRET=${{ secrets.JWT_SECRET }}
+          DB_SERVER=${{ secrets.DB_SERVER }}
+          DB_USER=${{ secrets.DB_USER }}
+          DB_PASSWORD=${{ secrets.DB_PASSWORD }}
+          DB_DATABASE=${{ secrets.DB_DATABASE }}
 
   deploy:
     name: Deploy to Production

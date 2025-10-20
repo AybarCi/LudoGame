@@ -213,7 +213,7 @@ const CustomSplashScreenWrapper = () => (
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#6E00B3',
+    backgroundColor: '#0a0a0a', // Siyah arka plan (expo-splash-screen ile uyumlu)
   },
   errorContainer: {
     flex: 1,
