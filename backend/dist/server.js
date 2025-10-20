@@ -2103,7 +2103,7 @@ app.post('/api/send-sms-code', async (req, res) => {
         // Eski kodları temizle
         await executeQuery(
             'DELETE FROM phone_verifications WHERE phone_number = @phoneNumber',
-            [{ name: 'phoneNumber', type: sql.NVarChar(20), value: cleanPhone }]
+            [{ name: 'phoneNumber', type: sql.NVarChar(255), value: cleanPhone }]
         );
 
         // Yeni kodu kaydet

@@ -13,7 +13,7 @@ async function createTable() {
         BEGIN
             CREATE TABLE phone_verifications (
                 id NVARCHAR(36) PRIMARY KEY DEFAULT NEWID(),
-                phone_number NVARCHAR(20) NOT NULL,
+                phone_number NVARCHAR(255) NOT NULL,
                 verification_code NVARCHAR(6) NOT NULL,
                 expires_at DATETIME2 NOT NULL,
                 is_used BIT DEFAULT 0,
@@ -33,7 +33,7 @@ async function createTable() {
         const alterTableQuery = `
         IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('users') AND name = 'phone_number')
         BEGIN
-            ALTER TABLE users ADD phone_number NVARCHAR(20) NULL;
+            ALTER TABLE users ADD phone_number NVARCHAR(255) NULL;
             CREATE INDEX IX_users_phone_number ON users(phone_number);
         END
         `;
