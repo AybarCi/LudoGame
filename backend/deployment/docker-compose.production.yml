@@ -5,6 +5,10 @@ services:
     build:
       context: ../
       dockerfile: deployment/Dockerfile
+      args:
+        - VATAN_SMS_API_ID=${VATAN_SMS_API_ID}
+        - VATAN_SMS_API_KEY=${VATAN_SMS_API_KEY}
+        - VATAN_SMS_SENDER=${VATAN_SMS_SENDER}
     container_name: ludo-backend-production
     ports:
       - "3001:3001"
@@ -13,6 +17,7 @@ services:
     environment:
       # Override only if needed - stack.env has priority
       - NODE_ENV=production
+      - SMS_TEST_MODE=false
     
     volumes:
       - ./logs:/app/logs

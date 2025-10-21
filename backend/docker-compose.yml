@@ -2,10 +2,10 @@ version: '3.8'
 
 services:
   ludo-backend:
-    image: ludo-backend:local
+    image: ghcr.io/aybarci/ludogame/ludo-backend:latest
     container_name: ludo-backend
     restart: unless-stopped
-    pull_policy: never
+    pull_policy: always
     ports:
       - "3001:3001"
     environment:
@@ -25,6 +25,11 @@ services:
       - VATAN_SMS_API_ID=e922a5b11aae40dd84928621
       - VATAN_SMS_API_KEY=bcc4701b87c2490ea4bf1a80
       - VATAN_SMS_SENDER=Midpot
+      - SMS_TEST_MODE=false
+      - SMS_RATE_LIMIT_ENABLED=true
+      - SMS_DAILY_LIMIT=1000
+      - SMS_HOURLY_LIMIT=100
+      - SMS_COOLDOWN_MS=60000
     volumes:
       - ./logs:/app/logs
     networks:
@@ -41,7 +46,7 @@ services:
     container_name: ludo-redis
     restart: unless-stopped
     ports:
-      - "6380:6379"
+      - "6379:6379"
     volumes:
       - redis-data:/data
     networks:
