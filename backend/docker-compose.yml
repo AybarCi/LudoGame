@@ -5,12 +5,13 @@ services:
     image: ghcr.io/aybarci/ludogame/ludo-backend:latest
     container_name: ludo-backend
     restart: unless-stopped
+    pull_policy: always
     ports:
       - "3001:3001"
     environment:
       - NODE_ENV=production
       - PORT=3001
-      - DB_SERVER=172.17.0.5
+      - DB_SERVER=mssql.istekbilisim.com
       - DB_DATABASE=ludoturcodb
       - DB_USER=sa
       - DB_PASSWORD=SeKo153759++
@@ -18,7 +19,7 @@ services:
       - DB_ENCRYPT=false
       - DB_TRUST_SERVER_CERTIFICATE=true
       - JWT_SECRET=your-jwt-secret-key-here-change-this-in-production
-      - REDIS_HOST=172.22.0.3
+      - REDIS_HOST=ludo-redis
       - REDIS_PORT=6379
       - REDIS_PASSWORD=
       - VATAN_SMS_API_ID=e922a5b11aae40dd84928621
