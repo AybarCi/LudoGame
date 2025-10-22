@@ -2286,30 +2286,138 @@ app.post('/api/verify-phone', verificationLimiter, async (req, res) => {
         if (user) {
             // User exists
             console.log(`[${new Date().toISOString()}] ✅ User found:`, user);
-            response = { 
-                success: true, 
-                message: 'Telefon numarası doğrulandı.',
-                phoneNumber: cleanPhone,
-                userExists: true,
-                user: {
-                    id: user.id,
-                    nickname: user.nickname,
-                    email: user.email,
-                    phoneNumber: cleanPhone, // Maskelenmemiş orijinal telefon
-                    score: user.score,
-                    gamesPlayed: user.games_played,
-                    wins: user.wins
+            
+            // Check if user needs nickname
+            const needsNickname = !user.nickname || user.nickname.trim() === '';
+            
+            // If user has no nickname, auto-generate one from phone number
+            if (needsNickname) {
+                console.log(`[${new Date().toISOString()}] 📝 User needs nickname, auto-generating...`);
+                
+                try {
+                    const phoneNickname = `User${cleanPhone.slice(-4)}`;
+                    
+                    // Update user with auto-generated nickname
+                    await executeQuery(
+                        'UPDATE users SET nickname = @nickname WHERE id = @id',
+                        [
+                            { name: 'nickname', type: sql.NVarChar(50), value: phoneNickname },
+                            { name: 'id', type: sql.NVarChar(36), value: user.id }
+                        ]
+                    );
+                    
+                    console.log(`[${new Date().toISOString()}] ✅ User nickname auto-generated:`, phoneNickname);
+                    
+                    // Return user with auto-generated nickname
+                    response = { 
+                        success: true, 
+                        message: 'Telefon numarası doğrulandı. Rumuz otomatik oluşturuldu.',
+                        phoneNumber: cleanPhone,
+                        userExists: true,
+                        needsNickname: false, // No need for nickname screen since we auto-generated it
+                        user: {
+                            id: user.id,
+                            nickname: phoneNickname,
+                            email: user.email,
+                            phoneNumber: cleanPhone,
+                            score: user.score,
+                            gamesPlayed: user.games_played,
+                            wins: user.wins
+                        }
+                    };
+                } catch (updateError) {
+                    console.error(`[${new Date().toISOString()}] ❌ Auto-generate nickname error:`, updateError);
+                    // Fallback to showing nickname screen
+                    response = { 
+                        success: true, 
+                        message: 'Telefon numarası doğrulandı. Rumuz gerekli.',
+                        phoneNumber: cleanPhone,
+                        userExists: true,
+                        needsNickname: true,
+                        user: {
+                            id: user.id,
+                            nickname: user.nickname,
+                            email: user.email,
+                            phoneNumber: cleanPhone,
+                            score: user.score,
+                            gamesPlayed: user.games_played,
+                            wins: user.wins
+                        }
+                    };
                 }
-            };
+            } else {
+                console.log(`[${new Date().toISOString()}] ✅ User has nickname:`, user.nickname);
+                
+                response = { 
+                    success: true, 
+                    message: 'Telefon numarası doğrulandı.',
+                    phoneNumber: cleanPhone,
+                    userExists: true,
+                    needsNickname: false,
+                    user: {
+                        id: user.id,
+                        nickname: user.nickname,
+                        email: user.email,
+                        phoneNumber: cleanPhone,
+                        score: user.score,
+                        gamesPlayed: user.games_played,
+                        wins: user.wins
+                    }
+                };
+            }
         } else {
-            // User doesn't exist, needs registration
-            console.log(`[${new Date().toISOString()}] 📱 User not found, needs registration`);
-            response = { 
-                success: true, 
-                message: 'Telefon numarası doğrulandı.',
-                phoneNumber: cleanPhone,
-                userExists: false
-            };
+            // User doesn't exist, create automatically
+            console.log(`[${new Date().toISOString()}] 📱 User not found, creating automatically...`);
+            
+            try {
+                // Auto-create user with auto-generated nickname
+                const userId = uuidv4();
+                const encryptedPhone = encryptPhoneNumber(cleanPhone);
+                const phoneNickname = `User${cleanPhone.slice(-4)}`;
+                const tempEmail = `${cleanPhone}@phone.user`;
+                const password_hash = await bcrypt.hash(cleanPhone + JWT_SECRET, 10);
+                
+                await executeQuery(
+                    'INSERT INTO users (id, email, password_hash, username, nickname, phone_number, salt, score, games_played, wins) VALUES (@id, @email, @passwordHash, @username, @nickname, @phoneNumber, @salt, 0, 0, 0)',
+                    [
+                        { name: 'id', type: sql.NVarChar(36), value: userId },
+                        { name: 'email', type: sql.NVarChar(255), value: tempEmail },
+                        { name: 'passwordHash', type: sql.NVarChar(255), value: password_hash },
+                        { name: 'username', type: sql.NVarChar(50), value: phoneNickname },
+                        { name: 'nickname', type: sql.NVarChar(50), value: phoneNickname }, // Auto-generated nickname
+                        { name: 'phoneNumber', type: sql.NVarChar(255), value: encryptedPhone },
+                        { name: 'salt', type: sql.NVarChar(255), value: '' }
+                    ]
+                );
+                
+                console.log(`[${new Date().toISOString()}] ✅ Auto-created user:`, userId);
+                
+                response = { 
+                    success: true, 
+                    message: 'Telefon numarası doğrulandı. Yeni kullanıcı oluşturuldu.',
+                    phoneNumber: cleanPhone,
+                    userExists: false,
+                    needsNickname: false, // No need for nickname screen since we auto-generated it
+                    user: {
+                        id: userId,
+                        nickname: phoneNickname,
+                        email: tempEmail,
+                        phoneNumber: cleanPhone,
+                        score: 0,
+                        gamesPlayed: 0,
+                        wins: 0
+                    }
+                };
+            } catch (createError) {
+                console.error(`[${new Date().toISOString()}] ❌ Auto-create user error:`, createError);
+                response = { 
+                    success: true, 
+                    message: 'Telefon numarası doğrulandı. Rumuz gerekli.',
+                    phoneNumber: cleanPhone,
+                    userExists: false,
+                    needsNickname: true
+                };
+            }
         }
         
         console.log(`[${new Date().toISOString()}] ✅ SUCCESS: Verification completed`);
@@ -2590,11 +2698,15 @@ app.get('/api/user/profile', requireDatabase, async (req, res) => {
         if (user.phone_number) {
             try {
                 const decryptedPhone = decryptPhoneNumber(user.phone_number);
+                console.log('Telefon numarası başarıyla deşifre edildi:', decryptedPhone);
                 const { maskPhoneNumber } = require('./utils/encryption');
                 maskedPhoneNumber = maskPhoneNumber(decryptedPhone);
+                console.log('Maskelenmiş telefon numarası:', maskedPhoneNumber);
             } catch (error) {
                 console.error('Telefon numarası çözme hatası:', error);
-                maskedPhoneNumber = '*** *** ** **'; // Hata durumunda varsayılan maske
+                console.error('Orijinal şifreli veri:', user.phone_number);
+                // Hata durumunda varsayılan maske yerine orijinal veriyi kullan
+                maskedPhoneNumber = maskPhoneNumber(user.phone_number.replace(/\s/g, ''));
             }
         }
         
@@ -2613,6 +2725,74 @@ app.get('/api/user/profile', requireDatabase, async (req, res) => {
         });
     } catch (error) {
         console.error('Profile check error:', error);
+        if (error.name === 'JsonWebTokenError') {
+            return res.status(401).json({ message: 'Geçersiz token.' });
+        } else if (error.name === 'TokenExpiredError') {
+            return res.status(401).json({ message: 'Token süresi dolmuş.' });
+        }
+        res.status(500).json({ message: 'İç sunucu hatası', error: error.message });
+    }
+});
+
+// Kullanıcı rumuz güncelleme endpoint'i
+app.put('/api/user/nickname', authenticateToken, async (req, res) => {
+    try {
+        console.log('=== RUMUZ GÜNCELLEME İSTEĞİ BAŞLADI ===');
+        console.log('Rumuz güncelleme isteği alındı:', {
+            userId: req.user?.userId,
+            body: req.body,
+            authHeader: req.headers?.authorization?.substring(0, 20) + '...'
+        });
+        
+        const userId = req.user.userId;
+        const { nickname } = req.body;
+        
+        console.log('Body parser sonrası:', { userId, nickname });
+        console.log('req.body tipi:', typeof req.body);
+        console.log('req.body içeriği:', JSON.stringify(req.body));
+        
+        console.log('Kullanıcı ID:', userId);
+        console.log('Yeni rumuz:', nickname);
+
+        if (!nickname || nickname.trim().length === 0) {
+            return res.status(400).json({ message: 'Rumuz gerekli.' });
+        }
+
+        // Rumuz uzunluğu kontrolü
+        if (nickname.length > 50) {
+            return res.status(400).json({ message: 'Rumuz en fazla 50 karakter olabilir.' });
+        }
+
+        // Rumuz benzersizlik kontrolü
+        const existingUser = await executeQuery(
+            'SELECT id FROM users WHERE nickname = @nickname AND id != @userId',
+            [
+                { name: 'nickname', type: sql.NVarChar(50), value: nickname.trim() },
+                { name: 'userId', type: sql.NVarChar(36), value: userId }
+            ]
+        );
+
+        if (existingUser.length > 0) {
+            return res.status(400).json({ message: 'Bu rumuz zaten kullanılıyor.' });
+        }
+
+        // Rumuzu güncelle
+        await executeQuery(
+            'UPDATE users SET nickname = @nickname WHERE id = @userId',
+            [
+                { name: 'nickname', type: sql.NVarChar(50), value: nickname.trim() },
+                { name: 'userId', type: sql.NVarChar(36), value: userId }
+            ]
+        );
+
+        res.json({ 
+            success: true, 
+            message: 'Rumuz başarıyla güncellendi.',
+            nickname: nickname.trim()
+        });
+
+    } catch (error) {
+        console.error('Rumuz güncelleme hatası:', error);
         if (error.name === 'JsonWebTokenError') {
             return res.status(401).json({ message: 'Geçersiz token.' });
         } else if (error.name === 'TokenExpiredError') {

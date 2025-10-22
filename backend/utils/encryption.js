@@ -115,17 +115,30 @@ function maskPhoneNumber(phoneNumber) {
       return '***';
     }
     
-    // Türk telefon formatı: +90 (5**) *** ** 34
+    // Türkiye için özel formatlar
     if (cleanPhone.startsWith('90')) {
+      // +90 ile başlayan format: +90 (5**) *** ** 34
       const last4 = cleanPhone.slice(-2);
       const first3 = cleanPhone.slice(2, 3);
       return `+90 (${first3}**) *** ** ${last4}`;
+    } else if (cleanPhone.length === 10 && (cleanPhone.startsWith('5') || cleanPhone.startsWith('0'))) {
+      // Türk cep telefonu formatı (5069384413 gibi) - daha sade format
+      const last4 = cleanPhone.slice(-4);
+      const first3 = cleanPhone.slice(0, 3);
+      return `${first3}***${last4}`;
+    } else if (cleanPhone.length === 11 && cleanPhone.startsWith('0')) {
+      // 0 ile başlayan 11 haneli format (05069384413 gibi)
+      const last4 = cleanPhone.slice(-4);
+      const first4 = cleanPhone.slice(0, 4);
+      return `(${first4}) *** ** ${last4}`;
     }
     
-    // Diğer formatlar için genel maskeleme
-    const last2 = cleanPhone.slice(-2);
-    const first2 = cleanPhone.slice(0, 2);
-    return `${first2}***${last2}`;
+    // Diğer formatlar için genel maskeleme - daha güvenli
+    const visibleDigits = 3; // Baştan ve sondan gösterilecek hane sayısı
+    const lastVisible = cleanPhone.slice(-visibleDigits);
+    const firstVisible = cleanPhone.slice(0, visibleDigits);
+    const middleStars = '*'.repeat(Math.max(3, cleanPhone.length - (visibleDigits * 2)));
+    return `${firstVisible}${middleStars}${lastVisible}`;
   } catch (error) {
     console.error('Telefon maskeleme hatası:', error);
     return '***';
