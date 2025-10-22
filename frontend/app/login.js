@@ -244,10 +244,8 @@ export default function LoginScreen() {
     const result = await dispatch(sendVerificationCode(cleanPhoneNumber));
     
     if (sendVerificationCode.fulfilled.match(result)) {
-      dispatch(showAlert({ 
-        message: 'Telefonunuza doğrulama kodu gönderildi. (Demo: Kod konsolda)', 
-        type: 'success' 
-      }));
+      // Başarılı SMS gönderimi - sadece modalda göster
+      console.log('✅ SMS kodu başarıyla gönderildi');
     } else if (sendVerificationCode.rejected.match(result)) {
       // Rate limiting hatası varsa sadece modalda göster, alert gösterme
       if (!result.payload.includes('dakika')) {
@@ -297,34 +295,26 @@ export default function LoginScreen() {
         throw new Error(errorMessage || 'Doğrulama kodu hatalı'); // Hata fırlat ki modal catch yapsın
       }
       
-      // Code verified successfully, check if user exists
-      if (verifyResult.payload.userExists) {
-        // User exists, check if they have a nickname
-        const userData = verifyResult.payload.user;
-        
-        // Close the modal
-        setShowVerificationModalLocal(false);
-        
-        if (!userData.nickname || userData.nickname.trim() === '') {
-          // User exists but doesn't have a nickname, show nickname screen
-          setShowNicknameScreen(true);
-        } else {
-          // User has nickname, generate tokens and login
-          const result = await dispatch(signInWithPhone({ phoneNumber: cleanPhoneNumber, code: code }));
-          
-          if (signInWithPhone.fulfilled.match(result)) {
-            // Login successful, go to home
-            // Navigate to home screen
-            router.push('/(auth)/home');
-          } else {
-            dispatch(showAlert({ message: result.payload || 'Giriş başarısız', type: 'error' }));
-            setLoading(false); // Butonun tekrar aktif olması için
-          }
-        }
-      } else {
-        // User doesn't exist, show nickname screen to register
-        setShowVerificationModalLocal(false);
+      // Code verified successfully, check response
+      const responseData = verifyResult.payload;
+      
+      // Close the modal
+      setShowVerificationModalLocal(false);
+      
+      if (responseData.needsNickname) {
+        // New user or user without nickname, show nickname screen
         setShowNicknameScreen(true);
+      } else {
+        // User has nickname, generate tokens and login
+        const result = await dispatch(signInWithPhone({ phoneNumber: cleanPhoneNumber, code: code }));
+        
+        if (signInWithPhone.fulfilled.match(result)) {
+          // Login successful, go to home
+          router.push('/(auth)/home');
+        } else {
+          dispatch(showAlert({ message: result.payload || 'Giriş başarısız', type: 'error' }));
+          setLoading(false); // Butonun tekrar aktif olması için
+        }
       }
     } catch (error) {
       console.error('Verification error:', error);

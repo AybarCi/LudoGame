@@ -35,6 +35,7 @@ const HomeScreen = () => {
   const { energy, maxEnergy, loadEnergy, hasEnoughEnergy, useEnergy: useEnergyFunc, buyEnergy } = useEnergy();
   const [avatarUrl, setAvatarUrl] = useState(null);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [currentNickname, setCurrentNickname] = useState(actualUser?.nickname || '');
   
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(30)).current;
@@ -105,6 +106,22 @@ const HomeScreen = () => {
     };
   }, [fadeAnim, slideAnim, scaleAnim, buttonAnims]);
 
+  // actualUser değiştiğinde currentNickname'i güncelle
+  useEffect(() => {
+    if (actualUser?.nickname) {
+      setCurrentNickname(actualUser.nickname);
+    }
+  }, [actualUser?.nickname]);
+
+  // Redux store'daki user objesi değiştiğinde currentNickname'i güncelle
+  useEffect(() => {
+    if (user?.nickname) {
+      setCurrentNickname(user.nickname);
+    } else if (user?.user?.nickname) {
+      setCurrentNickname(user.user.nickname);
+    }
+  }, [user]);
+
 
 
   // Elmas değeri artık Redux store'dan geliyor, bu yüzden bu fonksiyon kaldırıldı
@@ -128,7 +145,7 @@ const HomeScreen = () => {
     
     try {
       // AI modu için enerji kullanımı yok - serbest mod
-      const playerNickname = actualUser?.nickname || 'Oyuncu 1';
+      const playerNickname = currentNickname || 'Oyuncu 1';
       const playersInfo = {
         red: { nickname: playerNickname, type: 'human' },
         green: { nickname: 'Cansu', type: 'ai' },
@@ -389,7 +406,7 @@ const HomeScreen = () => {
             </View>
           </TouchableOpacity>
           <Text style={styles.welcomeText}>Hoş Geldin!</Text>
-          <Text style={styles.nicknameText}>{actualUser?.nickname || 'Misafir'}</Text>
+          <Text style={styles.nicknameText}>{currentNickname || 'Misafir'}</Text>
         </View>
         
         <View style={styles.statsContainer}>

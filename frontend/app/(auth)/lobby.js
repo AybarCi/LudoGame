@@ -26,6 +26,7 @@ const Lobby = () => {
   const [showSelfJoinModal, setShowSelfJoinModal] = useState(false);
   const [showEnergyModal, setShowEnergyModal] = useState(false);
   const [energyInfo, setEnergyInfo] = useState(null);
+  const [currentNickname, setCurrentNickname] = useState(actualUser?.nickname || '');
   const { energy: currentEnergy, maxEnergy, loadEnergy, hasEnoughEnergy, useEnergy: useEnergyFunc } = useEnergy();
   
   // Animation values
@@ -171,6 +172,22 @@ const Lobby = () => {
     loadEnergy();
   }, []); // Sadece mount sırasında çalışsın
 
+  // actualUser değiştiğinde currentNickname'i güncelle
+  useEffect(() => {
+    if (actualUser?.nickname) {
+      setCurrentNickname(actualUser.nickname);
+    }
+  }, [actualUser?.nickname]);
+
+  // Redux store'daki user objesi değiştiğinde currentNickname'i güncelle
+  useEffect(() => {
+    if (user?.nickname) {
+      setCurrentNickname(user.nickname);
+    } else if (user?.user?.nickname) {
+      setCurrentNickname(user.user.nickname);
+    }
+  }, [user]);
+
   const handleCreateRoom = async () => {
     if (!socket) return;
     
@@ -194,7 +211,9 @@ const Lobby = () => {
       let nickname = 'Guest';
       
       // Önce Redux store'dan kullanıcı bilgilerini al
-      if (actualUser && (actualUser.nickname || actualUser.name)) {
+      if (currentNickname) {
+        nickname = currentNickname;
+      } else if (actualUser && (actualUser.nickname || actualUser.name)) {
         nickname = actualUser.nickname || actualUser.name || 'Guest';
       } else {
         // Redux'ta yoksa AsyncStorage'dan dene
@@ -368,7 +387,9 @@ const Lobby = () => {
       let nickname = 'Guest';
       
       // Önce Redux store'dan kullanıcı bilgilerini al
-      if (actualUser && (actualUser.nickname || actualUser.name)) {
+      if (currentNickname) {
+        nickname = currentNickname;
+      } else if (actualUser && (actualUser.nickname || actualUser.name)) {
         nickname = actualUser.nickname || actualUser.name || 'Guest';
       } else {
         // Redux'ta yoksa AsyncStorage'dan dene

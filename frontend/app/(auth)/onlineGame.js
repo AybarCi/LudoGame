@@ -81,6 +81,7 @@ const OnlineGameScreen = () => {
   // Room closed durumunu state olarak takip et - erken return yerine
   const [isRoomClosed, setIsRoomClosed] = useState(false);
   const [roomClosedReason, setRoomClosedReason] = useState('');
+  const [currentNickname, setCurrentNickname] = useState(actualUser?.nickname || '');
   const dispatch = useDispatch();
   
   // Component mount durumu için ref
@@ -105,6 +106,22 @@ const OnlineGameScreen = () => {
       setRoomClosedReason('');
     };
   }, []);
+
+  // actualUser değiştiğinde currentNickname'i güncelle
+  useEffect(() => {
+    if (actualUser?.nickname) {
+      setCurrentNickname(actualUser.nickname);
+    }
+  }, [actualUser?.nickname]);
+
+  // Redux store'daki user objesi değiştiğinde currentNickname'i güncelle
+  useEffect(() => {
+    if (user?.nickname) {
+      setCurrentNickname(user.nickname);
+    } else if (user?.user?.nickname) {
+      setCurrentNickname(user.user.nickname);
+    }
+  }, [user]);
 
   // Geri sayım için animasyon değeri - Component seviyesinde tanımlanmalı
   const countdownScale = useRef(new Animated.Value(1)).current;
@@ -163,6 +180,9 @@ const OnlineGameScreen = () => {
 
   // Current user tanımlaması
   const currentUser = actualUser;
+  
+  // currentNickname'i kullanmak için güncellenmiş current user
+  const updatedCurrentUser = { ...actualUser, nickname: currentNickname };
 
   // Güvenli navigation helper fonksiyonu
   const safeNavigateToHome = useCallback(() => {
@@ -1297,7 +1317,7 @@ useEffect(() => {
             }}
             messages={chatMessages || []}
             onSendMessage={sendMessage}
-            currentUser={{ id: actualUser?.id, nickname: actualUser?.nickname }}
+            currentUser={{ id: actualUser?.id, nickname: currentNickname }}
             warningMessage={chatWarning}
             isBlocked={chatBlocked}
             blockDuration={chatBlockDuration}

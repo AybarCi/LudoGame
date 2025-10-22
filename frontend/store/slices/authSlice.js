@@ -634,6 +634,17 @@ const authSlice = createSlice({
         state.timer -= 1;
       }
     },
+    updateUserNickname: (state, action) => {
+      if (state.user) {
+        // Yeni bir user objesi oluşturarak referansı değiştir
+        state.user = {
+          ...state.user,
+          nickname: action.payload.nickname
+        };
+        // AsyncStorage'ı da güncelle
+        AsyncStorage.setItem('user', JSON.stringify(state.user));
+      }
+    },
   },
   extraReducers: (builder) => {
     builder
@@ -837,7 +848,8 @@ export const {
   setPhoneNumber, 
   clearError, 
   setUser,
-  decrementTimer 
+  decrementTimer,
+  updateUserNickname 
 } = authSlice.actions;
 
 export default authSlice.reducer;

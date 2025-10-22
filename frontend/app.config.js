@@ -7,11 +7,17 @@ export default {
     orientation: "portrait",
     icon: "./assets/images/icon.png",
     userInterfaceStyle: "automatic",
-    newArchEnabled: false, // DISABLED: Fix folly/coro error for iOS build
+    newArchEnabled: true, // ENABLED: Required for Reanimated
     ios: {
       supportsTablet: false, // Disable tablet support for faster builds
       bundleIdentifier: "com.aybarc.ludoturco",
       icon: "./assets/images/icon.png", // iOS icon eklendi
+      splash: {
+        backgroundColor: "#1a1a2e",
+        image: "./assets/images/splash-logos/logo-large.png",
+        resizeMode: "contain",
+        tabletImage: "./assets/images/splash-logos/logo-large.png"
+      },
       infoPlist: {
         ITSAppUsesNonExemptEncryption: false,
         NSCameraUsageDescription: 'Uygulama kamera erişimi gerekiyor',
@@ -31,6 +37,16 @@ export default {
         foregroundImage: "./assets/images/logo.png",
         backgroundColor: "#1a1a2e"
       },
+      splash: {
+        backgroundColor: "#1a1a2e",
+        image: "./assets/images/splash-logos/logo-large.png",
+        resizeMode: "contain",
+        mdpi: "./assets/images/splash-logos/logo-mdpi.png",
+        hdpi: "./assets/images/splash-logos/logo-hdpi.png",
+        xhdpi: "./assets/images/splash-logos/logo-xhdpi.png",
+        xxhdpi: "./assets/images/splash-logos/logo-xxhdpi.png",
+        xxxhdpi: "./assets/images/splash-logos/logo-xxxhdpi.png"
+      },
       edgeToEdgeEnabled: false, // Disable edge-to-edge for faster builds
       package: "com.aybarc.ludoturco"
     },
@@ -41,16 +57,20 @@ export default {
     },
     plugins: [
       "expo-router",
+      "expo-font",
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/splash-icon.png",
+          "backgroundColor": "#1a1a2e",
+          "image": "./assets/images/logo.png",
           "imageWidth": 200,
           "resizeMode": "contain",
-          "backgroundColor": "#6E00B3"
+          "dark": {
+            "backgroundColor": "#1a1a2e",
+            "image": "./assets/images/logo.png"
+          }
         }
       ],
-      "expo-font",
       [
         "expo-build-properties",
         {
