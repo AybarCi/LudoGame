@@ -1,7 +1,7 @@
 const crypto = require('crypto');
 
 // Environment variable'dan encryption key al
-const ENCRYPTION_KEY = process.env.PHONE_ENCRYPTION_KEY || 'your-32-character-encryption-key-here!';
+const ENCRYPTION_KEY = process.env.PHONE_ENCRYPTION_KEY || 'Ka14+Xm07Z6Wm+ZaDfqyAN/gV/xGcIWG';
 const ALGORITHM = 'aes-256-cbc';
 const KEY_LENGTH = 32;
 const IV_LENGTH = 16;

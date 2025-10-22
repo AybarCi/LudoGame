@@ -70,6 +70,7 @@ jobs:
           SMS_DAILY_LIMIT=${{ secrets.SMS_DAILY_LIMIT || '1000' }}
           SMS_HOURLY_LIMIT=${{ secrets.SMS_HOURLY_LIMIT || '100' }}
           SMS_RATE_LIMIT_ENABLED=${{ secrets.SMS_RATE_LIMIT_ENABLED || 'true' }}
+          PHONE_ENCRYPTION_KEY=${{ secrets.PHONE_ENCRYPTION_KEY }}
           JWT_SECRET=${{ secrets.JWT_SECRET }}
           DB_SERVER=${{ secrets.DB_SERVER }}
           DB_USER=${{ secrets.DB_USER }}
