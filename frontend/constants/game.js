@@ -62,9 +62,9 @@ import { NativeModules, Platform } from 'react-native';
 
 // Environment-based configuration
 const getEnvironmentConfig = () => {
-  // Production URLs - gerçek production URL'leri
-  const PRODUCTION_API_URL = 'https://ludoturcoapi.istekbilisim.com';
-  const PRODUCTION_SOCKET_URL = 'https://ludoturcoapi.istekbilisim.com';
+  // Production URLs - environment değişkenlerinden oku, yoksa fallback
+  const PRODUCTION_API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://ludoturcoapi.istekbilisim.com';
+  const PRODUCTION_SOCKET_URL = process.env.EXPO_PUBLIC_SOCKET_URL || 'https://ludoturcoapi.istekbilisim.com';
   
   // Development için local IP detection (sadece development modunda)
   const getLocalHost = () => {
