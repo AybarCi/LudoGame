@@ -154,13 +154,14 @@ export const SocketProvider = ({ children }) => {
                             reconnectionDelay: 1000,
                             reconnectionDelayMax: 5000,
                             timeout: 20000,
-                            transports: ['websocket', 'polling'],
+                            transports: ['polling', 'websocket'],
+                            path: '/socket.io/',
+                            secure: true,
                             pingTimeout: 60000,
                             pingInterval: 25000,
                             upgradeTimeout: 10000,
                             forceNew: false,
-                            rememberUpgrade: true,
-                            enableAutoUpgrade: true
+                            rememberUpgrade: false
                         });
                         
                         // Event listeners ekle
@@ -347,7 +348,9 @@ console.log(`[SocketProvider] Socket URL: ${socketUrlLocal}`);
                     reconnectionAttempts: 5,
                     reconnectionDelay: 2000, // Increased delay for better recovery
                     timeout: 20000,
-                    transports: ['websocket', 'polling'],
+                    transports: ['polling', 'websocket'],
+                    path: '/socket.io/',
+                    secure: true,
                     pingTimeout: 30000, // 30 seconds to wait for pong
                     pingInterval: 25000, // 25 seconds between pings
                 });
