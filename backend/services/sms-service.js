@@ -6,7 +6,6 @@ class SMSService {
         this.apiId = process.env.VATAN_SMS_API_ID;
         this.apiKey = process.env.VATAN_SMS_API_KEY;
         this.sender = process.env.VATAN_SMS_SENDER;
-        this.testMode = process.env.SMS_TEST_MODE === 'true';
         this.timeout = parseInt(process.env.SMS_TIMEOUT) || 10000;
         this.retryCount = parseInt(process.env.SMS_RETRY_COUNT) || 3;
         this.cooldownMs = parseInt(process.env.SMS_COOLDOWN_MS) || 60000;
@@ -18,7 +17,7 @@ class SMSService {
         this.smsLog = new Map();
         this.userCooldowns = new Map();
         
-        // API credentials kontrolü
+        // API credentials kontrolü - TEST MODE ARTIK YOK!
         if (!this.apiId || !this.apiKey || !this.sender) {
             console.warn('⚠️  VatanSMS API credentials eksik! Environment variables kontrol edin.');
             console.warn('   Gerekenler: VATAN_SMS_API_ID, VATAN_SMS_API_KEY, VATAN_SMS_SENDER');
@@ -26,7 +25,7 @@ class SMSService {
             console.log('✅ VatanSMS API credentials ayarlanmış');
             console.log('   API ID:', this.apiId);
             console.log('   Sender:', this.sender);
-            console.log('   Test Mode:', this.testMode);
+            console.log('   🔥 HER ZAMAN GERÇEK SMS GÖNDERİLİYOR!');
             console.log('   Timeout:', this.timeout);
             console.log('   Retry Count:', this.retryCount);
             console.log('   Rate Limit Enabled:', this.rateLimitEnabled);
@@ -270,20 +269,12 @@ class SMSService {
     }
 
     /**
-     * Test amaçlı SMS gönderme (development environment)
-     * @param {string} phoneNumber 
-     * @param {string} otpCode 
-     * @returns {Promise<Object>}
+     * Test amaçlı SMS gönderme ARTIK KULLANILMIYOR!
+     * @deprecated Artık her zaman gerçek SMS gönderiliyor
      */
     async sendTestOTP(phoneNumber, otpCode) {
-        console.log(`🧪 TEST MODE - SMS gönderildi: ${phoneNumber} -> OTP: ${otpCode}`);
-        console.log(`📝 Mesaj: Ludo Turco doğrulama kodunuz: ${otpCode}. Bu kod 10 dakika geçerlidir.`);
-        
-        return {
-            success: true,
-            data: { test_mode: true },
-            message: 'Test SMS başarıyla gönderildi (konsol)'
-        };
+        console.log(`❌ BU FONKSİYON ARTIK KULLANILMIYOR! Her zaman gerçek SMS gönderiliyor.`);
+        return await this.sendOTP(phoneNumber, otpCode); // Direkt gerçek SMS'ye yönlendir
     }
 
     /**
@@ -293,14 +284,8 @@ class SMSService {
      * @returns {Promise<Object>}
      */
     async send(phoneNumber, otpCode) {
-        // Test mode veya development environment'ta test mode kullan
-        if (this.testMode || process.env.NODE_ENV === 'development' || !this.apiId || !this.apiKey || !this.sender) {
-            console.log('🧪 Test modunda SMS gönderiliyor (gerçek SMS gönderilmeyecek)');
-            return await this.sendTestOTP(phoneNumber, otpCode);
-        }
-        
-        // Production'da gerçek SMS gönder
-        console.log('📱 Production modunda gerçek SMS gönderiliyor');
+        // HER ZAMAN GERÇEK SMS GÖNDER - Test modu tamamen kaldırıldı!
+        console.log('📱 HER ZAMAN GERÇEK SMS GÖNDERİLİYOR - Test modu devre dışı!');
         return await this.sendOTP(phoneNumber, otpCode);
     }
 }
