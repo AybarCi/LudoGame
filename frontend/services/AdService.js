@@ -21,8 +21,8 @@ try {
 // Web, simülatör ve emülatör kontrolü
 const isRealDevice = Platform.OS !== 'web' && Constants.isDevice === true;
 
-// Test modu kontrolü - __DEV__ false olduğunda gerçek reklamlar gösterilecek
-const isTestMode = __DEV__ || !isRealDevice;
+// Test modu kontrolü - Sadece __DEV__ true ise test modunda çalış
+const isTestMode = __DEV__;
 
 // AdMob başlatıldı
 console.log('AdMob enabled with react-native-google-mobile-ads');

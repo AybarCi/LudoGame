@@ -88,7 +88,7 @@ export default {
     // Disable heavy features in dev
     extra: {
       __DEV__: false, // Gerçek reklamlar için dev modunu kapat
-      adsEnabled: false, // CRASH PREVENTION: Reklamları geçici olarak kapat
+      adsEnabled: true, // Reklamlar aktif
       // Optimize for development
       devMode: false,
       fastRefresh: false,
