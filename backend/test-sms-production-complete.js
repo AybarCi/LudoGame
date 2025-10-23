@@ -5,6 +5,7 @@
  * Bu script production ortamındaki SMS servisini test etmek için kullanılır
  */
 
+require('dotenv').config({ path: '.env.production' });
 const SMSService = require('./services/sms-service');
 
 async function testSMSService() {
