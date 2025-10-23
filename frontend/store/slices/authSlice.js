@@ -417,6 +417,11 @@ export const logout = createAsyncThunk(
       await AsyncStorage.removeItem('accessToken');
       await AsyncStorage.removeItem('session');
       await AsyncStorage.removeItem('refreshToken');
+      
+      // Piyon verilerini de temizle
+      await AsyncStorage.removeItem('ownedPawns');
+      await AsyncStorage.removeItem('selectedPawn');
+      
       return null;
     } catch (error) {
       return rejectWithValue(error.message);

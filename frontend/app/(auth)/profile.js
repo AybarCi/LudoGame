@@ -123,6 +123,11 @@ const ProfileScreen = () => {
             try {
               // Avatar cache'ini temizle
               await AsyncStorage.removeItem('userAvatarUrl');
+              
+              // Piyon verilerini de temizle (ekstra güvenlik için)
+              await AsyncStorage.removeItem('ownedPawns');
+              await AsyncStorage.removeItem('selectedPawn');
+              
               await dispatch(logout());
               router.replace('/login');
             } catch (error) {

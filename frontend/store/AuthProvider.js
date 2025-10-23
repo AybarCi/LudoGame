@@ -213,6 +213,11 @@ export function AuthProvider({ children }) {
             await AsyncStorage.removeItem('accessToken');
             await AsyncStorage.removeItem('refreshToken');
             await AsyncStorage.removeItem('user');
+            
+            // Piyon verilerini de temizle
+            await AsyncStorage.removeItem('ownedPawns');
+            await AsyncStorage.removeItem('selectedPawn');
+            
             setUser(null);
             setSession(null);
              

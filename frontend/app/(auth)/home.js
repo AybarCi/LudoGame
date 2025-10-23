@@ -16,6 +16,7 @@ import { DiamondService } from '../../services/DiamondService';
 import { EnergyService } from '../../services/EnergyService';
 import useEnergy from '../../hooks/useEnergy';
 import { API_BASE_URL } from '../../constants/game';
+import { usePawns } from '../../hooks/useApi';
 
 
 const { width } = Dimensions.get('window');
@@ -29,6 +30,7 @@ const HomeScreen = () => {
   // Extract actual user object if it's wrapped in success property
   const actualUser = user?.success && user?.user ? user.user : user;
   const diamonds = useSelector(state => state.diamonds?.count || 0);
+  const ownedPawnCount = useSelector(state => Array.isArray(state.api?.ownedPawns) ? state.api.ownedPawns.filter(id => id !== 'default').length : 0);
   const [loading, setLoading] = useState(false);
   const [logoutLoading, setLogoutLoading] = useState(false);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
@@ -46,6 +48,9 @@ const HomeScreen = () => {
     new Animated.Value(0)
   ]).current;
 
+  // Load owned pawns and selected pawn into Redux on Home mount
+  usePawns();
+
   useEffect(() => {
     // Enerji sistemini başlat
     EnergyService.initializeEnergySystem().then(() => {
@@ -57,8 +62,12 @@ const HomeScreen = () => {
     const energyInterval = setInterval(() => {
       loadEnergy();
     }, 60000); // Update every minute
-    
-    // Elmas değerini senkronize et
+
+    return () => clearInterval(energyInterval);
+  }, []);
+
+  // Elmas değerini senkronize et
+  useEffect(() => {
     const syncDiamonds = async () => {
       try {
         const diamondsFromStorage = await DiamondService.getDiamonds();
@@ -68,9 +77,11 @@ const HomeScreen = () => {
         console.error('Elmas senkronizasyon hatası:', error);
       }
     };
-    
     syncDiamonds();
-    
+  }, []);
+  
+  // Açılış animasyonları
+  useEffect(() => {
     Animated.parallel([
       Animated.timing(fadeAnim, {
         toValue: 1,
@@ -99,11 +110,6 @@ const HomeScreen = () => {
         useNativeDriver: true,
       }).start();
     });
-
-    // Cleanup interval on unmount
-    return () => {
-      clearInterval(energyInterval);
-    };
   }, [fadeAnim, slideAnim, scaleAnim, buttonAnims]);
 
   // actualUser değiştiğinde currentNickname'i güncelle
@@ -445,6 +451,15 @@ const HomeScreen = () => {
                 label: 'Seviye',
                 gradient: ['#E61A8D', '#C71585'],
                 valueColor: '#FFFFFF'
+              },
+              {
+                icon: 'grid',
+                iconColor: '#00D9CC',
+                value: ownedPawnCount.toString(),
+                label: 'Piyon Koleksiyonum',
+                gradient: ['#2E8B57', '#006400'],
+                valueColor: '#FFFFFF',
+                onPress: () => router.push('/(auth)/pawnCollection')
               }
             ]}
           />

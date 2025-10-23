@@ -22,6 +22,7 @@ import { useDispatch } from 'react-redux';
 import { showAlert } from '../../store/slices/alertSlice';
 import Svg, { Circle, Path, Text as SvgText, Line, Rect } from 'react-native-svg';
 import { API_BASE_URL } from '../../constants/game';
+import { fetchOwnedPawns } from '../../store/slices/apiSlice';
 
 const API_URL = API_BASE_URL;
 
@@ -613,13 +614,13 @@ const ShopScreen = () => {
         if (success) {
           setDiamonds(prev => prev - item.price);
           
-          // Backend'e de piyon satın alma isteği gönder
+          // Backend'e piyon satın alma isteği gönder
           try {
             console.log('[SHOP DEBUG] Making diamond purchase request to backend for:', item.id);
             const backendResponse = await makeAuthenticatedRequest(`${API_URL}/api/shop/purchase`, {
               method: 'POST',
               body: JSON.stringify({
-                pawnId: item.id,
+                itemId: item.id,
                 price: item.price,
                 currency: 'diamonds'
               })
@@ -629,38 +630,61 @@ const ShopScreen = () => {
             
             if (backendResponse.ok) {
               console.log('[SHOP DEBUG] Diamond purchase successfully recorded in backend');
+              
+              // Backend başarılı olduğunda AsyncStorage'a kaydet
+              const newOwnedPawns = [...ownedPawns, item.id];
+              setOwnedPawns(newOwnedPawns);
+              
+              // AsyncStorage'a kaydet
+              try {
+                await AsyncStorage.setItem('ownedPawns', JSON.stringify(newOwnedPawns));
+                console.log('[SHOP DEBUG] Owned pawns saved to AsyncStorage:', newOwnedPawns);
+              } catch (error) {
+                console.error('[SHOP DEBUG] Error saving owned pawns to AsyncStorage:', error);
+              }
+              
+              // Redux'taki ownedPawns'ı backend ile senkronize et
+              dispatch(fetchOwnedPawns());
+              
+              dispatch(showAlert({
+                title: 'Başarılı!',
+                message: `${item.name} satın alındı!`,
+                type: 'success',
+                buttons: []
+              }));
             } else {
               console.error('[SHOP DEBUG] Failed to record diamond purchase in backend');
+              // Backend başarısız olduğunda elmasları geri yükle
+              await DiamondService.addDiamonds(item.price);
+              setDiamonds(prev => prev + item.price);
+              
+              dispatch(showAlert({
+                title: 'Hata',
+                message: 'Satın alma işlemi başarısız oldu. Elmaslar geri yüklendi.',
+                type: 'error',
+                buttons: []
+              }));
             }
           } catch (backendError) {
             console.error('[SHOP DEBUG] Error recording diamond purchase in backend:', backendError);
+            // Backend hatası durumunda elmasları geri yükle
+            await DiamondService.addDiamonds(item.price);
+            setDiamonds(prev => prev + item.price);
+            
+            dispatch(showAlert({
+              title: 'Hata',
+              message: 'Sunucu bağlantı hatası. Elmaslar geri yüklendi.',
+              type: 'error',
+              buttons: []
+            }));
           }
-          
-          // Ürünü sahip olunan listesine ekle
-          const newOwnedPawns = [...ownedPawns, item.id];
-          setOwnedPawns(newOwnedPawns);
-          
-          // AsyncStorage'a kaydet
-          try {
-            await AsyncStorage.setItem('ownedPawns', JSON.stringify(newOwnedPawns));
-            console.log('[SHOP DEBUG] Owned pawns saved to AsyncStorage:', newOwnedPawns);
-          } catch (error) {
-            console.error('[SHOP DEBUG] Error saving owned pawns to AsyncStorage:', error);
-          }
-          
-          dispatch(showAlert({
-            title: 'Başarılı!',
-            message: `${item.name} satın alındı!`,
-            type: 'success',
-            buttons: []
-          }));
         } else {
           dispatch(showAlert({
-          title: 'Hata',
-          message: 'Satın alma işlemi başarısız oldu.',
-          type: 'error',
-          buttons: []
-        }));
+            title: 'Hata',
+            message: 'Satın alma işlemi başarısız oldu.',
+            type: 'error',
+            buttons: []
+          }));
         }
         setPurchaseModal({ visible: false, item: null });
         return;
@@ -672,7 +696,7 @@ const ShopScreen = () => {
       const response = await makeAuthenticatedRequest(`${API_URL}/api/shop/purchase`, {
         method: 'POST',
         body: JSON.stringify({
-          pawnId: item.id,
+          itemId: item.id,
           price: item.price,
           currency: item.currency
         })
@@ -703,6 +727,8 @@ const ShopScreen = () => {
       if (response.ok) {
         const newOwnedPawns = [...ownedPawns, item.id];
         setOwnedPawns(newOwnedPawns);
+        // Redux'taki ownedPawns'ı güncelle
+        dispatch(fetchOwnedPawns());
         
         // AsyncStorage'a kaydet
         try {

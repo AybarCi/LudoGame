@@ -30,7 +30,7 @@ import {
   
   // Energy
   fetchEnergyData,
-  useEnergy,
+  useEnergy as useEnergyAction,
   
   // Stats
   fetchUserStats,
@@ -125,7 +125,7 @@ export const useApi = () => {
   }, [dispatch]);
 
   const useUserEnergy = useCallback((amount, reason) => {
-    return dispatch(useEnergy({ amount, reason }));
+    return dispatch(useEnergyAction({ amount, reason }));
   }, [dispatch]);
 
   const setLocalEnergy = useCallback((energyData) => {
@@ -242,7 +242,7 @@ export const usePawns = () => {
   return { ownedPawns, selectedPawn, ownedPawnsLoading, selectUserPawn };
 };
 
-export const useEnergy = () => {
+export const useEnergyApi = () => {
   const { loadEnergyData, energy, maxEnergy, energyLoading, energyError, useUserEnergy } = useApi();
   
   useEffect(() => {
