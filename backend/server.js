@@ -1390,8 +1390,12 @@ app.get('/api/shop/pawns', authenticateToken, async (req, res) => {
 
 app.post('/api/shop/purchase', authenticateToken, async (req, res) => {
     try {
-        const { pawnId, price, currency } = req.body;
+        const { pawnId: pawnIdRaw, itemId, price, currency } = req.body;
+        const pawnId = pawnIdRaw || itemId;
         const userId = req.user.userId;
+        if (!pawnId) {
+            return res.status(400).json({ error: 'Missing pawnId/itemId' });
+        }
         
         // Kullanıcının mevcut puanını kontrol et
         const userResult = await executeQuery(
