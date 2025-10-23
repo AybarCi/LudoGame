@@ -10,7 +10,7 @@ services:
       - "3001:3001"
     environment:
       - NODE_ENV=production
-      - HOSTNAME=0.0.0.0
+      - HOSTNAME=0.0.0.0  # CRITICAL: Must be 0.0.0.0 for container communication
       - PORT=3001
       - DB_SERVER=mssql.istekbilisim.com
       - DB_DATABASE=LudoGameDB
@@ -35,8 +35,8 @@ services:
       - ./logs:/app/logs
     networks:
       - ludo-network
-      - web-network
-      - nginx-proxy-network
+      - nginx-proxy-network  # Connect to reverse proxy network
+      - web-network          # Connect to web services network
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
       interval: 30s
@@ -48,6 +48,12 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.ludo-backend.rule=Host(`ludoturcoapi.istekbilisim.com`)"
+      - "traefik.http.routers.ludo-backend.entrypoints=websecure"
+      - "traefik.http.routers.ludo-backend.tls=true"
+      - "traefik.http.services.ludo-backend.loadbalancer.server.port=3001"
 
   redis:
     image: redis:7-alpine
@@ -68,10 +74,12 @@ services:
 networks:
   ludo-network:
     driver: bridge
-  web-network:
-    external: true
   nginx-proxy-network:
     external: true
+    name: nginx-proxy-network
+  web-network:
+    external: true
+    name: web-network
 
 volumes:
   redis-data:
