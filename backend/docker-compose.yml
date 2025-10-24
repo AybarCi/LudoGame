@@ -21,7 +21,7 @@ services:
       - DB_TRUST_SERVER_CERTIFICATE=true
       - JWT_SECRET=your-jwt-secret-key-here-change-this-in-production
       - REDIS_HOST=ludo-redis
-      - REDIS_PORT=6380
+      - REDIS_PORT=6379
       - REDIS_PASSWORD=
       - VATAN_SMS_API_ID=e922a5b11aae40dd84928621
       - VATAN_SMS_API_KEY=bcc4701b87c2490ea4bf1a80
