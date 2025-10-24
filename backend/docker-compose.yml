@@ -73,7 +73,9 @@ services:
 
 networks:
   nginx-proxy-network:
-    external: true
+    name: nginx-proxy-network
+    driver: bridge
+    attachable: true
 
 volumes:
   redis-data:
