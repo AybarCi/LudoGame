@@ -46,6 +46,14 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.ludo-backend.rule=Host(`ludoturcoapi.istekbilisim.com`)"
+      - "traefik.http.routers.ludo-backend.tls=true"
+      - "traefik.http.routers.ludo-backend.tls.certresolver=letsencrypt"
+      - "traefik.http.services.ludo-backend.loadbalancer.server.port=3001"
+      - "traefik.http.routers.ludo-backend.middlewares=security-headers,rate-limit,compression,circuit-breaker"
+      - "traefik.docker.network=nginx-proxy-network"
 
   redis:
     image: redis:7-alpine
