@@ -7,19 +7,18 @@ module.exports = {
     user: process.env.DB_USER || 'sa',
     password: process.env.DB_PASSWORD || 'SeKo153759++',
     port: parseInt(process.env.DB_PORT) || 1433,
-    options: {
-        encrypt: process.env.DB_ENCRYPT === 'true' || false, // Production'da false
-        trustServerCertificate: process.env.DB_TRUST_SERVER_CERTIFICATE === 'true' || true,
-        enableArithAbort: true,
-        requestTimeout: 30000, // 30 saniye
-        connectionTimeout: 30000, // 30 saniye
-        pool: {
-            max: 10, // Maksimum bağlantı sayısı
-            min: 0,  // Minimum bağlantı sayısı
-            idleTimeoutMillis: 30000 // Boşta kalma süresi
-        }
+    requestTimeout: 30000,
+    connectionTimeout: 30000,
+    pool: {
+        max: 10,
+        min: 0,
+        idleTimeoutMillis: 30000
     },
-    // Connection string alternatifi (gerekirse)
+    options: {
+        encrypt: process.env.DB_ENCRYPT === 'true' || false,
+        trustServerCertificate: process.env.DB_TRUST_SERVER_CERTIFICATE === 'true' || true,
+        enableArithAbort: true
+    },
     connectionString: process.env.DB_CONNECTION_STRING || null
 };
 
