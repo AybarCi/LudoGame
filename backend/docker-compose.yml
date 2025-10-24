@@ -33,8 +33,6 @@ services:
       - SMS_COOLDOWN_MS=60000
     volumes:
       - ./logs:/app/logs
-    networks:
-      - nginx-proxy-network
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
       interval: 30s
@@ -46,14 +44,6 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.ludo-backend.rule=Host(`ludoturcoapi.istekbilisim.com`)"
-      - "traefik.http.routers.ludo-backend.tls=true"
-      - "traefik.http.routers.ludo-backend.tls.certresolver=letsencrypt"
-      - "traefik.http.services.ludo-backend.loadbalancer.server.port=3001"
-      - "traefik.http.routers.ludo-backend.middlewares=security-headers,rate-limit,compression,circuit-breaker"
-      - "traefik.docker.network=nginx-proxy-network"
 
   redis:
     image: redis:7-alpine
@@ -63,17 +53,11 @@ services:
       - "6379:6379"
     volumes:
       - redis-data:/data
-    networks:
-      - nginx-proxy-network
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 30s
       timeout: 10s
       retries: 3
-
-networks:
-  nginx-proxy-network:
-    external: true
 
 volumes:
   redis-data:
