@@ -6,6 +6,7 @@ services:
     container_name: ludo-backend
     restart: unless-stopped
     pull_policy: always
+    network_mode: host
     ports:
       - "3001:3001"
     environment:
@@ -26,7 +27,7 @@ services:
       - DB_POOL_IDLE_TIMEOUT=60000
       - DB_POOL_ACQUIRE_TIMEOUT=60000
       - JWT_SECRET=LudoTurco2024SecretKey!@#$%^&*()_+{}|:<>?[]\\;'\",./-=`~
-      - REDIS_HOST=ludo-redis
+      - REDIS_HOST=localhost
       - REDIS_PORT=6379
       - REDIS_PASSWORD=
       - VATAN_SMS_API_ID=e922a5b11aae40dd84928621
@@ -40,8 +41,6 @@ services:
       - PHONE_ENCRYPTION_KEY=Ka14+Xm07Z6Wm+ZaDfqyAN/gV/xGcIWG
     volumes:
       - ./logs:/app/logs
-    networks:
-      - ludo-network
     depends_on:
       - redis
     # healthcheck:
