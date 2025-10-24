@@ -21,8 +21,8 @@ try {
 // Web, simülatör ve emülatör kontrolü
 const isRealDevice = Platform.OS !== 'web' && Constants.isDevice === true;
 
-// Test modu kontrolü - Sadece __DEV__ true ise test modunda çalış
-const isTestMode = __DEV__;
+// Test modu kontrolü - TestFlight için özel durum
+const isTestMode = __DEV__ || !Constants.isDevice;
 
 // AdMob başlatıldı
 console.log('AdMob enabled with react-native-google-mobile-ads');
@@ -73,15 +73,15 @@ const TEST_REWARDED_ID = 'ca-app-pub-3940256099942544/5224354917';
 const INTERSTITIAL_AD_ID = __DEV__
   ? (TestIds?.INTERSTITIAL || TEST_INTERSTITIAL_ID) // Test ID veya fallback
   : Platform.select({
-      ios: 'ca-app-pub-1743455537598911/1234567890', // Gerçek iOS ID - AdMob panelinden alınacak
-      android: 'ca-app-pub-1743455537598911/1234567891' // Gerçek Android ID - AdMob panelinden alınacak
+      ios: 'ca-app-pub-1743455537598911/9106427653', // Gerçek iOS ID
+      android: 'ca-app-pub-1743455537598911/4233374921' // Gerçek Android ID
     });
 
 const REWARDED_AD_ID = __DEV__
   ? (TestIds?.REWARDED || TEST_REWARDED_ID) // Test ID veya fallback
   : Platform.select({
-      ios: 'ca-app-pub-1743455537598911/1234567892', // Gerçek iOS ID - AdMob panelinden alınacak
-      android: 'ca-app-pub-1743455537598911/1234567893' // Gerçek Android ID - AdMob panelinden alınacak
+      ios: 'ca-app-pub-1743455537598911/9106427653', // Gerçek iOS ID - Aynı ID kullanılıyor
+      android: 'ca-app-pub-1743455537598911/4233374921' // Gerçek Android ID - Aynı ID kullanılıyor
     });
 
 // Reklam instance'ları
