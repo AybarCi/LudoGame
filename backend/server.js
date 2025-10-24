@@ -2709,8 +2709,9 @@ app.get('/api/user/profile', requireDatabase, async (req, res) => {
             } catch (error) {
                 console.error('Telefon numarası çözme hatası:', error);
                 console.error('Orijinal şifreli veri:', user.phone_number);
-                // Hata durumunda varsayılan maske yerine orijinal veriyi kullan
-                maskedPhoneNumber = maskPhoneNumber(user.phone_number.replace(/\s/g, ''));
+                // Hata durumunda varsayılan maske göster
+                const { maskPhoneNumber } = require('./utils/encryption');
+                maskedPhoneNumber = maskPhoneNumber('5xxxxxxxxx'); // Varsayılan format
             }
         }
         

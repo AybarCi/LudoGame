@@ -2,96 +2,71 @@ version: '3.8'
 
 services:
   ludo-backend:
-    build:
-      context: ../
-      dockerfile: deployment/Dockerfile
-      args:
-        - VATAN_SMS_API_ID=${VATAN_SMS_API_ID}
-        - VATAN_SMS_API_KEY=${VATAN_SMS_API_KEY}
-        - VATAN_SMS_SENDER=${VATAN_SMS_SENDER}
-    container_name: ludo-backend-production
+    image: ghcr.io/aybarci/ludogame/ludo-backend:latest
+    container_name: ludo-backend
+    restart: unless-stopped
     ports:
       - "3001:3001"
-    env_file:
-      - stack.env
     environment:
-      # Override only if needed - stack.env has priority
       - NODE_ENV=production
+      - PORT=3001
+      - DB_SERVER=172.17.0.5
+      - DB_DATABASE=LudoGameDB
+      - DB_USER=sa
+      - DB_PASSWORD=SeKo153759++
+      - DB_PORT=1433
+      - DB_ENCRYPT=false
+      - DB_TRUST_SERVER_CERTIFICATE=true
+      - DB_CONNECTION_TIMEOUT=60000
+      - DB_REQUEST_TIMEOUT=60000
+      - DB_POOL_MAX=10
+      - DB_POOL_MIN=0
+      - DB_POOL_IDLE_TIMEOUT=60000
+      - DB_POOL_ACQUIRE_TIMEOUT=60000
+      - JWT_SECRET=LudoTurco2024SecretKey!@#$%^&*()_+{}|:<>?[]\\;'\",./-=`~
+      - REDIS_HOST=ludo-redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=
+      - VATAN_SMS_API_ID=e922a5b11aae40dd84928621
+      - VATAN_SMS_API_KEY=bcc4701b87c2490ea4bf1a80
+      - VATAN_SMS_SENDER=Midpot
       - SMS_TEST_MODE=false
-    
+      - SMS_RATE_LIMIT_ENABLED=true
+      - SMS_DAILY_LIMIT=1000
+      - SMS_HOURLY_LIMIT=100
+      - SMS_COOLDOWN_MS=60000
+      - PHONE_ENCRYPTION_KEY=Ka14+Xm07Z6Wm+ZaDfqyAN/gV/xGcIWG
     volumes:
       - ./logs:/app/logs
-      - ./uploads:/app/uploads
-      - ./temp:/app/temp
-    
-    restart: unless-stopped
-    
-    # Health check
+    networks:
+      - ludo-network
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 60s
-    
-    # Resource limits
-    deploy:
-      resources:
-        limits:
-          cpus: '1.0'
-          memory: 1G
-        reservations:
-          cpus: '0.5'
-          memory: 512M
-    
-    # Security
-    security_opt:
-      - no-new-privileges:true
-    
-    networks:
-      - ludo-production-network
+      start_period: 40s
 
-  # Optional: Redis for caching and session management
   redis:
     image: redis:7-alpine
-    container_name: ludo-redis-production
+    container_name: ludo-redis
+    restart: unless-stopped
     ports:
       - "6379:6379"
     volumes:
-      - redis_data:/data
-    restart: unless-stopped
-    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+      - redis-data:/data
     networks:
-      - ludo-production-network
-
-  # Optional: Nginx reverse proxy
-  nginx:
-    image: nginx:alpine
-    container_name: ludo-nginx-production
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./ssl:/etc/nginx/ssl:ro
-      - ./logs/nginx:/var/log/nginx
-    depends_on:
-      - ludo-backend
-    restart: unless-stopped
-    networks:
-      - ludo-production-network
+      - ludo-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
 networks:
-  ludo-production-network:
+  ludo-network:
     driver: bridge
-    ipam:
-      config:
-        - subnet: 172.20.0.0/16
 
 volumes:
-  redis_data:
-    driver: local
-  logs:
-    driver: local
-  uploads:
+  redis-data:
     driver: local

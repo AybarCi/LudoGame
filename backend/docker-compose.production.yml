@@ -5,21 +5,25 @@ services:
     image: ghcr.io/aybarci/ludogame/ludo-backend:latest
     container_name: ludo-backend
     restart: unless-stopped
-    pull_policy: always
     ports:
       - "3001:3001"
     environment:
       - NODE_ENV=production
-      - HOSTNAME=0.0.0.0  # CRITICAL: Must be 0.0.0.0 for container communication
       - PORT=3001
-      - DB_SERVER=mssql.istekbilisim.com
+      - DB_SERVER=172.17.0.5
       - DB_DATABASE=LudoGameDB
       - DB_USER=sa
       - DB_PASSWORD=SeKo153759++
-      - DB_PORT=1433
+      - DB_PORT=32801
       - DB_ENCRYPT=false
       - DB_TRUST_SERVER_CERTIFICATE=true
-      - JWT_SECRET=your-jwt-secret-key-here-change-this-in-production
+      - DB_CONNECTION_TIMEOUT=60000
+      - DB_REQUEST_TIMEOUT=60000
+      - DB_POOL_MAX=10
+      - DB_POOL_MIN=0
+      - DB_POOL_IDLE_TIMEOUT=60000
+      - DB_POOL_ACQUIRE_TIMEOUT=60000
+      - JWT_SECRET=LudoTurco2024SecretKey!@#$%^&*()_+{}|:<>?[]\\;'\",./-=`~
       - REDIS_HOST=ludo-redis
       - REDIS_PORT=6379
       - REDIS_PASSWORD=
@@ -31,29 +35,17 @@ services:
       - SMS_DAILY_LIMIT=1000
       - SMS_HOURLY_LIMIT=100
       - SMS_COOLDOWN_MS=60000
+      - PHONE_ENCRYPTION_KEY=Ka14+Xm07Z6Wm+ZaDfqyAN/gV/xGcIWG
     volumes:
       - ./logs:/app/logs
     networks:
       - ludo-network
-      - nginx-proxy-network  # Connect to reverse proxy network
-      - web-network          # Connect to web services network
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 40s
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.ludo-backend.rule=Host(`ludoturcoapi.istekbilisim.com`)"
-      - "traefik.http.routers.ludo-backend.entrypoints=websecure"
-      - "traefik.http.routers.ludo-backend.tls=true"
-      - "traefik.http.services.ludo-backend.loadbalancer.server.port=3001"
 
   redis:
     image: redis:7-alpine
@@ -74,12 +66,6 @@ services:
 networks:
   ludo-network:
     driver: bridge
-  nginx-proxy-network:
-    external: true
-    name: nginx-proxy-network
-  web-network:
-    external: true
-    name: web-network
 
 volumes:
   redis-data:
