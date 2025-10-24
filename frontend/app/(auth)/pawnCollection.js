@@ -74,7 +74,7 @@ const PawnCollectionScreen = () => {
       case 'nature':
         return ids.filter(id => id.startsWith('nature_'));
       case 'vehicles':
-        return ids.filter(id => id.startsWith('vehicle_'));
+        return ids.filter(id => id.startsWith('vehicle_') || id.startsWith('vehicles_'));
       default:
         return [];
     }
@@ -205,7 +205,7 @@ const PawnCollectionScreen = () => {
     if (id.startsWith('emoji_')) return '😊';
     if (id.startsWith('animal_')) return '🐾';
     if (id.startsWith('nature_')) return '🌿';
-    if (id.startsWith('vehicle_')) return '🚗';
+    if (id.startsWith('vehicle_') || id.startsWith('vehicles_')) return '🚗';
     return '●';
   };
 
@@ -219,6 +219,7 @@ const PawnCollectionScreen = () => {
       animal: 'Hayvan',
       nature: 'Doğa',
       vehicle: 'Araç',
+      vehicles: 'Araç',
     };
     const base = map[prefix] || prefix;
     return `${base} ${num}`;
