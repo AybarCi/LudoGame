@@ -60,7 +60,7 @@ services:
     container_name: ludo-redis
     restart: unless-stopped
     ports:
-      - "6380:6379"
+      - "6379:6379"
     volumes:
       - redis-data:/data
     networks:
