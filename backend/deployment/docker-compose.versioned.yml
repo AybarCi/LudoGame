@@ -64,12 +64,12 @@ services:
       - "traefik.http.routers.ludo-backend.tls=true"
       - "traefik.http.routers.ludo-backend.tls.certresolver=letsencrypt"
       - "traefik.http.services.ludo-backend.loadbalancer.server.port=3001"
+      - "traefik.docker.network=nginx-proxy-network"
       - "com.ludo.version=${VERSION:-latest}"
       - "com.ludo.build-date=${BUILD_DATE}"
       - "com.ludo.git-commit=${GIT_COMMIT}"
     
     networks:
-      - ludo-production-network
       - nginx-proxy-network
 
   # Redis for caching and session management
@@ -77,14 +77,14 @@ services:
     image: redis:7-alpine
     container_name: ludo-redis-${VERSION:-latest}
     ports:
-      - "6379:6379"
+      - "6380:6379"
     volumes:
       - redis_data:/data
       - ./redis.conf:/usr/local/etc/redis/redis.conf:ro
     restart: unless-stopped
     command: redis-server /usr/local/etc/redis/redis.conf
     networks:
-      - ludo-production-network
+      - nginx-proxy-network
 
   # Traefik reverse proxy with automatic SSL
   traefik:
@@ -105,7 +105,7 @@ services:
     labels:
       - "com.ludo.version=${VERSION:-latest}"
     networks:
-      - ludo-production-network
+      - nginx-proxy-network
 
   # Watchtower for automatic updates
   watchtower:
@@ -130,14 +130,9 @@ services:
     labels:
       - "com.centurylinklabs.watchtower.enable=true"
     networks:
-      - ludo-production-network
+      - nginx-proxy-network
 
 networks:
-  ludo-production-network:
-    driver: bridge
-    ipam:
-      config:
-        - subnet: 172.20.0.0/16
   nginx-proxy-network:
     external: true
 

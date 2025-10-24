@@ -21,7 +21,7 @@ services:
       - DB_TRUST_SERVER_CERTIFICATE=true
       - JWT_SECRET=your-jwt-secret-key-here-change-this-in-production
       - REDIS_HOST=ludo-redis
-      - REDIS_PORT=6379
+      - REDIS_PORT=6380
       - REDIS_PASSWORD=
       - VATAN_SMS_API_ID=e922a5b11aae40dd84928621
       - VATAN_SMS_API_KEY=bcc4701b87c2490ea4bf1a80
@@ -34,8 +34,6 @@ services:
     volumes:
       - ./logs:/app/logs
     networks:
-      - ludo-network
-      - web-network
       - nginx-proxy-network
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
@@ -54,11 +52,11 @@ services:
     container_name: ludo-redis
     restart: unless-stopped
     ports:
-      - "6379:6379"
+      - "6380:6379"
     volumes:
       - redis-data:/data
     networks:
-      - ludo-network
+      - nginx-proxy-network
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 30s
@@ -66,10 +64,6 @@ services:
       retries: 3
 
 networks:
-  ludo-network:
-    driver: bridge
-  web-network:
-    external: true
   nginx-proxy-network:
     external: true
 
