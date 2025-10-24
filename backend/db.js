@@ -53,7 +53,7 @@ module.exports = {
             request = pool.request();
             
             // Timeout ayarını ekle
-            request.timeout = 30000; // 30 saniye timeout
+            request.timeout = 60000; // 60 saniye timeout
 
             // Parametreleri isteğe ekle
             params.forEach(param => {
@@ -78,7 +78,7 @@ module.exports = {
             
             // Timeout hatası mı kontrol et
             if (error.code === 'ETIMEOUT' || error.message.includes('timeout')) {
-                throw new Error(`Database query timeout after 30 seconds. Query: ${query.substring(0, 100)}...`);
+                throw new Error(`Database query timeout after 60 seconds. Query: ${query.substring(0, 100)}...`);
             }
             
             // UNIQUE KEY constraint hatası mı kontrol et
