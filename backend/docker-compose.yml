@@ -21,6 +21,10 @@ services:
       - DB_TRUST_SERVER_CERTIFICATE=true
       - DB_CONNECTION_TIMEOUT=60000
       - DB_REQUEST_TIMEOUT=60000
+      - DB_POOL_MAX=10
+      - DB_POOL_MIN=0
+      - DB_POOL_IDLE_TIMEOUT=60000
+      - DB_POOL_ACQUIRE_TIMEOUT=60000
       - JWT_SECRET=LudoTurco2024SecretKey!@#$%^&*()_+{}|:<>?[]\\;'\",./-=`~
       - REDIS_HOST=ludo-redis
       - REDIS_PORT=6379
@@ -33,6 +37,7 @@ services:
       - SMS_DAILY_LIMIT=1000
       - SMS_HOURLY_LIMIT=100
       - SMS_COOLDOWN_MS=60000
+      - PHONE_ENCRYPTION_KEY=Ka14+Xm07Z6Wm+ZaDfqyAN/gV/xGcIWG
     volumes:
       - ./logs:/app/logs
     networks:

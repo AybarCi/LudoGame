@@ -25,10 +25,19 @@ module.exports = {
         cancelTimeout: parseInt(process.env.DB_CONNECTION_TIMEOUT) || 60000,
         packetSize: 4096,
         useUTC: false,
-        abortTransactionOnError: false
+        abortTransactionOnError: false,
+        // Tedious driver specific timeout settings
+        connectionIsolationLevel: 1, // READ_UNCOMMITTED
+        rowCollectionOnDone: false,
+        rowCollectionOnRequestCompletion: false
     },
-    // Tedious driver specific options
+    // Tedious driver specific options - CRITICAL FOR TIMEOUT CONTROL
     driver: 'tedious',
     stream: false,
-    parseJSON: false
+    parseJSON: false,
+    // Override tedious connection timeout directly
+    connectionTimeout: parseInt(process.env.DB_CONNECTION_TIMEOUT) || 60000,
+    requestTimeout: parseInt(process.env.DB_REQUEST_TIMEOUT) || 60000,
+    // Additional tedious-specific timeout overrides
+    timeout: parseInt(process.env.DB_CONNECTION_TIMEOUT) || 60000
 };
