@@ -70,19 +70,20 @@ const MockAdService = {
 const TEST_INTERSTITIAL_ID = 'ca-app-pub-3940256099942544/1033173712';
 const TEST_REWARDED_ID = 'ca-app-pub-3940256099942544/5224354917';
 
+// Environment variable'lardan ID'leri oku, yoksa hardcoded değerleri kullan
 const INTERSTITIAL_AD_ID = __DEV__
   ? (TestIds?.INTERSTITIAL || TEST_INTERSTITIAL_ID) // Test ID veya fallback
-  : Platform.select({
+  : (process.env.EXPO_PUBLIC_ADMOB_INTERSTITIAL_ID || Platform.select({
       ios: 'ca-app-pub-1743455537598911/9106427653', // Gerçek iOS ID
       android: 'ca-app-pub-1743455537598911/4233374921' // Gerçek Android ID
-    });
+    }));
 
 const REWARDED_AD_ID = __DEV__
   ? (TestIds?.REWARDED || TEST_REWARDED_ID) // Test ID veya fallback
-  : Platform.select({
+  : (process.env.EXPO_PUBLIC_ADMOB_REWARDED_ID || Platform.select({
       ios: 'ca-app-pub-1743455537598911/9106427653', // Gerçek iOS ID - Aynı ID kullanılıyor
       android: 'ca-app-pub-1743455537598911/4233374921' // Gerçek Android ID - Aynı ID kullanılıyor
-    });
+    }));
 
 // Reklam instance'ları
 let interstitialAd = null;

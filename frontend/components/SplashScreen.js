@@ -142,7 +142,7 @@ const CustomSplashScreen = () => {
         console.log('SplashScreen: Authentication successful, redirecting to home');
         LaunchDiagnostics.logStage('AUTH_SUCCESS_REDIRECT');
         setTimeout(() => {
-          router.replace('/home');
+          router.replace('/(auth)/home');
         }, 1500);
       } else {
         console.log('SplashScreen: Authentication failed, redirecting to login');
