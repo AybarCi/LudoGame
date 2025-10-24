@@ -28,4 +28,5 @@ services:
 
 networks:
   web-network:
+    name: web-network
     driver: bridge

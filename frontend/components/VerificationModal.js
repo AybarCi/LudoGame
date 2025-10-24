@@ -93,6 +93,14 @@ const VerificationModal = ({ visible, onClose, onVerify, phoneNumber, timer, onR
     };
   }, [rateLimitInfo]);
 
+  // Modal açıldığında rate limit mesajını sadece bir kez göster
+  useEffect(() => {
+    if (visible && rateLimitInfo && rateLimitInfo.message) {
+      console.log('Rate limit info shown in modal:', rateLimitInfo.message);
+      // Burada Alert göstermiyoruz çünkü login.js zaten gösterdi
+    }
+  }, [visible, rateLimitInfo]);
+
   const handleVerify = async () => {
     if (code.length === 6 && !loading) {
       try {
@@ -225,8 +233,8 @@ const VerificationModal = ({ visible, onClose, onVerify, phoneNumber, timer, onR
 
           <View style={styles.actions}>
             {rateLimitInfo ? (
-              <Text style={[styles.timerText, { color: '#FF6B6B' }]}>
-                {rateLimitInfo.message} ({formatRateLimitTime(rateLimitInfo.retryAfter)})
+              <Text style={[styles.timerText, { color: '#FF6B6B', fontSize: 12 }]}>
+                Tekrar denemek için lütfen bekleyin
               </Text>
             ) : timer > 0 ? (
               <Text style={styles.timerText}>

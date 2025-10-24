@@ -23,9 +23,9 @@ entryPoints:
       tls:
         certResolver: letsencrypt
         domains:
-          - main: ludoturcoapi.istekbilisim.com
+          - main: api.your-domain.com
             sans:
-              - www.ludoturcoapi.istekbilisim.com
+              - www.api.your-domain.com
   
   traefik:
     address: ":8080"
@@ -33,7 +33,7 @@ entryPoints:
 certificatesResolvers:
   letsencrypt:
     acme:
-      email: cihan@istekbilisim.com
+      email: your-email@domain.com
       storage: acme.json
       keyType: EC256
       httpChallenge:
@@ -52,7 +52,7 @@ providers:
   docker:
     endpoint: unix:///var/run/docker.sock
     exposedByDefault: false
-    network: nginx-proxy-network
+    network: ludo-production-network
     watch: true
 
 # Middlewares

@@ -32,8 +32,66 @@ import { API_BASE_URL } from '../constants/game';
 
 const API_URL = API_BASE_URL;
 
+// Rate limit saklama anahtarları
+const RATE_LIMIT_STORAGE_KEY = 'rate_limit_info';
+const RATE_LIMIT_TIMESTAMP_KEY = 'rate_limit_timestamp';
+
 // Preload background image to prevent loading delay
 const logoImage = require('../assets/images/logo.png');
+
+// Rate limit bilgisini AsyncStorage'a kaydet
+const saveRateLimitToStorage = async (rateLimitInfo) => {
+  try {
+    if (rateLimitInfo) {
+      const data = {
+        ...rateLimitInfo,
+        timestamp: Date.now() // Mevcut zaman damgası
+      };
+      await AsyncStorage.setItem(RATE_LIMIT_STORAGE_KEY, JSON.stringify(data));
+      await AsyncStorage.setItem(RATE_LIMIT_TIMESTAMP_KEY, Date.now().toString());
+    } else {
+      await AsyncStorage.removeItem(RATE_LIMIT_STORAGE_KEY);
+      await AsyncStorage.removeItem(RATE_LIMIT_TIMESTAMP_KEY);
+    }
+  } catch (error) {
+    console.error('Rate limit bilgisi kaydedilemedi:', error);
+  }
+};
+
+// Rate limit bilgisini AsyncStorage'dan yükle
+const loadRateLimitFromStorage = async () => {
+  try {
+    const storedData = await AsyncStorage.getItem(RATE_LIMIT_STORAGE_KEY);
+    const storedTimestamp = await AsyncStorage.getItem(RATE_LIMIT_TIMESTAMP_KEY);
+    
+    if (!storedData || !storedTimestamp) {
+      return null;
+    }
+    
+    const rateLimitInfo = JSON.parse(storedData);
+    const timestamp = parseInt(storedTimestamp);
+    const now = Date.now();
+    const elapsedSeconds = Math.floor((now - timestamp) / 1000);
+    
+    // Kalan süreyi hesapla
+    const remainingSeconds = Math.max(0, rateLimitInfo.retryAfter - elapsedSeconds);
+    
+    if (remainingSeconds > 0) {
+      return {
+        ...rateLimitInfo,
+        retryAfter: remainingSeconds
+      };
+    } else {
+      // Süre dolmuş, temizle
+      await AsyncStorage.removeItem(RATE_LIMIT_STORAGE_KEY);
+      await AsyncStorage.removeItem(RATE_LIMIT_TIMESTAMP_KEY);
+      return null;
+    }
+  } catch (error) {
+    console.error('Rate limit bilgisi yüklenemedi:', error);
+    return null;
+  }
+};
 
 export default function LoginScreen() {
   console.log('=== LOGIN SCREEN MOUNTED ===');
@@ -63,14 +121,24 @@ export default function LoginScreen() {
   useEffect(() => {
     console.log('LoginScreen: Initial useEffect running');
     
-    // Component mount olduğunda state'leri sıfırla
+    // AsyncStorage'dan rate limit bilgisini yükle
+    const loadStoredRateLimit = async () => {
+      const storedRateLimit = await loadRateLimitFromStorage();
+      if (storedRateLimit) {
+        console.log('Stored rate limit loaded:', storedRateLimit);
+        setRateLimitInfo(storedRateLimit);
+      }
+    };
+    
+    loadStoredRateLimit();
+    
+    // Component mount olduğunda state'leri sıfırla (rate limit hariç)
     setPhoneNumberState('');
     setNickname('');
     setVerificationCode('');
     setShowNicknameScreen(false);
     setLoading(false);
     setShowVerificationModalLocal(false);
-    setRateLimitInfo(null);
     
     // Start animations immediately
     setTimeout(() => {
@@ -102,7 +170,7 @@ export default function LoginScreen() {
       setShowNicknameScreen(false);
       setLoading(false);
       setShowVerificationModalLocal(false);
-      setRateLimitInfo(null);
+      // Rate limit bilgisini temizleme - uygulama kapatılıp açıldığında devam etmesi için
     };
   }, []); // Boş dependency array - sadece mount/unmount'ta çalışır
 
@@ -125,10 +193,14 @@ export default function LoginScreen() {
       interval = setInterval(() => {
         setRateLimitInfo(prev => {
           if (prev && prev.retryAfter > 1) {
-            return { ...prev, retryAfter: prev.retryAfter - 1 };
+            const newInfo = { ...prev, retryAfter: prev.retryAfter - 1 };
+            // AsyncStorage'a kaydet
+            saveRateLimitToStorage(newInfo);
+            return newInfo;
           } else {
             console.log('Rate limit timer finished');
             // Süre doldu, rate limit bilgisini temizle
+            saveRateLimitToStorage(null);
             return null;
           }
         });
@@ -201,6 +273,7 @@ export default function LoginScreen() {
       if (sendVerificationCode.fulfilled.match(result)) {
         console.log('✅ SMS kodu başarıyla gönderildi');
         setRateLimitInfo(null); // Başarılı istekte rate limit bilgisini temizle
+        await saveRateLimitToStorage(null); // AsyncStorage'dan da temizle
         setShowVerificationModalLocal(true);
       } else if (sendVerificationCode.rejected.match(result)) {
         console.log('❌ SMS kodu gönderilemedi:', result.payload);
@@ -214,17 +287,21 @@ export default function LoginScreen() {
           
           // Sadece daha uzun bir süre geldiğinde veya yeni bir limit durumu oluştuğunda güncelle
           if (!rateLimitInfo || newRetryAfter > rateLimitInfo.retryAfter) {
-            setRateLimitInfo({
+            const rateLimitData = {
               type: 'sms',
               retryAfter: newRetryAfter,
               message: errorMessage
-            });
+            };
+            setRateLimitInfo(rateLimitData);
+            await saveRateLimitToStorage(rateLimitData); // AsyncStorage'a kaydet
           }
         }
         // Rate limiting hatası varsa sadece modalda göster, alert gösterme
         if (!errorMessage.includes('dakika')) {
           dispatch(showAlert({ message: errorMessage, type: 'error' }));
         }
+        // Rate limiting hatası zaten UI'da gösteriliyor, tekrar gösterme
+        // Bu sayede mesaj sadece bir kez (modalda) gösterilir
       }
     } catch (error) {
       console.log('🚨 Exception during SMS send:', error);
@@ -284,11 +361,13 @@ export default function LoginScreen() {
           
           // Sadece daha uzun bir süre geldiğinde veya yeni bir limit durumu oluştuğunda güncelle
           if (!rateLimitInfo || newRetryAfter > rateLimitInfo.retryAfter) {
-            setRateLimitInfo({
+            const rateLimitData = {
               type: 'verification',
               retryAfter: newRetryAfter,
               message: errorMessage
-            });
+            };
+            setRateLimitInfo(rateLimitData);
+            await saveRateLimitToStorage(rateLimitData); // AsyncStorage'a kaydet
           }
         }
         
