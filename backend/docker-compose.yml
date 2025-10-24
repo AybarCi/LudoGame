@@ -19,6 +19,8 @@ services:
       - DB_PORT=1433
       - DB_ENCRYPT=false
       - DB_TRUST_SERVER_CERTIFICATE=true
+      - DB_CONNECTION_TIMEOUT=60000
+      - DB_REQUEST_TIMEOUT=60000
       - JWT_SECRET=LudoTurco2024SecretKey!@#$%^&*()_+{}|:<>?[]\\;'\",./-=`~
       - REDIS_HOST=ludo-redis
       - REDIS_PORT=6379
@@ -33,6 +35,10 @@ services:
       - SMS_COOLDOWN_MS=60000
     volumes:
       - ./logs:/app/logs
+    networks:
+      - ludo-network
+    depends_on:
+      - redis
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
       interval: 30s
@@ -53,11 +59,17 @@ services:
       - "6379:6379"
     volumes:
       - redis-data:/data
+    networks:
+      - ludo-network
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 30s
       timeout: 10s
       retries: 3
+
+networks:
+  ludo-network:
+    driver: bridge
 
 volumes:
   redis-data:
