@@ -6,6 +6,18 @@ on:
     tags: [ 'v*' ]
   pull_request:
     branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      build_backend:
+        description: 'Build Backend'
+        required: false
+        default: true
+        type: boolean
+      build_web:
+        description: 'Build Web'
+        required: false
+        default: true
+        type: boolean
 
 env:
   REGISTRY: ghcr.io
@@ -16,6 +28,7 @@ jobs:
   build-backend:
     name: Build and Push Backend
     runs-on: ubuntu-latest
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.build_backend }}
     permissions:
       contents: read
       packages: write
@@ -147,6 +160,7 @@ jobs:
   build-web:
     name: Build and Push Web Frontend
     runs-on: ubuntu-latest
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.build_web }}
     permissions:
       contents: read
       packages: write
