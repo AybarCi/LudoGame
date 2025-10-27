@@ -1,0 +1,32 @@
+# Exclude heavy local artifacts from EAS upload
+
+# dependencies
+node_modules/
+
+# Expo caches
+.expo/
+.expo-shared/
+
+# Build outputs
+dist/
+web-build/
+build/
+
+# Android build outputs
+android/build/
+android/app/build/
+
+# iOS build outputs
+ios/build/
+ios/Pods/
+
+# Binary packages
+*.aab
+*.apk
+*.ipa
+
+# Logs and OS junk
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+.DS_Store

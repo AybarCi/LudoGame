@@ -45,4 +45,22 @@ app-example
 /ios
 
 # Android (for CNG/Prebuild compatibility)
-/android
+# /android - Commented out to allow gradlew and other build files to be included in EAS builds
+# Keep specific Android files that should be ignored
+android/build/
+android/.gradle/
+android/app/build/
+android/local.properties
+android/**/*.iml
+android/**/*.hprof
+android/.cxx/
+
+# But include gradlew and gradle wrapper
+!android/gradlew
+!android/gradlew.bat
+!android/gradle/wrapper/
+
+# Build artifacts
+*.aab
+*.apk
+*.ipa
