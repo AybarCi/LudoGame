@@ -5,11 +5,14 @@ services:
     image: ghcr.io/aybarci/ludogame/ludo-backend:latest
     container_name: ludo-backend
     restart: unless-stopped
+    user: root
     ports:
       - "3001:3001"
     environment:
       - NODE_ENV=production
       - PORT=3001
+      - BASE_URL=https://ludoturcoapi.istekbilisim.com
+      - LOG_TO_FILE=false
       - DB_SERVER=172.17.0.5
       - DB_DATABASE=LudoGameDB
       - DB_USER=sa
@@ -36,8 +39,9 @@ services:
       - SMS_HOURLY_LIMIT=100
       - SMS_COOLDOWN_MS=60000
       - PHONE_ENCRYPTION_KEY=Ka14+Xm07Z6Wm+ZaDfqyAN/gV/xGcIWG
-    volumes:
-      - ./logs:/app/logs
+    # Remove host bind mount to avoid permission issues on /app/logs
+    # Logs will be written inside the container and emitted to stdout
+    command: ["sh", "-c", "chmod -R 0777 /app/public /app/public/avatars /app/logs || true; node server.js"]
     networks:
       - ludo-network
     healthcheck:
