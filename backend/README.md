@@ -1,5 +1,9 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
+## CI Tetikleme Notu
+
+Bu satır, CI/CD workflow'unu tetiklemek amacıyla eklenmiştir. Kodda fonksiyonel bir değişiklik içermez.
+
 ## Getting Started
 
 First, run the development server:
