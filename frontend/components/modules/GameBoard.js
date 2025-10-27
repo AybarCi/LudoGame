@@ -306,6 +306,9 @@ const GameBoard = ({ pawns, onPawnPress, currentPlayer, diceValue, playersInfo, 
               // Takım piyonu kontrolü
               const isTeam = PawnService.isTeamPawn(finalSelectedPawn);
               const teamColors = isTeam ? PawnService.getTeamColors(finalSelectedPawn) : [];
+              // Marka piyonu kontrolü
+              const isBrand = PawnService.isBrandPawn(finalSelectedPawn);
+              const brandLogoType = isBrand ? PawnService.getBrandLogoType(finalSelectedPawn) : null;
               
               return (
                 <AnimatedPawn 
@@ -317,6 +320,8 @@ const GameBoard = ({ pawns, onPawnPress, currentPlayer, diceValue, playersInfo, 
                   moveSteps={moveSteps}
                   isTeam={isTeam}
                   teamColors={teamColors}
+                  isBrand={isBrand}
+                  brandLogoType={brandLogoType}
                 />
               );
             })}

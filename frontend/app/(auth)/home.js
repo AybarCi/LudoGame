@@ -6,8 +6,7 @@ import { useSelector, useDispatch } from 'react-redux';
 import { logout } from '../../store/slices/authSlice';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import * as ImagePicker from 'expo-image-picker';
-import * as FileSystem from 'expo-file-system';
+ 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import HomeButtons from '../../components/modules/HomeButtons';
 import RotatingStatsCard from '../../components/modules/RotatingStatsCard';
@@ -36,7 +35,7 @@ const HomeScreen = () => {
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const { energy, maxEnergy, loadEnergy, hasEnoughEnergy, useEnergy: useEnergyFunc, buyEnergy } = useEnergy();
   const [avatarUrl, setAvatarUrl] = useState(null);
-  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  
   const [currentNickname, setCurrentNickname] = useState(actualUser?.nickname || '');
   
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -263,105 +262,7 @@ const HomeScreen = () => {
     }
   };
 
-  const pickImage = async () => {
-    console.log('📷 pickImage fonksiyonu çağrıldı');
-    try {
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      console.log('📷 Galeri izni durumu:', status);
-      if (status !== 'granted') {
-        Alert.alert('İzin Gerekli', 'Fotoğraf yüklemek için galeri izni gerekiyor.');
-        return;
-      }
-      console.log('📷 Galeri izni verildi, ImagePicker başlatılıyor...');
-
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images'],
-        allowsEditing: true,
-        aspect: [1, 1],
-        quality: 0.5, // Reduced quality for smaller file size
-        base64: true,
-      });
-      
-      console.log('📷 ImagePicker sonucu:', result);
-
-      if (!result.canceled && result.assets[0].base64) {
-        // Check file size (base64 size roughly equals bytes)
-        const base64Size = result.assets[0].base64.length * 0.75; // Approximate byte size
-        const maxSize = 5 * 1024 * 1024; // 5MB limit
-        
-        if (base64Size > maxSize) {
-          Alert.alert('Hata', 'Fotoğraf çok büyük. Lütfen daha küçük bir fotoğraf seçin (max 5MB).');
-          return;
-        }
-        
-        await uploadAvatar(result.assets[0].base64);
-      }
-    } catch (error) {
-      console.error('Fotoğraf seçme hatası:', error);
-      Alert.alert('Hata', 'Fotoğraf seçilirken bir hata oluştu.');
-    }
-  };
-
-  const uploadAvatar = async (base64Image) => {
-    console.log('📸 Avatar yükleme başlatıldı - user kontrolü yapılıyor...');
-    if (!actualUser?.id) {
-      console.log('❌ Kullanıcı ID bulunamadı, actualUser:', actualUser);
-      Alert.alert('Hata', 'Kullanıcı oturumu bulunamadı. Lütfen tekrar giriş yapın.');
-      return;
-    }
-    console.log('✅ Kullanıcı ID bulundu:', actualUser.id);
-
-    setUploadingAvatar(true);
-    try {
-      // Get authentication token
-      const token = await AsyncStorage.getItem('accessToken');
-      if (!token) {
-        Alert.alert('Hata', 'Oturum açmanız gerekiyor. Lütfen tekrar giriş yapın.');
-        return;
-      }
-
-      console.log('Uploading avatar to:', `${API_BASE_URL}/api/avatar`);
-      const response = await fetch(`${API_BASE_URL}/api/avatar`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          userId: actualUser.id,
-          avatarUrl: `data:image/jpeg;base64,${base64Image}`,
-        }),
-      });
-
-      console.log('Upload response status:', response.status);
-      const data = await response.json();
-      console.log('Upload response data:', data);
-      
-      if (data.success) {
-        // Sunucudan gelen avatarUrl'yi kullan, yoksa base64 verisini kullan
-        if (data.avatarUrl) {
-          console.log('Sunucudan gelen avatar URL:', data.avatarUrl);
-          setAvatarUrl(data.avatarUrl);
-          // Avatar URL'sini AsyncStorage'a kaydet
-          await AsyncStorage.setItem('userAvatarUrl', data.avatarUrl);
-        } else {
-          console.log('Sunucu avatar URL döndürmedi, base64 verisini kullanıyorum');
-          setAvatarUrl(`data:image/jpeg;base64,${base64Image}`);
-          // Base64 verisini AsyncStorage'a kaydet
-          await AsyncStorage.setItem('userAvatarUrl', `data:image/jpeg;base64,${base64Image}`);
-        }
-        Alert.alert('Başarılı', 'Profil fotoğrafınız güncellendi.');
-      } else {
-        Alert.alert('Hata', data.message || 'Fotoğraf yüklenirken bir hata oluştu.');
-      }
-    } catch (error) {
-      console.error('Avatar yükleme hatası:', error);
-      console.error('Upload URL:', `${API_BASE_URL}/api/avatar`);
-      Alert.alert('Hata', 'Fotoğraf yüklenirken bir hata oluştu.');
-    } finally {
-      setUploadingAvatar(false);
-    }
-  };
+  
 
   if (!user) {
     return (
@@ -391,26 +292,18 @@ const HomeScreen = () => {
         ]}
       >
         <View style={styles.headerContainer}>
-          <TouchableOpacity 
+          <View 
             style={styles.avatarContainer}
-            onPress={pickImage}
-            activeOpacity={0.8}
-            disabled={uploadingAvatar}
           >
             <View style={styles.avatarCircle}>
-              {uploadingAvatar ? (
-                <ActivityIndicator size="large" color="#00D9CC" />
-              ) : avatarUrl ? (
+              {avatarUrl ? (
                 <Image source={{ uri: avatarUrl }} style={styles.avatarImage} />
               ) : (
                 <Ionicons name="person" size={40} color="#00D9CC" />
               )}
             </View>
             <View style={styles.avatarGlow} />
-            <View style={styles.avatarEditIcon}>
-              <Ionicons name="camera" size={16} color="white" />
-            </View>
-          </TouchableOpacity>
+          </View>
           <Text style={styles.welcomeText}>Hoş Geldin!</Text>
           <Text style={styles.nicknameText}>{currentNickname || 'Misafir'}</Text>
         </View>

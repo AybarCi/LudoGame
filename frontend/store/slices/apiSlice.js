@@ -576,7 +576,8 @@ const apiSlice = createSlice({
     // Select Pawn
     builder
       .addCase(selectPawn.fulfilled, (state, action) => {
-        state.selectedPawn = action.payload.selectedPawn;
+        // Prefer backend-provided selectedPawn, fallback to request arg (pawnId)
+        state.selectedPawn = action.payload?.selectedPawn ?? action.meta?.arg ?? state.selectedPawn;
       });
 
     // Fetch Selected Pawn

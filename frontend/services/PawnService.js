@@ -95,8 +95,21 @@ class PawnService {
         method: 'POST',
         body: JSON.stringify({ pawnId })
       });
-
-      return response.ok;
+      if (response.ok) {
+        // Try to read selected pawn from response; fallback to requested pawnId
+        let selected = pawnId;
+        try {
+          const data = await response.json();
+          if (data && typeof data.selectedPawn === 'string') {
+            selected = data.selectedPawn;
+          }
+        } catch (e) {
+          // Ignore body parse errors; use fallback
+        }
+        await AsyncStorage.setItem('selectedPawn', selected);
+        return true;
+      }
+      return false;
     } catch (error) {
       console.error('Error setting selected pawn:', error);
       return false;
@@ -105,6 +118,10 @@ class PawnService {
 
   // Piyon ID'sinden emoji'yi al
   static getPawnEmoji(pawnId) {
+    if (!pawnId) return '●';
+    // Dynamic category-based fallbacks
+    if (pawnId.startsWith('brand_')) return '🏷️';
+    if (pawnId.startsWith('vehicle_') || pawnId.startsWith('vehicles_')) return '🚗';
     const PAWN_EMOJIS = {
       'default': '●',
       'team_1': '⚽',
@@ -141,6 +158,35 @@ class PawnService {
     };
 
     return PAWN_EMOJIS[pawnId] || '●';
+  }
+
+  // Marka piyon mu?
+  static isBrandPawn(pawnId) {
+    if (!pawnId) return false;
+    const BRAND_TYPES = ['aura','vortex','stellar','nexus','phoenix','titan','merseles','avudi','bememe'];
+    return pawnId.startsWith('brand_') || BRAND_TYPES.includes(pawnId);
+  }
+
+  // Marka piyonunun logo tipini al
+  static getBrandLogoType(pawnId) {
+    if (!pawnId) return null;
+    const BRAND_TYPES = ['aura','vortex','stellar','nexus','phoenix','titan','merseles','avudi','bememe'];
+    if (BRAND_TYPES.includes(pawnId)) return pawnId; // alias olarak doğrudan logo tipi
+    if (pawnId.startsWith('brand_')) {
+      const brandLogoMap = {
+        'brand_1': 'aura',
+        'brand_2': 'vortex',
+        'brand_3': 'stellar',
+        'brand_4': 'nexus',
+        'brand_5': 'phoenix',
+        'brand_6': 'titan',
+        'brand_7': 'merseles',
+        'brand_8': 'avudi',
+        'brand_9': 'bememe'
+      };
+      return brandLogoMap[pawnId] || null;
+    }
+    return null;
   }
 
   // Takım piyonu renklerini al

@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import { View, StyleSheet, Alert, ActivityIndicator, ScrollView, TouchableOpacity, Image, Modal, TextInput } from 'react-native';
+import { View, StyleSheet, Alert, ActivityIndicator, ScrollView, TouchableOpacity, Image, Modal, TextInput, Linking } from 'react-native';
 import { Text, Button } from '@rneui/themed';
 import { useRouter } from 'expo-router';
 import { useSelector, useDispatch } from 'react-redux';
 import { logout, updateUserNickname } from '../../store/slices/authSlice';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import DeleteAccountModal from '../../components/DeleteAccountModal';
 import { API_BASE_URL } from '../../constants/game';
@@ -28,6 +29,7 @@ const ProfileScreen = () => {
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [avatarUrl, setAvatarUrl] = useState(null);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [userStats, setUserStats] = useState({
     gamesPlayed: 0,
     wins: 0,
@@ -107,6 +109,85 @@ const ProfileScreen = () => {
       } catch (error) {
         console.error('Avatar yükleme hatası:', error);
       }
+    }
+  };
+
+  const pickImage = async () => {
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('İzin Gerekli', 'Fotoğraf yüklemek için galeri izni gerekiyor.');
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.5,
+        base64: true,
+      });
+
+      if (!result.canceled && result.assets[0].base64) {
+        const base64Size = result.assets[0].base64.length * 0.75; // yaklaşık byte boyutu
+        const maxSize = 5 * 1024 * 1024; // 5MB limit
+        if (base64Size > maxSize) {
+          Alert.alert('Hata', 'Fotoğraf çok büyük. Lütfen daha küçük bir fotoğraf seçin (max 5MB).');
+          return;
+        }
+        await uploadAvatar(result.assets[0].base64);
+      }
+    } catch (error) {
+      console.error('Fotoğraf seçme hatası:', error);
+      Alert.alert('Hata', 'Fotoğraf seçilirken bir hata oluştu.');
+    }
+  };
+
+  const uploadAvatar = async (base64Image) => {
+    if (!actualUser?.id) {
+      Alert.alert('Hata', 'Kullanıcı oturumu bulunamadı. Lütfen tekrar giriş yapın.');
+      return;
+    }
+
+    setUploadingAvatar(true);
+    try {
+      const token = await AsyncStorage.getItem('accessToken');
+      if (!token) {
+        Alert.alert('Hata', 'Oturum açmanız gerekiyor. Lütfen tekrar giriş yapın.');
+        return;
+      }
+
+      const response = await fetch(`${API_BASE_URL}/api/avatar`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          userId: actualUser.id,
+          avatarUrl: `data:image/jpeg;base64,${base64Image}`,
+        }),
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        if (data.avatarUrl) {
+          setAvatarUrl(data.avatarUrl);
+          await AsyncStorage.setItem('userAvatarUrl', data.avatarUrl);
+        } else {
+          const inlineUrl = `data:image/jpeg;base64,${base64Image}`;
+          setAvatarUrl(inlineUrl);
+          await AsyncStorage.setItem('userAvatarUrl', inlineUrl);
+        }
+        Alert.alert('Başarılı', 'Profil fotoğrafınız güncellendi.');
+      } else {
+        Alert.alert('Hata', data.message || 'Fotoğraf yüklenirken bir hata oluştu.');
+      }
+    } catch (error) {
+      console.error('Avatar yükleme hatası:', error);
+      Alert.alert('Hata', 'Fotoğraf yüklenirken bir hata oluştu.');
+    } finally {
+      setUploadingAvatar(false);
     }
   };
 
@@ -283,6 +364,14 @@ const ProfileScreen = () => {
     setNewNickname('');
   };
 
+  const openPrivacy = () => {
+    Linking.openURL('https://ludoturco.com/privacy');
+  };
+
+  const openTerms = () => {
+    Linking.openURL('https://ludoturco.com/terms');
+  };
+
   if (!actualUser) {
     return (
       <LinearGradient colors={['#1a1a2e', '#16213e']} style={styles.container}>
@@ -308,16 +397,26 @@ const ProfileScreen = () => {
 
         {/* Avatar ve Kullanıcı Bilgileri */}
         <View style={styles.userInfoContainer}>
-          <View style={styles.avatarContainer}>
+          <TouchableOpacity 
+            style={styles.avatarContainer}
+            onPress={pickImage}
+            activeOpacity={0.8}
+            disabled={uploadingAvatar}
+          >
             <View style={styles.avatarCircle}>
-              {avatarUrl ? (
+              {uploadingAvatar ? (
+                <ActivityIndicator size="large" color="#00D9CC" />
+              ) : avatarUrl ? (
                 <Image source={{ uri: avatarUrl }} style={styles.avatarImage} />
               ) : (
                 <Ionicons name="person" size={40} color="#00D9CC" />
               )}
             </View>
             <View style={styles.avatarGlow} />
-          </View>
+            <View style={styles.avatarEditIcon}>
+              <Ionicons name="camera" size={16} color="white" />
+            </View>
+          </TouchableOpacity>
           
           <View style={styles.nicknameContainer}>
             <Text style={styles.nicknameText}>{currentNickname || 'Oyuncu'}</Text>
@@ -352,8 +451,29 @@ const ProfileScreen = () => {
           </View>
         </View>
 
-        {/* Ayarlar */}
+        {/* Yasal Bağlantılar */}
         <View style={styles.settingsContainer}>
+          <Text style={styles.sectionTitle}>Yasal</Text>
+
+          <TouchableOpacity style={styles.settingItem} onPress={openPrivacy}>
+            <View style={styles.settingIcon}>
+              <Ionicons name="shield-checkmark" size={20} color="#00D9CC" />
+            </View>
+            <Text style={styles.settingText}>Gizlilik Politikası</Text>
+            <Ionicons name="chevron-forward" size={20} color="#999" />
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.settingItem} onPress={openTerms}>
+            <View style={styles.settingIcon}>
+              <Ionicons name="document-text-outline" size={20} color="#00D9CC" />
+            </View>
+            <Text style={styles.settingText}>Kullanım Şartları</Text>
+            <Ionicons name="chevron-forward" size={20} color="#999" />
+          </TouchableOpacity>
+        </View>
+
+        {/* Ayarlar */}
+        <View style={[styles.settingsContainer, styles.legalContainer]}>
           <Text style={styles.sectionTitle}>Hesap Ayarları</Text>
           
           <TouchableOpacity style={styles.settingItem} onPress={handleLogout}>
@@ -506,6 +626,20 @@ const styles = StyleSheet.create({
     height: 94,
     borderRadius: 47,
   },
+  avatarEditIcon: {
+    position: 'absolute',
+    bottom: 8,
+    right: 8,
+    backgroundColor: '#00D9CC',
+    borderRadius: 12,
+    width: 24,
+    height: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: 'white',
+    zIndex: 3,
+  },
   nicknameText: {
     fontSize: 22,
     color: '#00D9CC',
@@ -557,6 +691,9 @@ const styles = StyleSheet.create({
     borderRadius: 15,
     padding: 20,
     marginHorizontal: 20,
+  },
+  legalContainer: {
+    marginTop: 20,
   },
   settingItem: {
     flexDirection: 'row',

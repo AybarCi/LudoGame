@@ -54,7 +54,6 @@ const PawnCollectionScreen = () => {
 
   const categories = [
     { key: 'teams', name: 'Takımlar', icon: '⚽' },
-    { key: 'brands', name: 'Marka', icon: '🏷️' },
     { key: 'emoji', name: 'Emoji', icon: '😊' },
     { key: 'animals', name: 'Hayvan', icon: '🐾' },
     { key: 'nature', name: 'Doğa', icon: '🌿' },
@@ -65,8 +64,6 @@ const PawnCollectionScreen = () => {
     switch (categoryKey) {
       case 'teams':
         return ids.filter(id => id.startsWith('team_'));
-      case 'brands':
-        return ids.filter(id => id.startsWith('brand_'));
       case 'emoji':
         return ids.filter(id => id.startsWith('emoji_'));
       case 'animals':
@@ -74,7 +71,7 @@ const PawnCollectionScreen = () => {
       case 'nature':
         return ids.filter(id => id.startsWith('nature_'));
       case 'vehicles':
-        return ids.filter(id => id.startsWith('vehicle_') || id.startsWith('vehicles_'));
+        return ids.filter(id => id.startsWith('vehicle_') || id.startsWith('vehicles_') || id.startsWith('brand_'));
       default:
         return [];
     }
@@ -206,6 +203,7 @@ const PawnCollectionScreen = () => {
     if (id.startsWith('animal_')) return '🐾';
     if (id.startsWith('nature_')) return '🌿';
     if (id.startsWith('vehicle_') || id.startsWith('vehicles_')) return '🚗';
+    if (id.startsWith('brand_')) return '🏷️';
     return '●';
   };
 

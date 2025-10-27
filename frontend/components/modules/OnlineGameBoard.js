@@ -347,6 +347,9 @@ const OnlineGameBoard = ({ players = [], gameState = {}, onPawnPress, currentPla
               // Takım piyonu kontrolü
               const isTeam = playerSelectedPawn ? PawnService.isTeamPawn(playerSelectedPawn) : false;
               const teamColors = isTeam ? PawnService.getTeamColors(playerSelectedPawn) : [];
+              // Marka piyonu kontrolü
+              const isBrand = playerSelectedPawn ? PawnService.isBrandPawn(playerSelectedPawn) : false;
+              const brandLogoType = isBrand ? PawnService.getBrandLogoType(playerSelectedPawn) : null;
               
               return (
                 <AnimatedPawn 
@@ -358,6 +361,8 @@ const OnlineGameBoard = ({ players = [], gameState = {}, onPawnPress, currentPla
                   moveSteps={moveSteps}
                   isTeam={isTeam}
                   teamColors={teamColors}
+                  isBrand={isBrand}
+                  brandLogoType={brandLogoType}
                 />
               );
             })}
