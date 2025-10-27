@@ -1,5 +1,7 @@
 // Environment variables yükleme
 require('dotenv').config();
+const path = require('path');
+const fs = require('fs');
 
 const express = require('express');
 const dbConfig = require('./db-config');
@@ -77,8 +79,19 @@ const ROOM_TIMEOUT = 20000; // 20 seconds
 const app = express();
 app.use(cors());
 
-// Serve static files (avatars)
-app.use('/avatars', express.static('/Users/cihanaybar/Projects/Ludo/backend/public/avatars'));
+// Serve static files (avatars) - use container-relative paths
+const PUBLIC_DIR = process.env.PUBLIC_DIR || path.join(process.cwd(), 'public');
+const AVATARS_DIR = path.join(PUBLIC_DIR, 'avatars');
+try {
+  if (!fs.existsSync(AVATARS_DIR)) {
+    fs.mkdirSync(AVATARS_DIR, { recursive: true });
+  }
+  // Attempt to make avatars dir world-writable if ownership blocks writes
+  try { fs.chmodSync(AVATARS_DIR, 0o777); } catch (_) {}
+} catch (e) {
+  console.warn(`[Startup] Avatar directory check failed: ${e.message}`);
+}
+app.use('/avatars', express.static(AVATARS_DIR));
 
 const server = http.createServer(app);
 const io = new Server(server, { 
@@ -1547,7 +1560,8 @@ app.post('/api/user/select-pawn', authenticateToken, async (req, res) => {
         console.log('[PAWN SELECT DEBUG] Pawn selection successful');
         res.json({ 
             success: true, 
-            message: 'Pawn selected successfully'
+            message: 'Pawn selected successfully',
+            selectedPawn: pawnId
         });
     } catch (error) {
         console.error('[PAWN SELECT DEBUG] Error selecting pawn:', error);
@@ -2828,13 +2842,21 @@ app.post('/api/avatar', async (req, res) => {
         const logMessage = `[${timestamp}] [AVATAR UPLOAD] İstek alındı - UserId: ${userId}, AvatarUrl uzunluğu: ${avatarUrl ? avatarUrl.length : 0}`;
         console.log(logMessage);
         
-        // Log dosyasına yaz
-        const fs = require('fs');
-        const logDir = './logs';
-        if (!fs.existsSync(logDir)){
-            fs.mkdirSync(logDir);
+        // Dosya loglama (izin hatalarında süreci bozmayacak şekilde)
+        // Varsayılan: false (sadece LOG_TO_FILE='true' ise dosyaya yaz)
+        const LOG_TO_FILE = process.env.LOG_TO_FILE === 'true';
+        const logDir = process.env.LOG_DIR || path.join(process.cwd(), 'logs');
+        if (LOG_TO_FILE) {
+            try {
+                if (!fs.existsSync(logDir)) {
+                    fs.mkdirSync(logDir, { recursive: true });
+                }
+                try { fs.chmodSync(logDir, 0o777); } catch (_) {}
+                fs.appendFileSync(path.join(logDir, 'avatar-uploads.log'), logMessage + '\n');
+            } catch (e) {
+                console.warn(`[AVATAR UPLOAD] Log dosyasına yazma hatası: ${e.message}. stdout ile devam ediliyor.`);
+            }
         }
-        fs.appendFileSync(`${logDir}/avatar-uploads.log`, logMessage + '\n');
         
         if (!avatarUrl) {
             console.log(`[AVATAR UPLOAD] Hata: Avatar URL eksik`);
@@ -2870,7 +2892,7 @@ app.post('/api/avatar', async (req, res) => {
         const extension = mimeType.split('/')[1]; // jpeg, png, etc.
         const fileName = `${userId}_${Date.now()}.${extension}`;
         const filePath = `/avatars/${fileName}`;
-        const fullPath = `/Users/cihanaybar/Projects/Ludo/backend/public${filePath}`;
+        const fullPath = path.join(AVATARS_DIR, fileName);
         
         // Base64 veriyi buffer'a çevir ve dosyaya yaz
         const imageBuffer = Buffer.from(base64Data, 'base64');
@@ -2886,7 +2908,7 @@ app.post('/api/avatar', async (req, res) => {
         if (success) {
             console.log(`[AVATAR UPLOAD] Başarılı - avatarUrl geri döndürülüyor`);
             // Return full URL including the base URL
-            const baseUrl = process.env.BASE_URL || 'http://192.168.14:3001';
+            const baseUrl = process.env.BASE_URL || 'http://localhost:3001';
             const fullAvatarUrl = `${baseUrl}${avatarFileUrl}`;
             res.json({ 
                 success: true, 
