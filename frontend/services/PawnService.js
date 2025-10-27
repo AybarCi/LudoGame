@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_BASE_URL } from '../constants/game';
+import { getEmojiForId } from './CategoryEmojiService';
 
 const API_URL = API_BASE_URL;
 
@@ -119,9 +120,7 @@ class PawnService {
   // Piyon ID'sinden emoji'yi al
   static getPawnEmoji(pawnId) {
     if (!pawnId) return '●';
-    // Dynamic category-based fallbacks
-    if (pawnId.startsWith('brand_')) return '🏷️';
-    if (pawnId.startsWith('vehicle_') || pawnId.startsWith('vehicles_')) return '🚗';
+    // Önce statik haritaya bak
     const PAWN_EMOJIS = {
       'default': '●',
       'team_1': '⚽',
@@ -156,8 +155,16 @@ class PawnService {
       'nature_5': '🔥',
       'nature_6': '❄️'
     };
+    if (PAWN_EMOJIS[pawnId]) return PAWN_EMOJIS[pawnId];
 
-    return PAWN_EMOJIS[pawnId] || '●';
+    // Otomatik üretilen kategori ID'leri için gerçek emojiyi hesapla
+    const computed = getEmojiForId(pawnId);
+    if (computed) return computed;
+
+    // Diğer kategori bazlı basit fallbacks (marka vb.)
+    if (pawnId.startsWith('brand_')) return '🏷️';
+    // Son çare
+    return '●';
   }
 
   // Marka piyon mu?

@@ -650,6 +650,23 @@ const authSlice = createSlice({
         AsyncStorage.setItem('user', JSON.stringify(state.user));
       }
     },
+    updateUserAvatar: (state, action) => {
+      if (state.user) {
+        // Avatar URL'sini güncelle
+        state.user = {
+          ...state.user,
+          avatarUrl: action.payload.avatarUrl
+        };
+        // Kullanıcıyı ve avatarı kalıcı hale getir
+        AsyncStorage.setItem('user', JSON.stringify(state.user));
+        const url = action.payload.avatarUrl;
+        if (typeof url === 'string' && url.length > 0) {
+          AsyncStorage.setItem('userAvatarUrl', url);
+        } else {
+          AsyncStorage.removeItem('userAvatarUrl');
+        }
+      }
+    },
   },
   extraReducers: (builder) => {
     builder
@@ -854,7 +871,8 @@ export const {
   clearError, 
   setUser,
   decrementTimer,
-  updateUserNickname 
+  updateUserNickname,
+  updateUserAvatar
 } = authSlice.actions;
 
 export default authSlice.reducer;

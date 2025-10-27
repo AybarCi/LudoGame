@@ -1,12 +1,14 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { View, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
 import { Text } from '@rneui/themed';
 import { Stack, useRouter } from 'expo-router';
 import { useSelector } from 'react-redux';
+import { useFocusEffect } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { PawnService } from '../../services/PawnService';
+import { getEmojiDisplayName } from '../../services/EmojiNameService';
 import Svg, { Circle, Path, Text as SvgText, Line } from 'react-native-svg';
 
 const PawnCollectionScreen = () => {
@@ -23,6 +25,21 @@ const PawnCollectionScreen = () => {
     loadOwnedPawns();
     loadSelectedPawn();
   }, []);
+
+  // Redux'taki ownedPawns güncellenince koleksiyon ekranını anında güncelle
+  useEffect(() => {
+    if (Array.isArray(reduxOwnedPawns) && reduxOwnedPawns.length > 0) {
+      setOwnedPawns(reduxOwnedPawns);
+    }
+  }, [reduxOwnedPawns]);
+
+  // Ekran odaklandığında (navigasyon ile buraya dönünce) tekrar yükle
+  useFocusEffect(
+    useCallback(() => {
+      loadOwnedPawns();
+      loadSelectedPawn();
+    }, [reduxOwnedPawns])
+  );
 
   const loadOwnedPawns = async () => {
     try {
@@ -67,7 +84,7 @@ const PawnCollectionScreen = () => {
       case 'emoji':
         return ids.filter(id => id.startsWith('emoji_'));
       case 'animals':
-        return ids.filter(id => id.startsWith('animal_'));
+        return ids.filter(id => id.startsWith('animal_') || id.startsWith('animals_'));
       case 'nature':
         return ids.filter(id => id.startsWith('nature_'));
       case 'vehicles':
@@ -200,7 +217,7 @@ const PawnCollectionScreen = () => {
     const known = PawnService.getPawnEmoji(id);
     if (known !== '●' || id === 'default') return known;
     if (id.startsWith('emoji_')) return '😊';
-    if (id.startsWith('animal_')) return '🐾';
+    if (id.startsWith('animal_') || id.startsWith('animals_')) return '🐾';
     if (id.startsWith('nature_')) return '🌿';
     if (id.startsWith('vehicle_') || id.startsWith('vehicles_')) return '🚗';
     if (id.startsWith('brand_')) return '🏷️';
@@ -210,17 +227,12 @@ const PawnCollectionScreen = () => {
   const formatName = (id) => {
     if (id === 'default') return 'Varsayılan';
     const [prefix, num] = id.split('_');
-    const map = {
-      team: 'Takım',
-      brand: 'Marka',
-      emoji: 'Emoji',
-      animal: 'Hayvan',
-      nature: 'Doğa',
-      vehicle: 'Araç',
-      vehicles: 'Araç',
-    };
-    const base = map[prefix] || prefix;
-    return `${base} ${num}`;
+    // Takım ve marka isimlerini mevcut düzende tut
+    if (prefix === 'team') return `Takım ${num}`;
+    if (prefix === 'brand') return `Marka ${num}`;
+    // Diğer kategorilerde (emoji, hayvan, doğa, araç) gerçek temsil adını göster
+    const emoji = PawnService.getPawnEmoji(id);
+    return getEmojiDisplayName(emoji);
   };
 
   const handleSelectPawn = async (pawnId) => {

@@ -23,6 +23,7 @@ import { showAlert } from '../../store/slices/alertSlice';
 import Svg, { Circle, Path, Text as SvgText, Line, Rect } from 'react-native-svg';
 import { API_BASE_URL } from '../../constants/game';
 import { fetchOwnedPawns } from '../../store/slices/apiSlice';
+import { getEmojiDisplayName } from '../../services/EmojiNameService';
 
 const API_URL = API_BASE_URL;
 
@@ -43,22 +44,16 @@ const generatePawnItems = (baseItems, categoryPrefix, count = 100) => {
   for (let i = items.length + 1; i <= count; i++) {
     const emojiIndex = (i - 1) % categoryEmojis.length;
     const priceVariation = Math.floor(Math.random() * 16) + 5; // 5-20 arası rastgele fiyat
-    const isMoneyItem = i % 10 === 0; // Her 10. item para ile satın alınabilir
-    
-    // Özel fiyatlandırma için kontrol
-    let itemPrice = isMoneyItem ? (Math.random() * 5 + 1).toFixed(2) : priceVariation;
-    let itemCurrency = isMoneyItem ? 'money' : 'diamonds';
-    
-    // Hayvan 11 ve Hayvan 28 için özel fiyat
-    if (categoryPrefix === 'animals' && (i === 11 || i === 28)) {
-      itemPrice = '5.00';
-      itemCurrency = 'money';
-    }
-    
+
+    // Tüm otomatik üretilen öğeler ELMAŞ ile satılır
+    const itemPrice = priceVariation;
+    const itemCurrency = 'diamonds';
+
+    const emojiChar = categoryEmojis[emojiIndex];
     items.push({
       id: `${categoryPrefix}_${i}`,
-      emoji: categoryEmojis[emojiIndex],
-      name: `${categoryPrefix === 'emoji' ? 'Emoji' : categoryPrefix === 'animals' ? 'Hayvan' : categoryPrefix === 'vehicles' ? 'Araç' : 'Doğa'} ${i}`,
+      emoji: emojiChar,
+      name: getEmojiDisplayName(emojiChar),
       price: itemPrice,
       currency: itemCurrency
     });
@@ -95,7 +90,7 @@ const PAWN_CATEGORIES = {
        { id: 'emoji_3', emoji: '🤩', name: 'Yıldız Gözlü', price: 12, currency: 'diamonds' },
        { id: 'emoji_4', emoji: '🥳', name: 'Parti', price: 15, currency: 'diamonds' },
        { id: 'emoji_5', emoji: '👑', name: 'Kral Tacı', price: 25, currency: 'diamonds' },
-       { id: 'emoji_6', emoji: '💎', name: 'Elmas', price: 2.99, currency: 'money' },
+      { id: 'emoji_6', emoji: '💎', name: 'Elmas', price: 30, currency: 'diamonds' },
        { id: 'emoji_7', emoji: '🚀', name: 'Roket', price: 30, currency: 'diamonds' }
      ], 'emoji', 100)
   },
@@ -107,8 +102,8 @@ const PAWN_CATEGORIES = {
        { id: 'animal_2', emoji: '🐶', name: 'Köpek', price: 6, currency: 'diamonds' },
        { id: 'animal_3', emoji: '🦁', name: 'Aslan', price: 18, currency: 'diamonds' },
        { id: 'animal_4', emoji: '🐯', name: 'Kaplan', price: 20, currency: 'diamonds' },
-       { id: 'animal_5', emoji: '🦄', name: 'Unicorn', price: 4.99, currency: 'money' },
-       { id: 'animal_6', emoji: '🐉', name: 'Ejder', price: 6.99, currency: 'money' }
+      { id: 'animal_5', emoji: '🦄', name: 'Unicorn', price: 50, currency: 'diamonds' },
+      { id: 'animal_6', emoji: '🐉', name: 'Ejder', price: 70, currency: 'diamonds' }
      ], 'animals', 100)
   },
   nature: {
@@ -119,8 +114,8 @@ const PAWN_CATEGORIES = {
        { id: 'nature_2', emoji: '🌺', name: 'Hibiskus', price: 5, currency: 'diamonds' },
        { id: 'nature_3', emoji: '🌟', name: 'Yıldız', price: 10, currency: 'diamonds' },
        { id: 'nature_4', emoji: '⚡', name: 'Şimşek', price: 12, currency: 'diamonds' },
-       { id: 'nature_5', emoji: '🔥', name: 'Ateş', price: 3.99, currency: 'money' },
-       { id: 'nature_6', emoji: '❄️', name: 'Kar Tanesi', price: 3.99, currency: 'money' }
+      { id: 'nature_5', emoji: '🔥', name: 'Ateş', price: 40, currency: 'diamonds' },
+      { id: 'nature_6', emoji: '❄️', name: 'Kar Tanesi', price: 40, currency: 'diamonds' }
      ], 'nature', 100)
   },
   vehicles: {
@@ -131,8 +126,8 @@ const PAWN_CATEGORIES = {
       { id: 'brand_2', emoji: '🏷️', name: 'Vortex Auto', price: 40, currency: 'diamonds', isBrand: true, logoType: 'vortex' },
       { id: 'brand_3', emoji: '🏷️', name: 'Stellar Cars', price: 45, currency: 'diamonds', isBrand: true, logoType: 'stellar' },
       { id: 'brand_4', emoji: '🏷️', name: 'Nexus Motors', price: 50, currency: 'diamonds', isBrand: true, logoType: 'nexus' },
-      { id: 'brand_5', emoji: '🏷️', name: 'Phoenix Auto', price: 12.99, currency: 'money', isBrand: true, logoType: 'phoenix' },
-      { id: 'brand_6', emoji: '🏷️', name: 'Titan Motors', price: 15.99, currency: 'money', isBrand: true, logoType: 'titan' },
+      { id: 'brand_5', emoji: '🏷️', name: 'Phoenix Auto', price: 130, currency: 'diamonds', isBrand: true, logoType: 'phoenix' },
+      { id: 'brand_6', emoji: '🏷️', name: 'Titan Motors', price: 160, currency: 'diamonds', isBrand: true, logoType: 'titan' },
       { id: 'brand_7', emoji: '🏷️', name: 'Merseles', price: 60, currency: 'diamonds', isBrand: true, logoType: 'merseles' },
       { id: 'brand_8', emoji: '🏷️', name: 'Avudi', price: 55, currency: 'diamonds', isBrand: true, logoType: 'avudi' },
       { id: 'brand_9', emoji: '🏷️', name: 'Bememe', price: 65, currency: 'diamonds', isBrand: true, logoType: 'bememe' },
@@ -140,8 +135,8 @@ const PAWN_CATEGORIES = {
       { id: 'vehicle_2', emoji: '🚕', name: 'Taksi', price: 10, currency: 'diamonds' },
       { id: 'vehicle_3', emoji: '🚌', name: 'Otobüs', price: 15, currency: 'diamonds' },
       { id: 'vehicle_4', emoji: '🏎️', name: 'Yarış Arabası', price: 25, currency: 'diamonds' },
-      { id: 'vehicle_5', emoji: '🚁', name: 'Helikopter', price: 7.99, currency: 'money' },
-      { id: 'vehicle_6', emoji: '✈️', name: 'Uçak', price: 9.99, currency: 'money' }
+      { id: 'vehicle_5', emoji: '🚁', name: 'Helikopter', price: 80, currency: 'diamonds' },
+      { id: 'vehicle_6', emoji: '✈️', name: 'Uçak', price: 100, currency: 'diamonds' }
     ], 'vehicles', 100)
   }
 };

@@ -21,7 +21,7 @@ try {
 // Web, simülatör ve emülatör kontrolü
 const isRealDevice = Platform.OS !== 'web' && Constants.isDevice === true;
 
-// Test modu kontrolü - TestFlight için özel durum
+// Test modu kontrolü: geliştirme veya simülatör/emülatör (gerçek cihaz değil)
 const isTestMode = __DEV__ || !Constants.isDevice;
 
 // AdMob başlatıldı
@@ -71,19 +71,28 @@ const TEST_INTERSTITIAL_ID = 'ca-app-pub-3940256099942544/1033173712';
 const TEST_REWARDED_ID = 'ca-app-pub-3940256099942544/5224354917';
 
 // Environment variable'lardan ID'leri oku, yoksa hardcoded değerleri kullan
-const INTERSTITIAL_AD_ID = __DEV__
+const envInterstitialId = process.env.EXPO_PUBLIC_ADMOB_INTERSTITIAL_ID;
+const envRewardedId = process.env.EXPO_PUBLIC_ADMOB_REWARDED_ID;
+
+let INTERSTITIAL_AD_ID = __DEV__
   ? (TestIds?.INTERSTITIAL || TEST_INTERSTITIAL_ID) // Test ID veya fallback
-  : (process.env.EXPO_PUBLIC_ADMOB_INTERSTITIAL_ID || Platform.select({
-      ios: 'ca-app-pub-1743455537598911/9106427653', // Gerçek iOS ID
-      android: 'ca-app-pub-1743455537598911/4233374921' // Gerçek Android ID
+  : (envInterstitialId || Platform.select({
+      ios: 'ca-app-pub-1743455537598911/4233374921', // iOS interstitial fallback
+      android: 'ca-app-pub-1743455537598911/4233374921' // Android interstitial fallback
     }));
 
-const REWARDED_AD_ID = __DEV__
+let REWARDED_AD_ID = __DEV__
   ? (TestIds?.REWARDED || TEST_REWARDED_ID) // Test ID veya fallback
-  : (process.env.EXPO_PUBLIC_ADMOB_REWARDED_ID || Platform.select({
-      ios: 'ca-app-pub-1743455537598911/9106427653', // Gerçek iOS ID - Aynı ID kullanılıyor
-      android: 'ca-app-pub-1743455537598911/4233374921' // Gerçek Android ID - Aynı ID kullanılıyor
+  : (envRewardedId || Platform.select({
+      ios: 'ca-app-pub-1743455537598911/9106427653', // iOS rewarded fallback
+      android: 'ca-app-pub-1743455537598911/9106427653' // Android rewarded fallback
     }));
+
+// Güvenlik: Yanlışlıkla aynı ID verilmişse ödüllü reklamı test ID'sine çevir
+if (!__DEV__ && envRewardedId && envInterstitialId && envRewardedId === envInterstitialId) {
+  console.warn('AdService: REWARDED_AD_ID and INTERSTITIAL_AD_ID are identical. Falling back to test rewarded ID.');
+  REWARDED_AD_ID = TEST_REWARDED_ID;
+}
 
 // Reklam instance'ları
 let interstitialAd = null;
@@ -117,12 +126,12 @@ class AdService {
       
       // Reklam instance'larını oluştur
       interstitialAd = InterstitialAd.createForAdRequest(INTERSTITIAL_AD_ID, {
-        requestNonPersonalizedAdsOnly: false,
+        requestNonPersonalizedAdsOnly: true,
         keywords: ['game', 'ludo', 'board game']
       });
       
       rewardedAd = RewardedAd.createForAdRequest(REWARDED_AD_ID, {
-        requestNonPersonalizedAdsOnly: false,
+        requestNonPersonalizedAdsOnly: true,
         keywords: ['game', 'ludo', 'board game']
       });
       
@@ -183,54 +192,77 @@ class AdService {
   static async showRewardedAd() {
     return new Promise(async (resolve, reject) => {
       try {
-        // Test modunda ise mock servis kullan
+        // Geliştirme veya web ortamında mock reklam kullan
         if (isTestMode) {
-          console.log('AdService: Test modu AÇIK - Mock reklam gösteriliyor');
-          
-          if (__DEV__) {
-            const result = await MockAdService.showMockRewardedAd();
-            resolve(result);
-          } else {
-            resolve({ userDidWatchAd: false });
-          }
+          console.log('AdService: Test/Simülatör ortamı - Mock rewarded reklam');
+          const result = await MockAdService.showMockRewardedAd();
+          resolve(result);
           return;
         }
-        
-        // Gerçek cihazda ama mobileAds yoksa hata ver
-        if (!mobileAds || !rewardedAd) {
-          console.log('AdService: Gerçek cihazda mobileAds yok!');
+
+        // SDK mevcut değilse veya gerçek cihaz değilse
+        if (!mobileAds || !isRealDevice) {
+          console.log('AdService: MobileAds yok veya gerçek cihaz değil');
           resolve({ userDidWatchAd: false });
           return;
         }
-        
+
+        // Her gösterim için taze RewardedAd instance oluştur
+        rewardedAd = RewardedAd.createForAdRequest(REWARDED_AD_ID, {
+          requestNonPersonalizedAdsOnly: true,
+          keywords: ['game', 'ludo', 'board game']
+        });
+
         let userDidWatchAd = false;
-        
-        // Reklam ödülü verildiğinde
+
+        // Ödül kazanıldığında
         const unsubscribeEarned = rewardedAd.addAdEventListener(RewardedAdEventType.EARNED_REWARD, (reward) => {
-          console.log('User was rewarded with:', reward);
+          console.log('RewardedAd: EARNED_REWARD', reward);
           userDidWatchAd = true;
         });
-        
-        // Reklam tamamlandığında
+
+        // Reklam yüklendiğinde göster
+        const unsubscribeLoaded = rewardedAd.addAdEventListener(AdEventType.LOADED, async () => {
+          console.log('RewardedAd: LOADED, showing');
+          try {
+            await rewardedAd.show();
+          } catch (showErr) {
+            console.error('RewardedAd show error:', showErr);
+          }
+        });
+
+        // Reklam kapandığında sonucu döndür
         const unsubscribeClosed = rewardedAd.addAdEventListener(AdEventType.CLOSED, () => {
-          console.log('Rewarded ad closed, user watched:', userDidWatchAd);
+          console.log('RewardedAd: CLOSED, watched =', userDidWatchAd);
           unsubscribeEarned();
+          unsubscribeLoaded();
           unsubscribeClosed();
           resolve({ userDidWatchAd });
         });
-        
-        // Reklam yüklenemediğinde
+
+        // Yükleme/gösterme hatası
         const unsubscribeError = rewardedAd.addAdEventListener(AdEventType.ERROR, (error) => {
-          console.error('Rewarded ad error:', error);
+          console.error('RewardedAd: ERROR', error);
           unsubscribeEarned();
+          unsubscribeLoaded();
           unsubscribeClosed();
           unsubscribeError();
           resolve({ userDidWatchAd: false });
         });
+
+        // Yüklemeyi tetikle
+        rewardedAd.load();
         
-        // Reklamı yükle ve göster
-        await rewardedAd.load();
-        await rewardedAd.show();
+        // Güvenli zaman aşımı: 12 sn içinde kapanmazsa başarısız say
+        setTimeout(() => {
+          try {
+            unsubscribeEarned();
+            unsubscribeLoaded();
+            unsubscribeClosed();
+            unsubscribeError();
+          } catch (_) {}
+          resolve({ userDidWatchAd: false });
+        }, 12000);
         
       } catch (error) {
         console.error('Failed to show rewarded ad:', error);

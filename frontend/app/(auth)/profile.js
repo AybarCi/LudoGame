@@ -3,7 +3,7 @@ import { View, StyleSheet, Alert, ActivityIndicator, ScrollView, TouchableOpacit
 import { Text, Button } from '@rneui/themed';
 import { useRouter } from 'expo-router';
 import { useSelector, useDispatch } from 'react-redux';
-import { logout, updateUserNickname } from '../../store/slices/authSlice';
+import { logout, updateUserNickname, updateUserAvatar } from '../../store/slices/authSlice';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
@@ -11,10 +11,56 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import DeleteAccountModal from '../../components/DeleteAccountModal';
 import { API_BASE_URL } from '../../constants/game';
 
-// Backend'den gelen maskelenmiş telefon numarasını doğrudan göster
-const maskPhoneNumber = (phoneNumber) => {
-  // Backend'den zaten maskelenmiş hâli geliyor, doğrudan göster
-  return phoneNumber || '';
+// Avatar URL normalize: yanlış base (örn. 10.22.233.37) geldiyse production base’e çevir
+const normalizeAvatarUrl = (url) => {
+  if (!url) return null;
+  try {
+    // Eğer /uploads ile başlıyorsa API_BASE_URL ile birleştir
+    if (url.startsWith('/uploads')) {
+      return `${API_BASE_URL}${url}`;
+    }
+    // Farklı bir origin içeriyorsa origin'i API_BASE_URL ile değiştir
+    const baseRegex = /^https?:\/\/[^/]+/;
+    const apiBase = API_BASE_URL.replace(/\/$/, '');
+    return url.replace(baseRegex, apiBase);
+  } catch (e) {
+    return url;
+  }
+};
+
+// Görsel cache'ini kırmak için yardımcı
+const withCacheBust = (url) => {
+  if (!url) return url;
+  try {
+    // Base64 inline görsel için cache-bust ekleme
+    if (url.startsWith('data:')) return url;
+    const sep = url.includes('?') ? '&' : '?';
+    return `${url}${sep}t=${Date.now()}`;
+  } catch (e) {
+    return url;
+  }
+};
+
+// Telefon gösterimi: backend maskeleri varsa öncelik ver, aksi halde güvenli maskele
+const getDisplayPhone = (user) => {
+  const maskedCandidates = [
+    user?.maskedPhone,
+    user?.obfuscatedPhone,
+    user?.phoneMasked,
+    user?.gsmMasked
+  ].filter(Boolean);
+  if (maskedCandidates.length > 0) return maskedCandidates[0];
+  const raw = user?.phoneNumber || user?.phone || user?.msisdn || '';
+  if (!raw) return '';
+  // Eğer içerik aşırı uzun ve sayı dışı karakter doluysa şifreli/metinsel kabul et ve gizle
+  const digits = raw.replace(/\D/g, '');
+  if (!digits) return '';
+  // Basit, güvenli maskeleme
+  if (digits.length >= 10 && digits.length <= 14) {
+    const last2 = digits.slice(-2);
+    return `+${digits.slice(0, 2)} *** ** ${last2}`;
+  }
+  return raw.length > 20 ? '' : raw;
 };
 
 const ProfileScreen = () => {
@@ -101,9 +147,11 @@ const ProfileScreen = () => {
         if (response.ok) {
           const data = await response.json();
           if (data.success && data.avatarUrl) {
-            setAvatarUrl(data.avatarUrl);
-            // Cache the avatar URL
-            await AsyncStorage.setItem('userAvatarUrl', data.avatarUrl);
+            const normalized = normalizeAvatarUrl(data.avatarUrl);
+            const busted = withCacheBust(normalized);
+            setAvatarUrl(busted);
+            // Cache'e cache-bust olmadan yaz (kalıcılık için)
+            await AsyncStorage.setItem('userAvatarUrl', normalized);
           }
         }
       } catch (error) {
@@ -172,12 +220,17 @@ const ProfileScreen = () => {
       const data = await response.json();
       if (data.success) {
         if (data.avatarUrl) {
-          setAvatarUrl(data.avatarUrl);
-          await AsyncStorage.setItem('userAvatarUrl', data.avatarUrl);
+          const normalized = normalizeAvatarUrl(data.avatarUrl);
+          const busted = withCacheBust(normalized);
+          setAvatarUrl(busted);
+          // Store ve cache'i güncelle
+          await AsyncStorage.setItem('userAvatarUrl', normalized);
+          dispatch(updateUserAvatar({ avatarUrl: normalized }));
         } else {
           const inlineUrl = `data:image/jpeg;base64,${base64Image}`;
           setAvatarUrl(inlineUrl);
           await AsyncStorage.setItem('userAvatarUrl', inlineUrl);
+          dispatch(updateUserAvatar({ avatarUrl: inlineUrl }));
         }
         Alert.alert('Başarılı', 'Profil fotoğrafınız güncellendi.');
       } else {
@@ -425,7 +478,7 @@ const ProfileScreen = () => {
             </TouchableOpacity>
           </View>
           <Text style={styles.phoneText}>
-            {actualUser.phoneNumber ? maskPhoneNumber(actualUser.phoneNumber) : ''}
+            {getDisplayPhone(actualUser)}
           </Text>
         </View>
 

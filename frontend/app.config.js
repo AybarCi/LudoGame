@@ -24,6 +24,7 @@ export default {
         NSPhotoLibraryUsageDescription: 'Fotoğraf galerisine erişim gerekiyor',
         NSPhotoLibraryAddUsageDescription: 'Fotoğraf kaydetmek için erişim gerekiyor',
         NSMicrophoneUsageDescription: 'Mikrofon erişimi gerekiyor',
+        NSUserTrackingUsageDescription: 'Reklamları kişiselleştirmek ve uygulama deneyimini iyileştirmek için izleme izni gerekiyor',
         // Network ve multiplayer için
         NSLocalNetworkUsageDescription: 'Oyun bağlantıları için yerel ağ erişimi gerekiyor',
         // Arkaplanda müzik/oyun sesleri için
@@ -48,7 +49,17 @@ export default {
         xxxhdpi: "./assets/images/splash-logos/logo-xxxhdpi.png"
       },
       edgeToEdgeEnabled: false, // Disable edge-to-edge for faster builds
-      package: "com.aybarc.ludoturco"
+      package: "com.aybarc.ludoturco",
+      // CAMERA iznini kaldırmak ve yalnızca gerekli izinleri talep etmek için
+      // Android izinlerini açıkça tanımlıyoruz.
+      permissions: [
+        "INTERNET",
+        "ACCESS_NETWORK_STATE",
+        // Android 13+ için medya okuma izni
+        "READ_MEDIA_IMAGES",
+        // Eski cihazlarla geriye uyumluluk (Android < 13)
+        "READ_EXTERNAL_STORAGE"
+      ]
     },
     web: {
       bundler: "metro",
@@ -80,6 +91,13 @@ export default {
             "flipper": false
           }
         }
+      ],
+      [
+        "react-native-google-mobile-ads",
+        {
+          "androidAppId": process.env.EXPO_PUBLIC_ADMOB_ANDROID_APP_ID || "ca-app-pub-1743455537598911~1127881197",
+          "iosAppId": process.env.EXPO_PUBLIC_ADMOB_IOS_APP_ID || "ca-app-pub-1743455537598911~5406887612"
+        }
       ]
     ],
     experiments: {
@@ -100,9 +118,5 @@ export default {
       }
     }
   },
-  // AdMob Configuration
-  "react-native-google-mobile-ads": {
-    "android_app_id": "ca-app-pub-1743455537598911~1127881197",
-    "ios_app_id": "ca-app-pub-1743455537598911~5406887612"
-  }
+  // Not: react-native-google-mobile-ads plugin'i yukarıda plugins içinde yapılandırıldı
 };

@@ -216,7 +216,9 @@ const HomeScreen = () => {
         const cachedAvatar = await AsyncStorage.getItem('userAvatarUrl');
         if (cachedAvatar) {
           console.log('Cache avatar bulundu, hemen gösteriliyor');
-          setAvatarUrl(cachedAvatar);
+          // Normalize cached avatar URL de (eski base hatalı olabilir)
+          const normalizedCached = normalizeAvatarUrl(cachedAvatar);
+          setAvatarUrl(normalizedCached);
         }
 
         // Get authentication token
@@ -239,10 +241,12 @@ const HomeScreen = () => {
         // API'dan gelen avatarUrl'yi kontrol et
         if (data.success) {
           if (data.avatarUrl) {
-            console.log('Avatar URL bulundu:', data.avatarUrl);
-            setAvatarUrl(data.avatarUrl);
-            // Güncel avatarı cache'e kaydet
-            await AsyncStorage.setItem('userAvatarUrl', data.avatarUrl);
+            const normalized = normalizeAvatarUrl(data.avatarUrl);
+            const busted = withCacheBust(normalized);
+            console.log('Avatar URL bulundu (normalized):', normalized);
+            setAvatarUrl(busted);
+            // Güncel avatarı cache'e (cache-bust olmadan) kaydet
+            await AsyncStorage.setItem('userAvatarUrl', normalized);
           } else {
             console.log('Avatar URL null, kullanıcının avatarı yok');
             // Avatar yoksa state'i temizle (varsayılan ikon gösterilecek)
@@ -261,6 +265,45 @@ const HomeScreen = () => {
       }
     }
   };
+
+  // Avatar URL normalize helper
+  const normalizeAvatarUrl = (url) => {
+    if (!url) return null;
+    try {
+      if (url.startsWith('/uploads')) {
+        return `${API_BASE_URL}${url}`;
+      }
+      const baseRegex = /^https?:\/\/[^/]+/;
+      const apiBase = API_BASE_URL.replace(/\/$/, '');
+      return url.replace(baseRegex, apiBase);
+    } catch (e) {
+      return url;
+    }
+  };
+
+  // Görsel cache'ini kırmak için yardımcı
+  const withCacheBust = (url) => {
+    if (!url) return url;
+    try {
+      if (url.startsWith('data:')) return url;
+      const sep = url.includes('?') ? '&' : '?';
+      return `${url}${sep}t=${Date.now()}`;
+    } catch (e) {
+      return url;
+    }
+  };
+
+  // Store'daki avatarUrl güncellenirse ekranda tazele ve cache'i senkronize et
+  useEffect(() => {
+    const nextAvatar = (actualUser?.avatarUrl) || (user?.avatarUrl) || (user?.user?.avatarUrl);
+    if (nextAvatar) {
+      const normalized = normalizeAvatarUrl(nextAvatar);
+      const busted = withCacheBust(normalized);
+      setAvatarUrl(busted);
+      // Cache'e normalized URL yaz (cache-bust olmadan)
+      AsyncStorage.setItem('userAvatarUrl', normalized);
+    }
+  }, [actualUser?.avatarUrl, user]);
 
   
 

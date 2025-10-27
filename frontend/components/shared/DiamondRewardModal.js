@@ -72,7 +72,7 @@ const DiamondRewardModal = ({ visible, onClose, rewardType = 'ad' }) => {
         
         Alert.alert(
           '🎉 Tebrikler!',
-          '2 elmas kazandınız!',
+          '1 elmas kazandınız!',
           [
             {
               text: 'Tamam',
@@ -159,7 +159,7 @@ const DiamondRewardModal = ({ visible, onClose, rewardType = 'ad' }) => {
       case 'ad':
         return {
           title: '💎 Elmas Kazan',
-          subtitle: 'Reklam izleyerek 2 elmas kazanın!',
+          subtitle: 'Reklam izleyerek 1 elmas kazanın!',
           buttonText: 'Reklam İzle',
           onPress: handleWatchAd,
         };
@@ -217,7 +217,7 @@ const DiamondRewardModal = ({ visible, onClose, rewardType = 'ad' }) => {
               ]}
             >
               <Ionicons name="diamond" size={40} color="#00D9CC" />
-              <Text style={styles.animationText}>+2</Text>
+              <Text style={styles.animationText}>+1</Text>
             </Animated.View>
 
             <View style={styles.currentDiamonds}>
