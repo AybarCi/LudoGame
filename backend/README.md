@@ -4,6 +4,8 @@ This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-
 
 Bu satır, CI/CD workflow'unu tetiklemek amacıyla eklenmiştir. Kodda fonksiyonel bir değişiklik içermez.
 
+Ek tetikleme: Avatar yükleme UI profil sayfasına taşındı.
+
 ## Getting Started
 
 First, run the development server:
