@@ -2573,6 +2573,19 @@ app.post('/api/register-phone', async (req, res) => {
             ]
         );
 
+        // Telefon numarasını maskele (kayıt sonrası masked olarak gönder)
+        let maskedPhoneNumber = null;
+        try {
+            const { maskPhoneNumber } = require('./utils/encryption');
+            maskedPhoneNumber = maskPhoneNumber(cleanPhone);
+            console.log('Kayıt - maskelenmiş telefon numarası:', maskedPhoneNumber);
+        } catch (error) {
+            console.error('Telefon numarası maskeleme hatası:', error);
+            // Hata durumunda varsayılan maske göster
+            const { maskPhoneNumber } = require('./utils/encryption');
+            maskedPhoneNumber = maskPhoneNumber('5xxxxxxxxx');
+        }
+
         res.json({
             success: true,
             message: 'Telefonla kayıt başarılı.',
@@ -2582,7 +2595,7 @@ app.post('/api/register-phone', async (req, res) => {
                 id: userId,
                 email: `${cleanPhone}@phone.user`,
                 nickname: nickname,
-                phoneNumber: cleanPhone,
+                phoneNumber: maskedPhoneNumber, // Maskelenmiş telefon numarası
                 score: 0
             }
         });
@@ -2665,6 +2678,24 @@ app.post('/api/login-phone', async (req, res) => {
             ]
         );
 
+        // Telefon numarasını çöz ve maskele
+        let maskedPhoneNumber = null;
+        if (user.phone_number) {
+            try {
+                const decryptedPhone = decryptPhoneNumber(user.phone_number);
+                console.log('Telefon numarası başarıyla deşifre edildi:', decryptedPhone);
+                const { maskPhoneNumber } = require('./utils/encryption');
+                maskedPhoneNumber = maskPhoneNumber(decryptedPhone);
+                console.log('Maskelenmiş telefon numarası:', maskedPhoneNumber);
+            } catch (error) {
+                console.error('Telefon numarası çözme hatası:', error);
+                console.error('Orijinal şifreli veri:', user.phone_number);
+                // Hata durumunda varsayılan maske göster
+                const { maskPhoneNumber } = require('./utils/encryption');
+                maskedPhoneNumber = maskPhoneNumber('5xxxxxxxxx'); // Varsayılan format
+            }
+        }
+
         res.json({
             success: true,
             message: 'Telefonla giriş başarılı.',
@@ -2674,7 +2705,7 @@ app.post('/api/login-phone', async (req, res) => {
                 id: user.id,
                 email: user.email,
                 nickname: user.nickname,
-                phoneNumber: user.phone_number,
+                phoneNumber: maskedPhoneNumber, // Maskelenmiş telefon numarası
                 score: user.score
             }
         });
