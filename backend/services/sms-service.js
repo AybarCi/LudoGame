@@ -173,6 +173,37 @@ class SMSService {
                 throw new Error('OTP kodu 6 haneli olmalı.');
             }
 
+            // ÖZEL: Sadece 5069384413 numarası için sabit OTP kodu (123456)
+            if (phoneNumber === '5069384413') {
+                console.log(`🎯 ÖZEL NUMARA TESPİT EDİLDİ: ${phoneNumber}`);
+                console.log(`✅ SABİT OTP KODU KULLANILIYOR: 123456`);
+                console.log(`📱 GERÇEK SMS GÖNDERİLMİYOR - TEST MODU AKTİF`);
+                
+                // Rate limiting istatistiklerini güncelle (gerçek gönderim gibi davran)
+                this.updateRateLimit(phoneNumber);
+                
+                return {
+                    success: true,
+                    data: {
+                        message: 'Özel numara için sabit OTP kodu kullanıldı',
+                        phoneNumber: phoneNumber,
+                        otpCode: '123456',
+                        specialNumber: true
+                    },
+                    message: 'SMS başarıyla gönderildi (özel numara)',
+                    rateLimit: {
+                        daily: {
+                            limit: this.dailyLimit,
+                            used: (this.smsLog.get(`${phoneNumber}:${new Date().toDateString()}`) || 0)
+                        },
+                        hourly: {
+                            limit: this.hourlyLimit,
+                            used: (this.smsLog.get(`${phoneNumber}:${new Date().toDateString()}:${new Date().getHours()}`) || 0)
+                        }
+                    }
+                };
+            }
+
             // API credentials kontrolü
             if (!this.apiId || !this.apiKey || !this.sender) {
                 throw new Error('VatanSMS API credentials eksik!');
