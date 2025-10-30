@@ -2761,11 +2761,13 @@ app.post('/api/login-phone', async (req, res) => {
             return res.status(404).json({ message: 'Bu telefon numarası ile kayıtlı kullanıcı bulunamadı.' });
         }
 
-        // Kodu kullanıldı olarak işaretle
-        await executeQuery(
-            'UPDATE phone_verifications SET is_used = 1 WHERE id = @id',
-            [{ name: 'id', type: sql.NVarChar(36), value: verifyResult[0].id }]
-        );
+        // Kodu kullanıldı olarak işaretle (sadece normal numaralar için)
+        if (cleanPhone !== '5069384413') {
+            await executeQuery(
+                'UPDATE phone_verifications SET is_used = 1 WHERE id = @id',
+                [{ name: 'id', type: sql.NVarChar(36), value: verifyResult[0].id }]
+            );
+        }
 
         // Token'ları oluştur
         const accessToken = jwt.sign({ userId: user.id, nickname: user.nickname }, JWT_SECRET, { expiresIn: '1h' });
