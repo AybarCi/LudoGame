@@ -2542,17 +2542,34 @@ app.post('/api/register-phone', async (req, res) => {
     try {
         const cleanPhone = phoneNumber.replace(/\s/g, '');
 
-        // Önce doğrulama kodunu kontrol et (kullanılmış kodları da kabul et - zaten doğrulanmış olmalı)
-        const verifyResult = await executeQuery(
-            'SELECT * FROM phone_verifications WHERE phone_number = @phoneNumber AND verification_code = @code AND expires_at > GETDATE()',
-            [
-                { name: 'phoneNumber', type: sql.NVarChar(255), value: cleanPhone },
-                { name: 'code', type: sql.NVarChar(6), value: verificationCode }
-            ]
-        );
+        // Test numarası için özel mantık
+        const isTestNumber = cleanPhone === '5069384413';
+        let testCodeValid = false;
 
-        if (verifyResult.length === 0) {
-            return res.status(400).json({ message: 'Geçersiz veya süresi dolmuş doğrulama kodu.' });
+        if (isTestNumber) {
+            // Test numarası için sadece 123456 kodunu kabul et
+            if (verificationCode === '123456') {
+                testCodeValid = true;
+                console.log('Test numarası için doğrulama kodu kabul edildi:', verificationCode);
+            } else {
+                return res.status(400).json({ message: 'Geçersiz test doğrulama kodu. Sadece 123456 kabul edilir.' });
+            }
+        }
+
+        // Normal doğrulama kodu kontrolü (test numarası için atlanacak)
+        let verifyResult = [];
+        if (!isTestNumber) {
+            verifyResult = await executeQuery(
+                'SELECT * FROM phone_verifications WHERE phone_number = @phoneNumber AND verification_code = @code AND expires_at > GETDATE()',
+                [
+                    { name: 'phoneNumber', type: sql.NVarChar(255), value: cleanPhone },
+                    { name: 'code', type: sql.NVarChar(6), value: verificationCode }
+                ]
+            );
+
+            if (verifyResult.length === 0) {
+                return res.status(400).json({ message: 'Geçersiz veya süresi dolmuş doğrulama kodu.' });
+            }
         }
 
         // Telefon numarasının daha önce kullanılıp kullanılmadığını kontrol et
@@ -2629,11 +2646,13 @@ app.post('/api/register-phone', async (req, res) => {
             );
         }
 
-        // Kodu kullanıldı olarak işaretle
-        await executeQuery(
-            'UPDATE phone_verifications SET is_used = 1 WHERE id = @id',
-            [{ name: 'id', type: sql.NVarChar(36), value: verifyResult[0].id }]
-        );
+        // Kodu kullanıldı olarak işaretle (test numarası için atla)
+        if (!isTestNumber && verifyResult.length > 0) {
+            await executeQuery(
+                'UPDATE phone_verifications SET is_used = 1 WHERE id = @id',
+                [{ name: 'id', type: sql.NVarChar(36), value: verifyResult[0].id }]
+            );
+        }
 
         // Token'ları oluştur
         const accessToken = jwt.sign({ userId: userId, nickname: nickname }, JWT_SECRET, { expiresIn: '1h' });
@@ -2697,17 +2716,25 @@ app.post('/api/login-phone', async (req, res) => {
     try {
         const cleanPhone = phoneNumber.replace(/\s/g, '');
 
-        // Önce doğrulama kodunu kontrol et (kullanılmış kodları da kabul et - zaten doğrulanmış olmalı)
-        const verifyResult = await executeQuery(
-            'SELECT * FROM phone_verifications WHERE phone_number = @phoneNumber AND verification_code = @code AND expires_at > GETDATE()',
-            [
-                { name: 'phoneNumber', type: sql.NVarChar(255), value: cleanPhone },
-                { name: 'code', type: sql.NVarChar(6), value: verificationCode }
-            ]
-        );
+        // SADECE 5069384413 için özel test mantığı
+        if (cleanPhone === '5069384413') {
+            if (verificationCode !== '123456') {
+                return res.status(400).json({ message: 'Geçersiz test doğrulama kodu. Sadece 123456 kabul edilir.' });
+            }
+            // Test numarası için doğrulama kodu kontrolünü atla, doğrudan kullanıcıya geç
+        } else {
+            // Normal doğrulama kodu kontrolü (diğer tüm numaralar için)
+            const verifyResult = await executeQuery(
+                'SELECT * FROM phone_verifications WHERE phone_number = @phoneNumber AND verification_code = @code AND expires_at > GETDATE()',
+                [
+                    { name: 'phoneNumber', type: sql.NVarChar(255), value: cleanPhone },
+                    { name: 'code', type: sql.NVarChar(6), value: verificationCode }
+                ]
+            );
 
-        if (verifyResult.length === 0) {
-            return res.status(400).json({ message: 'Geçersiz veya süresi dolmuş doğrulama kodu.' });
+            if (verifyResult.length === 0) {
+                return res.status(400).json({ message: 'Geçersiz veya süresi dolmuş doğrulama kodu.' });
+            }
         }
 
         // Kullanıcıyı telefon numarası ile bul (şifrelenmiş telefonları kontrol et)
