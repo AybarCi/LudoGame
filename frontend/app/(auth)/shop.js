@@ -67,76 +67,76 @@ const PAWN_CATEGORIES = {
       name: 'Takımlar',
       icon: '⚽',
     items: [
-      { id: 'team_1', name: 'Takım 1', price: 45, currency: 'diamonds', isTeam: true, colors: ['#000000', '#FFFFFF'] },
-      { id: 'team_2', name: 'Takım 2', price: 45, currency: 'diamonds', isTeam: true, colors: ['#FFD700', '#FF0000'] },
-      { id: 'team_3', name: 'Takım 3', price: 45, currency: 'diamonds', isTeam: true, colors: ['#FFFF00', '#000080'] },
-      { id: 'team_4', name: 'Takım 4', price: 40, currency: 'diamonds', isTeam: true, colors: ['#800080', '#87CEEB'] },
-      { id: 'team_5', name: 'Takım 5', price: 35, currency: 'diamonds', isTeam: true, colors: ['#FF4500', '#000080'] },
-      { id: 'team_6', name: 'Takım 6', price: 30, currency: 'diamonds', isTeam: true, colors: ['#FF4500', '#008000'] },
-      { id: 'team_7', name: 'Takım 7', price: 30, currency: 'diamonds', isTeam: true, colors: ['#FF0000', '#FFFFFF'] },
-      { id: 'team_8', name: 'Takım 8', price: 25, currency: 'diamonds', isTeam: true, colors: ['#008000', '#FFFFFF'] },
-      { id: 'team_9', name: 'Takım 9', price: 25, currency: 'diamonds', isTeam: true, colors: ['#FF0000', '#FFFFFF'] },
-      { id: 'team_10', name: 'Takım 10', price: 25, currency: 'diamonds', isTeam: true, colors: ['#FF0000', '#FFD700'] },
-      { id: 'team_11', name: 'Takım 11', price: 20, currency: 'diamonds', isTeam: true, colors: ['#0000FF', '#008000'] },
-      { id: 'team_12', name: 'Takım 12', price: 20, currency: 'diamonds', isTeam: true, colors: ['#FF0000', '#000000'] }
+      { id: 'team_1', name: 'Takım 1', price: 135, currency: 'diamonds', isTeam: true, colors: ['#000000', '#FFFFFF'] },
+      { id: 'team_2', name: 'Takım 2', price: 135, currency: 'diamonds', isTeam: true, colors: ['#FFD700', '#FF0000'] },
+      { id: 'team_3', name: 'Takım 3', price: 135, currency: 'diamonds', isTeam: true, colors: ['#FFFF00', '#000080'] },
+      { id: 'team_4', name: 'Takım 4', price: 120, currency: 'diamonds', isTeam: true, colors: ['#800080', '#87CEEB'] },
+      { id: 'team_5', name: 'Takım 5', price: 105, currency: 'diamonds', isTeam: true, colors: ['#FF4500', '#000080'] },
+      { id: 'team_6', name: 'Takım 6', price: 90, currency: 'diamonds', isTeam: true, colors: ['#FF4500', '#008000'] },
+      { id: 'team_7', name: 'Takım 7', price: 90, currency: 'diamonds', isTeam: true, colors: ['#FF0000', '#FFFFFF'] },
+      { id: 'team_8', name: 'Takım 8', price: 75, currency: 'diamonds', isTeam: true, colors: ['#008000', '#FFFFFF'] },
+      { id: 'team_9', name: 'Takım 9', price: 75, currency: 'diamonds', isTeam: true, colors: ['#FF0000', '#FFFFFF'] },
+      { id: 'team_10', name: 'Takım 10', price: 75, currency: 'diamonds', isTeam: true, colors: ['#FF0000', '#FFD700'] },
+      { id: 'team_11', name: 'Takım 11', price: 60, currency: 'diamonds', isTeam: true, colors: ['#0000FF', '#008000'] },
+      { id: 'team_12', name: 'Takım 12', price: 60, currency: 'diamonds', isTeam: true, colors: ['#FF0000', '#000000'] }
     ]
   },
   emoji: {
     name: 'Emoji',
     icon: '😊',
     items: generatePawnItems([
-       { id: 'emoji_1', emoji: '😀', name: 'Mutlu Yüz', price: 5, currency: 'diamonds' },
-       { id: 'emoji_2', emoji: '😎', name: 'Havalı', price: 8, currency: 'diamonds' },
-       { id: 'emoji_3', emoji: '🤩', name: 'Yıldız Gözlü', price: 12, currency: 'diamonds' },
-       { id: 'emoji_4', emoji: '🥳', name: 'Parti', price: 15, currency: 'diamonds' },
-       { id: 'emoji_5', emoji: '👑', name: 'Kral Tacı', price: 25, currency: 'diamonds' },
-      { id: 'emoji_6', emoji: '💎', name: 'Elmas', price: 30, currency: 'diamonds' },
-       { id: 'emoji_7', emoji: '🚀', name: 'Roket', price: 30, currency: 'diamonds' }
+       { id: 'emoji_1', emoji: '😀', name: 'Mutlu Yüz', price: 15, currency: 'diamonds' },
+       { id: 'emoji_2', emoji: '😎', name: 'Havalı', price: 24, currency: 'diamonds' },
+       { id: 'emoji_3', emoji: '🤩', name: 'Yıldız Gözlü', price: 36, currency: 'diamonds' },
+       { id: 'emoji_4', emoji: '🥳', name: 'Parti', price: 45, currency: 'diamonds' },
+       { id: 'emoji_5', emoji: '👑', name: 'Kral Tacı', price: 75, currency: 'diamonds' },
+      { id: 'emoji_6', emoji: '💎', name: 'Elmas', price: 90, currency: 'diamonds' },
+       { id: 'emoji_7', emoji: '🚀', name: 'Roket', price: 90, currency: 'diamonds' }
      ], 'emoji', 100)
   },
   animals: {
     name: 'Hayvan',
     icon: '🐾',
     items: generatePawnItems([
-       { id: 'animal_1', emoji: '🐱', name: 'Kedi', price: 6, currency: 'diamonds' },
-       { id: 'animal_2', emoji: '🐶', name: 'Köpek', price: 6, currency: 'diamonds' },
-       { id: 'animal_3', emoji: '🦁', name: 'Aslan', price: 18, currency: 'diamonds' },
-       { id: 'animal_4', emoji: '🐯', name: 'Kaplan', price: 20, currency: 'diamonds' },
-      { id: 'animal_5', emoji: '🦄', name: 'Unicorn', price: 50, currency: 'diamonds' },
-      { id: 'animal_6', emoji: '🐉', name: 'Ejder', price: 70, currency: 'diamonds' }
+       { id: 'animal_1', emoji: '🐱', name: 'Kedi', price: 18, currency: 'diamonds' },
+       { id: 'animal_2', emoji: '🐶', name: 'Köpek', price: 18, currency: 'diamonds' },
+       { id: 'animal_3', emoji: '🦁', name: 'Aslan', price: 54, currency: 'diamonds' },
+       { id: 'animal_4', emoji: '🐯', name: 'Kaplan', price: 60, currency: 'diamonds' },
+      { id: 'animal_5', emoji: '🦄', name: 'Unicorn', price: 150, currency: 'diamonds' },
+      { id: 'animal_6', emoji: '🐉', name: 'Ejder', price: 210, currency: 'diamonds' }
      ], 'animals', 100)
   },
   nature: {
     name: 'Doğa',
     icon: '🌿',
     items: generatePawnItems([
-       { id: 'nature_1', emoji: '🌸', name: 'Kiraz Çiçeği', price: 5, currency: 'diamonds' },
-       { id: 'nature_2', emoji: '🌺', name: 'Hibiskus', price: 5, currency: 'diamonds' },
-       { id: 'nature_3', emoji: '🌟', name: 'Yıldız', price: 10, currency: 'diamonds' },
-       { id: 'nature_4', emoji: '⚡', name: 'Şimşek', price: 12, currency: 'diamonds' },
-      { id: 'nature_5', emoji: '🔥', name: 'Ateş', price: 40, currency: 'diamonds' },
-      { id: 'nature_6', emoji: '❄️', name: 'Kar Tanesi', price: 40, currency: 'diamonds' }
+       { id: 'nature_1', emoji: '🌸', name: 'Kiraz Çiçeği', price: 15, currency: 'diamonds' },
+       { id: 'nature_2', emoji: '🌺', name: 'Hibiskus', price: 15, currency: 'diamonds' },
+       { id: 'nature_3', emoji: '🌟', name: 'Yıldız', price: 30, currency: 'diamonds' },
+       { id: 'nature_4', emoji: '⚡', name: 'Şimşek', price: 36, currency: 'diamonds' },
+      { id: 'nature_5', emoji: '🔥', name: 'Ateş', price: 120, currency: 'diamonds' },
+      { id: 'nature_6', emoji: '❄️', name: 'Kar Tanesi', price: 120, currency: 'diamonds' }
      ], 'nature', 100)
   },
   vehicles: {
     name: 'Araç',
     icon: '🚗',
     items: generatePawnItems([
-      { id: 'brand_1', emoji: '🏷️', name: 'Aura Motors', price: 35, currency: 'diamonds', isBrand: true, logoType: 'aura' },
-      { id: 'brand_2', emoji: '🏷️', name: 'Vortex Auto', price: 40, currency: 'diamonds', isBrand: true, logoType: 'vortex' },
-      { id: 'brand_3', emoji: '🏷️', name: 'Stellar Cars', price: 45, currency: 'diamonds', isBrand: true, logoType: 'stellar' },
-      { id: 'brand_4', emoji: '🏷️', name: 'Nexus Motors', price: 50, currency: 'diamonds', isBrand: true, logoType: 'nexus' },
-      { id: 'brand_5', emoji: '🏷️', name: 'Phoenix Auto', price: 130, currency: 'diamonds', isBrand: true, logoType: 'phoenix' },
-      { id: 'brand_6', emoji: '🏷️', name: 'Titan Motors', price: 160, currency: 'diamonds', isBrand: true, logoType: 'titan' },
-      { id: 'brand_7', emoji: '🏷️', name: 'Merseles', price: 60, currency: 'diamonds', isBrand: true, logoType: 'merseles' },
-      { id: 'brand_8', emoji: '🏷️', name: 'Avudi', price: 55, currency: 'diamonds', isBrand: true, logoType: 'avudi' },
-      { id: 'brand_9', emoji: '🏷️', name: 'Bememe', price: 65, currency: 'diamonds', isBrand: true, logoType: 'bememe' },
-      { id: 'vehicle_1', emoji: '🚗', name: 'Araba', price: 8, currency: 'diamonds' },
-      { id: 'vehicle_2', emoji: '🚕', name: 'Taksi', price: 10, currency: 'diamonds' },
-      { id: 'vehicle_3', emoji: '🚌', name: 'Otobüs', price: 15, currency: 'diamonds' },
-      { id: 'vehicle_4', emoji: '🏎️', name: 'Yarış Arabası', price: 25, currency: 'diamonds' },
-      { id: 'vehicle_5', emoji: '🚁', name: 'Helikopter', price: 80, currency: 'diamonds' },
-      { id: 'vehicle_6', emoji: '✈️', name: 'Uçak', price: 100, currency: 'diamonds' }
+      { id: 'brand_1', emoji: '🏷️', name: 'Aura Motors', price: 105, currency: 'diamonds', isBrand: true, logoType: 'aura' },
+      { id: 'brand_2', emoji: '🏷️', name: 'Vortex Auto', price: 120, currency: 'diamonds', isBrand: true, logoType: 'vortex' },
+      { id: 'brand_3', emoji: '🏷️', name: 'Stellar Cars', price: 135, currency: 'diamonds', isBrand: true, logoType: 'stellar' },
+      { id: 'brand_4', emoji: '🏷️', name: 'Nexus Motors', price: 150, currency: 'diamonds', isBrand: true, logoType: 'nexus' },
+      { id: 'brand_5', emoji: '🏷️', name: 'Phoenix Auto', price: 390, currency: 'diamonds', isBrand: true, logoType: 'phoenix' },
+      { id: 'brand_6', emoji: '🏷️', name: 'Titan Motors', price: 480, currency: 'diamonds', isBrand: true, logoType: 'titan' },
+      { id: 'brand_7', emoji: '🏷️', name: 'Merseles', price: 180, currency: 'diamonds', isBrand: true, logoType: 'merseles' },
+      { id: 'brand_8', emoji: '🏷️', name: 'Avudi', price: 165, currency: 'diamonds', isBrand: true, logoType: 'avudi' },
+      { id: 'brand_9', emoji: '🏷️', name: 'Bememe', price: 195, currency: 'diamonds', isBrand: true, logoType: 'bememe' },
+      { id: 'vehicle_1', emoji: '🚗', name: 'Araba', price: 24, currency: 'diamonds' },
+      { id: 'vehicle_2', emoji: '🚕', name: 'Taksi', price: 30, currency: 'diamonds' },
+      { id: 'vehicle_3', emoji: '🚌', name: 'Otobüs', price: 45, currency: 'diamonds' },
+      { id: 'vehicle_4', emoji: '🏎️', name: 'Yarış Arabası', price: 75, currency: 'diamonds' },
+      { id: 'vehicle_5', emoji: '🚁', name: 'Helikopter', price: 240, currency: 'diamonds' },
+      { id: 'vehicle_6', emoji: '✈️', name: 'Uçak', price: 300, currency: 'diamonds' }
     ], 'vehicles', 100)
   }
 };

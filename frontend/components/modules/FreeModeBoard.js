@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, Text, Dimensions } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, StyleSheet, Text, Dimensions, PanResponder } from 'react-native';
 
 const { width: screenWidth } = Dimensions.get('window');
 const isTablet = screenWidth >= 768; // Tablet için minimum genişlik
@@ -165,6 +165,18 @@ const FreeameBoard = ({ pawns, onPawnPress, currentPlayer, diceValue, playersInf
   const [movingPawns, setMovingPawns] = useState(new Set());
   const [lastPawns, setLastPawns] = useState([]);
   const [selectedPawnId, setSelectedPawnId] = useState('default');
+  
+  // Tüm gesture'ları engellemek için PanResponder
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => false,
+      onMoveShouldSetPanResponder: () => false,
+      onPanResponderGrant: () => false,
+      onPanResponderMove: () => false,
+      onPanResponderRelease: () => false,
+      onPanResponderTerminate: () => false,
+    })
+  ).current;
 
   // Seçili piyonu yükle
   useEffect(() => {

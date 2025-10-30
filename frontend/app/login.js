@@ -388,7 +388,37 @@ export default function LoginScreen() {
         const result = await dispatch(signInWithPhone({ phoneNumber: cleanPhoneNumber, code: code }));
         
         if (signInWithPhone.fulfilled.match(result)) {
-          // Login successful, go to home
+          // Login successful, check user data and go to home
+          console.log('[Login] signInWithPhone successful, user data:', result.payload.user);
+          
+          // Kullanıcı verisini kontrol et ve gerekirse yenile
+          if (result.payload.user && !result.payload.user.phoneNumber && !result.payload.user.maskedPhone) {
+            console.log('[Login] User phone data missing, attempting to refresh profile...');
+            // Kullanıcı profilini yenilemek için kısa bir bekleme
+            setTimeout(async () => {
+              try {
+                const refreshResponse = await fetch(`${API_URL}/api/user/profile`, {
+                  method: 'GET',
+                  headers: {
+                    'Authorization': `Bearer ${result.payload.token}`,
+                    'Content-Type': 'application/json'
+                  }
+                });
+                
+                if (refreshResponse.ok) {
+                  const refreshData = await refreshResponse.json();
+                  console.log('[Login] Profile refresh successful:', refreshData);
+                  // Store updated user data
+                  if (refreshData.success && refreshData.user) {
+                    await AsyncStorage.setItem('user', JSON.stringify(refreshData.user));
+                  }
+                }
+              } catch (refreshError) {
+                console.log('[Login] Profile refresh failed:', refreshError);
+              }
+            }, 500);
+          }
+          
           router.push('/(auth)/home');
         } else {
           dispatch(showAlert({ message: result.payload || 'Giriş başarısız', type: 'error' }));
@@ -429,6 +459,36 @@ export default function LoginScreen() {
 
       if (registerWithPhone.fulfilled.match(result)) {
         // Registration successful
+        console.log('[Login] registerWithPhone successful, user data:', result.payload.user);
+        
+        // Kullanıcı verisini kontrol et ve gerekirse yenile
+        if (result.payload.user && !result.payload.user.phoneNumber && !result.payload.user.maskedPhone) {
+          console.log('[Login] Registration: User phone data missing, attempting to refresh profile...');
+          // Kullanıcı profilini yenilemek için kısa bir bekleme
+          setTimeout(async () => {
+            try {
+              const refreshResponse = await fetch(`${API_URL}/api/user/profile`, {
+                method: 'GET',
+                headers: {
+                  'Authorization': `Bearer ${result.payload.token}`,
+                  'Content-Type': 'application/json'
+                }
+              });
+              
+              if (refreshResponse.ok) {
+                const refreshData = await refreshResponse.json();
+                console.log('[Login] Registration: Profile refresh successful:', refreshData);
+                // Store updated user data
+                if (refreshData.success && refreshData.user) {
+                  await AsyncStorage.setItem('user', JSON.stringify(refreshData.user));
+                }
+              }
+            } catch (refreshError) {
+              console.log('[Login] Registration: Profile refresh failed:', refreshError);
+            }
+          }, 500);
+        }
+        
         setShowNicknameScreen(false);
         // Navigate to home screen
         router.push('/(auth)/home');

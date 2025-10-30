@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, Text } from 'react-native';
+import { View, StyleSheet, Text, PanResponder } from 'react-native';
 import {
   COLORS,
   PATH_MAP,
@@ -165,6 +165,28 @@ const GameBoard = ({ pawns, onPawnPress, currentPlayer, diceValue, playersInfo, 
   const [lastPawns, setLastPawns] = useState([]);
   const [selectedPawnId, setSelectedPawnId] = useState('default');
 
+  // Tüm gesture'ları engellemek için PanResponder
+  const panResponder = PanResponder.create({
+    onStartShouldSetPanResponder: () => true,
+    onMoveShouldSetPanResponder: () => true,
+    onPanResponderGrant: () => {
+      // Touch başladığında hiçbir şey yapma
+      return false;
+    },
+    onPanResponderMove: () => {
+      // Hareket engelle
+      return false;
+    },
+    onPanResponderRelease: () => {
+      // Touch bittiğinde hiçbir şey yapma
+      return false;
+    },
+    onPanResponderTerminate: () => {
+      // Gesture sonlandırıldığında hiçbir şey yapma
+      return false;
+    }
+  });
+
   // Prop guard: undefined veya yanlış tip gelirse default değer kullan
   const safePawns = Array.isArray(pawns) ? pawns : [];
   const safeCurrentPlayer = typeof currentPlayer === 'string' ? currentPlayer : null;
@@ -237,8 +259,8 @@ const GameBoard = ({ pawns, onPawnPress, currentPlayer, diceValue, playersInfo, 
   const boardLayout = generateBoardLayout(safePawns, safeCurrentPlayer, safeDiceValue);
 
   return (
-    <View style={[styles.boardContainer, style]}>
-      <View style={styles.board}>
+    <View style={[styles.boardContainer, style]} {...panResponder.panHandlers} pointerEvents="box-only">
+      <View style={styles.board} pointerEvents="none">
       {boardLayout.map((cell, index) => {
         const backgroundColor =
           cell.type === 'base' ? TRANSPARENT_COLORS[cell.color] : // Use transparent colors for bases

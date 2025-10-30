@@ -55,11 +55,15 @@ export default {
       permissions: [
         "INTERNET",
         "ACCESS_NETWORK_STATE",
-        // Android 13+ için medya okuma izni
-        "READ_MEDIA_IMAGES",
         // Eski cihazlarla geriye uyumluluk (Android < 13)
         "READ_EXTERNAL_STORAGE"
-      ]
+      ],
+      // Google Mobile Ads App ID - Sabit değerlerle build pipeline sorunlarını önler
+      googleMobileAdsAppId: "ca-app-pub-1743455537598911~1127881197",
+      // Android config - Google Mobile Ads için gerekli
+      config: {
+        googleMobileAdsAppId: "ca-app-pub-1743455537598911~1127881197"
+      }
     },
     web: {
       bundler: "metro",
@@ -95,10 +99,11 @@ export default {
       [
         "react-native-google-mobile-ads",
         {
-          "androidAppId": process.env.EXPO_PUBLIC_ADMOB_ANDROID_APP_ID || "ca-app-pub-1743455537598911~1127881197",
-          "iosAppId": process.env.EXPO_PUBLIC_ADMOB_IOS_APP_ID || "ca-app-pub-1743455537598911~5406887612"
+          "android_app_id": "ca-app-pub-1743455537598911~1127881197",
+          "ios_app_id": "ca-app-pub-1743455537598911~5406887612"
         }
       ]
+
     ],
     experiments: {
       typedRoutes: true
@@ -106,17 +111,16 @@ export default {
     // Disable heavy features in dev
     extra: {
       __DEV__: false, // Gerçek reklamlar için dev modunu kapat
-      adsEnabled: true, // Reklamlar aktif
+      adsEnabled: false, // Reklamlar aktif
       // Optimize for development
       devMode: false,
       fastRefresh: false,
       // CRASH PREVENTION: Disable potentially problematic features
-      disableAnimations: true,
+      disableAnimations: false,
       crashReporting: true,
       eas: {
         projectId: "b8e01f31-8965-439c-a7b9-15d597018d93"
       }
     }
-  },
-  // Not: react-native-google-mobile-ads plugin'i yukarıda plugins içinde yapılandırıldı
+  }
 };

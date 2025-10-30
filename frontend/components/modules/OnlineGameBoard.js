@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, Text, ImageBackground } from 'react-native';
+import { View, StyleSheet, Text, ImageBackground, PanResponder } from 'react-native';
 import {
   COLORS,
   PATH_MAP,
@@ -163,6 +163,28 @@ const OnlineGameBoard = ({ players = [], gameState = {}, onPawnPress, currentPla
   const [movingPawns, setMovingPawns] = useState(new Set());
   const [lastGameState, setLastGameState] = useState(null);
 
+  // Tüm gesture'ları engellemek için PanResponder
+  const panResponder = PanResponder.create({
+    onStartShouldSetPanResponder: () => true,
+    onMoveShouldSetPanResponder: () => true,
+    onPanResponderGrant: () => {
+      // Touch başladığında hiçbir şey yapma
+      return false;
+    },
+    onPanResponderMove: () => {
+      // Hareket engelle
+      return false;
+    },
+    onPanResponderRelease: () => {
+      // Touch bittiğinde hiçbir şey yapma
+      return false;
+    },
+    onPanResponderTerminate: () => {
+      // Gesture sonlandırıldığında hiçbir şey yapma
+      return false;
+    }
+  });
+
   // Çevrimiçi modda seçili piyon bilgisi players prop'undan gelir
   // Yerel depolamadan yükleme yapmıyoruz
 
@@ -249,7 +271,7 @@ const OnlineGameBoard = ({ players = [], gameState = {}, onPawnPress, currentPla
   };
 
   return (
-    <View style={[styles.boardContainer, style]}>
+    <View style={[styles.boardContainer, style]} {...panResponder.panHandlers}>
       <ImageBackground 
         source={require('../../assets/images/wood-background.png')}
         style={styles.board}

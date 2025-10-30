@@ -3,13 +3,14 @@ import { View, StyleSheet, Alert, ActivityIndicator, ScrollView, TouchableOpacit
 import { Text, Button } from '@rneui/themed';
 import { useRouter } from 'expo-router';
 import { useSelector, useDispatch } from 'react-redux';
-import { logout, updateUserNickname, updateUserAvatar } from '../../store/slices/authSlice';
+import { logout, updateUserNickname, updateUserAvatar, setUser } from '../../store/slices/authSlice';
+import { API_BASE_URL } from '../../constants/game';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import DeleteAccountModal from '../../components/DeleteAccountModal';
-import { API_BASE_URL } from '../../constants/game';
+
 
 // Avatar URL normalize: yanlış base (örn. 10.22.233.37) geldiyse production base’e çevir
 const normalizeAvatarUrl = (url) => {
@@ -43,23 +44,70 @@ const withCacheBust = (url) => {
 
 // Telefon gösterimi: backend maskeleri varsa öncelik ver, aksi halde güvenli maskele
 const getDisplayPhone = (user) => {
+  console.log('[getDisplayPhone] User object:', user);
+  console.log('[getDisplayPhone] Available phone fields:', {
+    maskedPhone: user?.maskedPhone,
+    obfuscatedPhone: user?.obfuscatedPhone,
+    phoneMasked: user?.phoneMasked,
+    gsmMasked: user?.gsmMasked,
+    phoneNumber: user?.phoneNumber,
+    phone: user?.phone,
+    msisdn: user?.msisdn
+  });
+  
+  // Öncelikle backend'den gelen maskelenmiş telefon numaralarını kontrol et
   const maskedCandidates = [
     user?.maskedPhone,
     user?.obfuscatedPhone,
     user?.phoneMasked,
     user?.gsmMasked
   ].filter(Boolean);
-  if (maskedCandidates.length > 0) return maskedCandidates[0];
-  const raw = user?.phoneNumber || user?.phone || user?.msisdn || '';
-  if (!raw) return '';
-  // Eğer içerik aşırı uzun ve sayı dışı karakter doluysa şifreli/metinsel kabul et ve gizle
-  const digits = raw.replace(/\D/g, '');
-  if (!digits) return '';
-  // Basit, güvenli maskeleme
-  if (digits.length >= 10 && digits.length <= 14) {
-    const last2 = digits.slice(-2);
-    return `+${digits.slice(0, 2)} *** ** ${last2}`;
+  
+  if (maskedCandidates.length > 0) {
+    console.log('[getDisplayPhone] Found masked phone:', maskedCandidates[0]);
+    return maskedCandidates[0];
   }
+  
+  // Ham telefon numarasını al
+  const raw = user?.phoneNumber || user?.phone || user?.msisdn || '';
+  console.log('[getDisplayPhone] Raw phone number:', raw);
+  
+  if (!raw) {
+    console.log('[getDisplayPhone] No phone number found');
+    return '';
+  }
+  
+  // Sadece rakamları al
+  const digits = raw.replace(/\D/g, '');
+  console.log('[getDisplayPhone] Cleaned digits:', digits);
+  
+  if (!digits) {
+    console.log('[getDisplayPhone] No digits found after cleaning');
+    return '';
+  }
+  
+  // Türkiye veya uluslararası numara formatına göre maskeleme
+  if (digits.length === 10) {
+    // Türkiye: 5069384413 -> 506 *** 44 13
+    const masked = `${digits.slice(0, 3)} *** ${digits.slice(6, 8)} ${digits.slice(-2)}`;
+    console.log('[getDisplayPhone] Turkish phone (10 digits):', masked);
+    return masked;
+  } else if (digits.length === 11 && digits.startsWith('0')) {
+    // Türkiye: 05069384413 -> 506 *** 44 13
+    const masked = `${digits.slice(1, 4)} *** ${digits.slice(7, 9)} ${digits.slice(-2)}`;
+    console.log('[getDisplayPhone] Turkish phone (11 digits with 0):', masked);
+    return masked;
+  } else if (digits.length >= 10 && digits.length <= 14) {
+    // Uluslararası: +905069384413 -> +90 *** *** 13
+    const countryCode = digits.slice(0, digits.length - 10);
+    const mainNumber = digits.slice(-10);
+    const last2 = mainNumber.slice(-2);
+    const masked = `+${countryCode} *** *** ${last2}`;
+    console.log('[getDisplayPhone] International phone:', masked);
+    return masked;
+  }
+  
+  console.log('[getDisplayPhone] Returning raw or empty');
   return raw.length > 20 ? '' : raw;
 };
 
@@ -93,7 +141,45 @@ const ProfileScreen = () => {
     if (actualUser?.nickname) {
       setCurrentNickname(actualUser.nickname);
     }
-  }, [actualUser?.nickname]);
+    
+    // Sayfa her açıldığında kullanıcı verisini güncelle
+    const refreshUserData = async () => {
+      if (accessToken) {
+        try {
+          const response = await fetch(`${API_BASE_URL}/api/user/profile`, {
+            method: 'GET',
+            headers: {
+              'Authorization': `Bearer ${accessToken}`,
+              'Content-Type': 'application/json'
+            }
+          });
+
+          if (response.ok) {
+            const data = await response.json();
+            console.log('[Profile] User data refreshed:', data);
+            if (data.success && data.user) {
+              // AsyncStorage'daki kullanıcı verisini güncelle
+              await AsyncStorage.setItem('user', JSON.stringify(data.user));
+              
+              // Redux store'daki kullanıcıyı güncelle
+              dispatch(setUser(data.user));
+              
+              // Telefon numarasını kontrol et
+              console.log('[Profile] Phone data after refresh:', {
+                phoneNumber: data.user.phoneNumber,
+                maskedPhone: data.user.maskedPhone,
+                obfuscatedPhone: data.user.obfuscatedPhone
+              });
+            }
+          }
+        } catch (error) {
+          console.error('[Profile] User data refresh error:', error);
+        }
+      }
+    };
+    
+    refreshUserData();
+  }, [actualUser?.nickname, accessToken]);
 
   const loadUserProfile = async () => {
     if (!accessToken) return;

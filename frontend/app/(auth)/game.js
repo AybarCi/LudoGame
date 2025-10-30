@@ -13,7 +13,7 @@ import {
   Platform
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useRouter, useLocalSearchParams, useNavigation } from 'expo-router';
 import { useSelector, useDispatch } from 'react-redux';
 import { setUser } from '../../store/slices/authSlice';
 import { useSocket } from '../../store/SocketProvider';
@@ -65,6 +65,7 @@ const GameScreen = () => {
   const reduxDispatch = useDispatch();
   const session = useSelector(state => state.auth.session);
   const user = useSelector(state => state.auth.user);
+  const navigation = useNavigation();
   
   // Extract actual user object if it's wrapped in success property
   const actualUser = user?.success && user?.user ? user.user : user;
@@ -106,6 +107,22 @@ const GameScreen = () => {
 
   const [showTurnPopup, setShowTurnPopup] = useState(false);
   const [popupAnim] = useState(new Animated.Value(0));
+
+  // Navigation gesture'larını devre dışı bırak
+  useEffect(() => {
+    navigation.setOptions({
+      gestureEnabled: false,
+      gestureDirection: 'vertical',
+    });
+    
+    // Cleanup function
+    return () => {
+      navigation.setOptions({
+        gestureEnabled: true,
+        gestureDirection: 'horizontal',
+      });
+    };
+  }, [navigation]);
   // --- Award points and diamonds to the winner ---
   useEffect(() => {
     if (gamePhase === 'game-over' && winner && playersInfo[winner]) {

@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { View, StyleSheet, Alert, ActivityIndicator, Animated, Dimensions, TouchableOpacity, Image } from 'react-native';
 import { Text } from '@rneui/themed';
-import { useRouter } from 'expo-router';
+import { useRouter, useNavigation } from 'expo-router';
 import { useSelector, useDispatch } from 'react-redux';
 import { logout } from '../../store/slices/authSlice';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -23,6 +23,7 @@ const { width } = Dimensions.get('window');
 
 const HomeScreen = () => {
   const router = useRouter();
+  const navigation = useNavigation();
   const dispatch = useDispatch();
   const user = useSelector(state => state.auth.user);
   
@@ -51,6 +52,13 @@ const HomeScreen = () => {
   usePawns();
 
   useEffect(() => {
+    // Navigation gesture'larını devre dışı bırak
+    navigation.setOptions({
+      gestureEnabled: false,
+      gestureDirection: 'vertical',
+      animation: 'none'
+    });
+
     // Enerji sistemini başlat
     EnergyService.initializeEnergySystem().then(() => {
       loadEnergy();

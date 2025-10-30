@@ -21,8 +21,8 @@ try {
 // Web, simülatör ve emülatör kontrolü
 const isRealDevice = Platform.OS !== 'web' && Constants.isDevice === true;
 
-// Test modu kontrolü: geliştirme veya simülatör/emülatör (gerçek cihaz değil)
-const isTestMode = __DEV__ || !Constants.isDevice;
+// Test modu kontrolü: Sadece geliştirme modunda veya web/simülatörde mock kullan
+const isTestMode = (__DEV__ && !Constants.isDevice) || Platform.OS === 'web';
 
 // AdMob başlatıldı
 console.log('AdMob enabled with react-native-google-mobile-ads');
@@ -73,6 +73,15 @@ const TEST_REWARDED_ID = 'ca-app-pub-3940256099942544/5224354917';
 // Environment variable'lardan ID'leri oku, yoksa hardcoded değerleri kullan
 const envInterstitialId = process.env.EXPO_PUBLIC_ADMOB_INTERSTITIAL_ID;
 const envRewardedId = process.env.EXPO_PUBLIC_ADMOB_REWARDED_ID;
+
+// Production'da environment variable'ları kontrol et
+console.log('AdService: Environment variables check:', {
+  hasInterstitialId: !!envInterstitialId,
+  hasRewardedId: !!envRewardedId,
+  isDev: __DEV__,
+  isRealDevice: isRealDevice,
+  isTestMode: isTestMode
+});
 
 let INTERSTITIAL_AD_ID = __DEV__
   ? (TestIds?.INTERSTITIAL || TEST_INTERSTITIAL_ID) // Test ID veya fallback
@@ -192,8 +201,15 @@ class AdService {
   static async showRewardedAd() {
     return new Promise(async (resolve, reject) => {
       try {
+        // Production'da gerçek cihazda mock reklam kullanma
+        if (isTestMode && !__DEV__) {
+          console.log('AdService: Production ortamında gerçek cihaz - Mock reklam atlanıyor');
+          resolve({ userDidWatchAd: false });
+          return;
+        }
+        
         // Geliştirme veya web ortamında mock reklam kullan
-        if (isTestMode) {
+        if (isTestMode && __DEV__) {
           console.log('AdService: Test/Simülatör ortamı - Mock rewarded reklam');
           const result = await MockAdService.showMockRewardedAd();
           resolve(result);

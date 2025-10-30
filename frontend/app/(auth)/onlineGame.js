@@ -755,25 +755,26 @@ useEffect(() => {
     let backHandlerSubscription;
     const onBack = () => true; 
 
-    if (gamePhase === 'waiting' || gamePhase === 'pre-game') {
-      backHandlerSubscription = BackHandler.addEventListener('hardwareBackPress', onBack);
-      unsubscribe = navigation.addListener('beforeRemove', e => e.preventDefault());
-      navigation.setOptions?.({ gestureEnabled: false });
-    } else {
-      if (backHandlerSubscription) {
-        backHandlerSubscription.remove();
-      }
-      if (unsubscribe) unsubscribe();
-      navigation.setOptions?.({ gestureEnabled: true });
-    }
+    // Tüm oyun süresince gesture'ları ve geri tuşunu devre dışı bırak
+    backHandlerSubscription = BackHandler.addEventListener('hardwareBackPress', onBack);
+    unsubscribe = navigation.addListener('beforeRemove', e => e.preventDefault());
+    navigation.setOptions?.({ 
+      gestureEnabled: false,
+      gestureDirection: 'vertical'
+    });
 
     return () => {
       if (backHandlerSubscription) {
         backHandlerSubscription.remove();
       }
       if (unsubscribe) unsubscribe();
+      // Cleanup: gesture'ları tekrar aktif et
+      navigation.setOptions?.({ 
+        gestureEnabled: true,
+        gestureDirection: 'horizontal'
+      });
     };
-  }, [gamePhase, navigation]);
+  }, [navigation]);
 
   // Room closed durumunu güncelle - DAHA GÜÇLÜ VERSİYON
   useEffect(() => {

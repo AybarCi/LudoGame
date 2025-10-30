@@ -82,7 +82,11 @@ const InitialLayout = React.memo(function InitialLayout() {
   }
 
   return (
-    <Stack screenOptions={{ animation: 'fade', headerShown: false }}>
+    <Stack screenOptions={{ 
+      animation: 'fade', 
+      headerShown: false,
+      gestureEnabled: false  // Global gesture'ları devre dışı bırak
+    }}>
       {/* Publicly accessible screens */}
       <Stack.Screen name="login" />
       <Stack.Screen name="index" />

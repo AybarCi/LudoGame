@@ -5,6 +5,7 @@ import { useDispatch } from 'react-redux';
 import { initializeAuth } from '../store/slices/authSlice';
 import { store } from '../store';
 import LaunchDiagnostics from '../utils/launchDiagnostics';
+import * as SplashScreen from 'expo-splash-screen';
 
 const { width, height } = Dimensions.get('window');
 
@@ -21,6 +22,16 @@ const CustomSplashScreen = () => {
   useEffect(() => {
     console.log('SplashScreen: Component mounting...');
     LaunchDiagnostics.logStage('SPLASH_MOUNT_START');
+    
+    // Expo splash screen'i hide et (native splash screen)
+    try {
+      SplashScreen.hideAsync();
+      console.log('SplashScreen: Native splash screen hidden');
+      LaunchDiagnostics.logStage('NATIVE_SPLASH_HIDDEN');
+    } catch (error) {
+      console.error('SplashScreen: Failed to hide native splash:', error);
+      LaunchDiagnostics.logStage('NATIVE_SPLASH_HIDE_ERROR', { error: error.message });
+    }
     
     // Kritik kaynak kontrolleri
     try {

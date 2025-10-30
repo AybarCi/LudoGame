@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useRouter, useLocalSearchParams, useNavigation } from 'expo-router';
 import { useDispatch } from 'react-redux';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { store } from '../../store';
@@ -44,6 +44,7 @@ const getStatusBarHeight = () => {
 
 const FreeModeGame = () => {
   const router = useRouter();
+  const navigation = useNavigation();
   const params = useLocalSearchParams();
   const [energyChecked, setEnergyChecked] = useState(false);
   const [gameInitialized, setGameInitialized] = useState(false);
@@ -75,6 +76,15 @@ const FreeModeGame = () => {
     setEnergyChecked(true);
     setGameInitialized(true);
   }, []);
+
+  // Sadece navigation gesture'larını devre dışı bırak
+  useEffect(() => {
+    navigation.setOptions({
+      gestureEnabled: false,
+      gestureDirection: 'vertical',
+      animation: 'none'
+    });
+  }, [navigation]);
 
   // Get possible moves for current player
   const possibleMoves = state && state.diceValue ? 
