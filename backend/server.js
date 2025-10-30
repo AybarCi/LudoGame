@@ -799,6 +799,56 @@ const handlePawnMove = (room, player, move) => {
         room.gameState.phase = 'finished';
         room.gameState.winner = color;
         
+        // Kazanan oyuncuya ödülleri ver (async IIFE kullan)
+        (async () => {
+            const winnerPlayer = room.players.find(p => p.color === color);
+            if (winnerPlayer && !winnerPlayer.isBot) {
+                try {
+                    // Kazananın mevcut bilgilerini al
+                    const userResult = await executeQuery(
+                        'SELECT score, wins, level FROM users WHERE id = @userId',
+                        [{ name: 'userId', type: sql.NVarChar(36), value: winnerPlayer.userId }]
+                    );
+                    
+                    if (userResult.recordset.length > 0) {
+                        const currentScore = userResult.recordset[0].score;
+                        const currentWins = userResult.recordset[0].wins;
+                        const currentLevel = userResult.recordset[0].level;
+                        
+                        // Yeni puan ve seviye hesapla
+                        const newScore = currentScore + 10;
+                        const newWins = currentWins + 1;
+                        const newLevel = Math.floor(newScore / 100) + 1;
+                        
+                        // Veritabanını güncelle
+                        await executeQuery(
+                            'UPDATE users SET score = @score, wins = @wins, level = @level, last_game_at = GETDATE() WHERE id = @userId',
+                            [
+                                { name: 'score', type: sql.Int, value: newScore },
+                                { name: 'wins', type: sql.Int, value: newWins },
+                                { name: 'level', type: sql.Int, value: newLevel },
+                                { name: 'userId', type: sql.NVarChar(36), value: winnerPlayer.userId }
+                            ]
+                        );
+                        
+                        // Diğer oyuncuların oynadığı oyun sayısını artır
+                        for (const player of room.players) {
+                            if (player.color !== color && !player.isBot) {
+                                await executeQuery(
+                                    'UPDATE users SET games_played = games_played + 1, last_game_at = GETDATE() WHERE id = @userId',
+                                    [{ name: 'userId', type: sql.NVarChar(36), value: player.userId }]
+                                );
+                            }
+                        }
+                        
+                        console.log(`[Game Rewards] Kazanan: ${winnerPlayer.nickname}, Yeni Puan: ${newScore}, Yeni Seviye: ${newLevel}, Toplam Galibiyet: ${newWins}`);
+                    }
+                } catch (error) {
+                    console.error('[Game Rewards] Ödül verme hatası:', error);
+                }
+            }
+        })();
+        
         // Oyun bittikten sonra sadece botlar kaldıysa odayı sil
         setTimeout(async () => {
             const humanPlayers = room.players.filter(p => !p.isBot);
@@ -1221,7 +1271,10 @@ app.post('/api/login', async (req, res) => {
                 id: user.id, 
                 email: user.email, 
                 nickname: user.nickname, 
-                score: user.score 
+                score: user.score,
+                level: user.level,
+                gamesPlayed: user.games_played,
+                wins: user.wins
             } 
         });
     } catch (error) {
@@ -1295,7 +1348,10 @@ app.post('/api/refresh-token', async (req, res) => {
                 id: user.id,
                 email: user.email,
                 nickname: user.nickname,
-                score: user.score
+                score: user.score,
+                level: user.level,
+                gamesPlayed: user.games_played,
+                wins: user.wins
             }
         });
         
@@ -2706,7 +2762,10 @@ app.post('/api/login-phone', async (req, res) => {
                 email: user.email,
                 nickname: user.nickname,
                 phoneNumber: maskedPhoneNumber, // Maskelenmiş telefon numarası
-                score: user.score
+                score: user.score,
+                level: user.level,
+                gamesPlayed: user.games_played,
+                wins: user.wins
             }
         });
     } catch (error) {
@@ -2732,7 +2791,7 @@ app.get('/api/user/profile', requireDatabase, async (req, res) => {
 
         // Get user from database
         const userResult = await executeQuery(
-            'SELECT id, email, username, nickname, phone_number, score, games_played, wins FROM users WHERE id = @userId',
+            'SELECT id, email, username, nickname, phone_number, score, games_played, wins, level FROM users WHERE id = @userId',
             [{ name: 'userId', type: sql.NVarChar(36), value: userId }]
         );
 
@@ -2770,7 +2829,8 @@ app.get('/api/user/profile', requireDatabase, async (req, res) => {
                 phoneNumber: maskedPhoneNumber, // Maskelenmiş telefon numarası
                 score: user.score,
                 gamesPlayed: user.games_played,
-                wins: user.wins
+                wins: user.wins,
+                level: user.level
             }
         });
     } catch (error) {
