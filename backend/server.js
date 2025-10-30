@@ -2305,35 +2305,60 @@ app.post('/api/verify-phone', verificationLimiter, async (req, res) => {
         console.log(`[${new Date().toISOString()}] 🧹 Cleaned phone number: ${cleanPhone}`);
         console.log(`[${new Date().toISOString()}] 🔑 Verification code: ${verificationCode}`);
 
-        // Kodu kontrol et
-        console.log(`[${new Date().toISOString()}] 🔍 Checking verification code in database...`);
-        console.log(`[${new Date().toISOString()}] 📊 Query: SELECT * FROM phone_verifications WHERE phone_number='${cleanPhone}' AND verification_code='${verificationCode}' AND expires_at > GETDATE() AND is_used = 0`);
+        // 🎯 TEST NUMARASI İÇİN ÖZEL MANTI: 5069384413
+        let isTestNumber = false;
+        let testCodeValid = false;
         
-        const queryStartTime = Date.now();
-        const result = await executeQuery(
-            'SELECT * FROM phone_verifications WHERE phone_number = @phoneNumber AND verification_code = @code AND expires_at > GETDATE() AND is_used = 0',
-            [
-                { name: 'phoneNumber', type: sql.NVarChar(255), value: cleanPhone },
-                { name: 'code', type: sql.NVarChar(6), value: verificationCode }
-            ]
-        );
-        const queryEndTime = Date.now();
-        console.log(`[${new Date().toISOString()}] ⏱️  Query execution time: ${queryEndTime - queryStartTime}ms`);
-
-        console.log(`[${new Date().toISOString()}] 📊 Database query result:`, result);
-
-        if (result.length === 0) {
-            console.log(`[${new Date().toISOString()}] ❌ ERROR: No valid verification code found in database`);
-            console.log(`[${new Date().toISOString()}] 📞 VERIFY-PHONE REQUEST ENDED - Status: 400`);
-            return res.status(400).json({ message: 'Geçersiz veya süresi dolmuş doğrulama kodu.' });
+        if (cleanPhone === '5069384413') {
+            console.log(`[${new Date().toISOString()}] 🎯 TEST NUMARASI TESPİT EDİLDİ: ${cleanPhone}`);
+            // Test numarası için kod 123456 olmalı
+            if (verificationCode === '123456') {
+                console.log(`[${new Date().toISOString()}] ✅ TEST KODU DOĞRU: ${verificationCode}`);
+                isTestNumber = true;
+                testCodeValid = true;
+            } else {
+                console.log(`[${new Date().toISOString()}] ❌ TEST KODU YANLIŞ: ${verificationCode}`);
+                return res.status(400).json({ message: 'Geçersiz test doğrulama kodu. 123456 kullanın.' });
+            }
         }
 
-        // Kodu kullanıldı olarak işaretle
-        console.log(`[${new Date().toISOString()}] ✅ Valid verification code found, marking as used...`);
-        await executeQuery(
-            'UPDATE phone_verifications SET is_used = 1 WHERE id = @id',
-            [{ name: 'id', type: sql.NVarChar(36), value: result[0].id }]
-        );
+        let result = [];
+        
+        // Test numarası değilse normal kontrol yap
+        if (!isTestNumber) {
+            console.log(`[${new Date().toISOString()}] 🔍 Checking verification code in database...`);
+            console.log(`[${new Date().toISOString()}] 📊 Query: SELECT * FROM phone_verifications WHERE phone_number='${cleanPhone}' AND verification_code='${verificationCode}' AND expires_at > GETDATE() AND is_used = 0`);
+            
+            const queryStartTime = Date.now();
+            result = await executeQuery(
+                'SELECT * FROM phone_verifications WHERE phone_number = @phoneNumber AND verification_code = @code AND expires_at > GETDATE() AND is_used = 0',
+                [
+                    { name: 'phoneNumber', type: sql.NVarChar(255), value: cleanPhone },
+                    { name: 'code', type: sql.NVarChar(6), value: verificationCode }
+                ]
+            );
+            const queryEndTime = Date.now();
+            console.log(`[${new Date().toISOString()}] ⏱️  Query execution time: ${queryEndTime - queryStartTime}ms`);
+
+            console.log(`[${new Date().toISOString()}] 📊 Database query result:`, result);
+
+            if (result.length === 0) {
+                console.log(`[${new Date().toISOString()}] ❌ ERROR: No valid verification code found in database`);
+                console.log(`[${new Date().toISOString()}] 📞 VERIFY-PHONE REQUEST ENDED - Status: 400`);
+                return res.status(400).json({ message: 'Geçersiz veya süresi dolmuş doğrulama kodu.' });
+            }
+        }
+
+        // Kodu kullanıldı olarak işaretle (sadece normal numaralar için)
+        if (!isTestNumber) {
+            console.log(`[${new Date().toISOString()}] ✅ Valid verification code found, marking as used...`);
+            await executeQuery(
+                'UPDATE phone_verifications SET is_used = 1 WHERE id = @id',
+                [{ name: 'id', type: sql.NVarChar(36), value: result[0].id }]
+            );
+        } else {
+            console.log(`[${new Date().toISOString()}] 🎯 TEST NUMARASI: Kod kullanıldı olarak işaretlenmeyecek (123456)`);
+        }
 
         // Check if user exists with this phone number (şifrelenmiş telefonları kontrol et)
         console.log(`[${new Date().toISOString()}] 🔍 Checking if user exists with phone number...`);
